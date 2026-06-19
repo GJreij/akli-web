@@ -364,7 +364,7 @@ export default function AkliApp({
     setSiError(null); setSiLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: siEmail, password: siPassword });
     if (error) { setSiError(error.message); setSiLoading(false); return; }
-    window.location.href = "/";
+    window.location.href = "/home";
   }
 
   async function handleSave() {
@@ -423,7 +423,7 @@ export default function AkliApp({
     setHomeC(Math.round(lastMacros.c));
     setHomeF(Math.round(lastMacros.f));
     setSaveLoading(false);
-    transition("home");
+    window.location.href = "/home";
   }
 
   async function handleSignOut(e: React.MouseEvent) {
@@ -730,7 +730,7 @@ export default function AkliApp({
                     </button>
                     <div style={{ textAlign: "center" }}>
                       <p style={{ fontFamily: "'Playfair Display', serif", fontSize: 36, fontWeight: 500, margin: 0, lineHeight: 1 }}>
-                        {kcalIn.toLocaleString()}
+                        {kcalIn.toLocaleString("en-US")}
                       </p>
                       <p style={{ fontSize: 12, color: C.light, margin: "4px 0 0" }}>kcal / day</p>
                     </div>
@@ -820,7 +820,7 @@ export default function AkliApp({
                       <IconMinus size={16} />
                     </button>
                     <p style={{ fontFamily: "'Playfair Display', serif", fontSize: 30, fontWeight: 500, margin: 0, minWidth: 140, textAlign: "center" }}>
-                      {kcalFixed.toLocaleString()} kcal
+                      {kcalFixed.toLocaleString("en-US")} kcal
                     </p>
                     <button aria-label="Increase"
                       style={{ width: 34, height: 34, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}
@@ -1009,7 +1009,7 @@ export default function AkliApp({
             <div className="info-card" style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
                 <p style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 500, margin: 0 }}>
-                  {homeKcal ? `${Math.round(homeKcal).toLocaleString()} kcal` : "—"}
+                  {homeKcal ? `${Math.round(homeKcal).toLocaleString("en-US")} kcal` : "—"}
                 </p>
                 <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
                   {homeKcal ? `${formatPrice(dayPrice, homeP ?? 0, homeC ?? 0, homeF ?? 0)} / day` : ""}
