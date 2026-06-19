@@ -131,7 +131,7 @@ function Header({
               onClick={onSignIn}
               style={{
                 background: "none", border: "none", padding: 0, cursor: "pointer",
-                fontSize: 13, color: "rgba(255,255,255,0.75)", fontWeight: 500,
+                fontSize: 13, color: C.teal, fontWeight: 600,
               }}
             >
               Sign in
@@ -595,15 +595,12 @@ export default function AkliApp({
 
               {/* Delivery strip */}
               <div style={{
-                background: C.teal, borderRadius: 12,
-                padding: "13px 16px", display: "flex",
-                alignItems: "center", gap: 12,
+                background: "#f5f2ef", borderRadius: 12,
+                padding: "12px 16px", display: "flex",
+                alignItems: "center", gap: 10,
               }}>
-                <IconTruck size={18} color="#fff" style={{ flexShrink: 0 }} />
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", margin: "0 0 2px" }}>Free delivery on orders over $25</p>
-                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", margin: 0 }}>Every daily order above $25 ships free — no monthly commitment needed.</p>
-                </div>
+                <IconTruck size={16} color={C.tealDark} />
+                <p style={{ fontSize: 12.5, color: C.muted, margin: 0 }}>Free delivery on orders over $25</p>
               </div>
             </div>
 
