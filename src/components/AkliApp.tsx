@@ -487,10 +487,10 @@ export default function AkliApp({
                 Your meal plan, built for you
               </p>
               <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 600, lineHeight: 1.25, margin: "0 0 10px", color: C.primary }}>
-                Eat well.<br />Hit your numbers.
+                Meal prep that fits<br />your life.
               </h2>
               <p style={{ fontSize: 14, color: C.muted, margin: 0, lineHeight: 1.65 }}>
-                Tell us your goal — we&apos;ll build a plan around your macros and deliver real food to your door.
+                Tell us your goal — we handle the rest. Real food, real macros, delivered around your schedule.
               </p>
             </div>
 
@@ -498,7 +498,7 @@ export default function AkliApp({
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
               {[
                 { Icon: IconChartBar, title: "Macro-matched meals",  sub: "Every dish is calculated to hit your daily protein, carbs & fat targets." },
-                { Icon: IconLeaf,     title: "Fresh, weekly menu",   sub: "New recipes every week — no repetitive meal prepping." },
+                { Icon: IconLeaf,     title: "Menu refreshes bi-weekly", sub: "New recipes every two weeks — variety without the guesswork." },
                 { Icon: IconTruck,    title: "Free delivery over $25", sub: "Delivered to your door. No minimum commitment." },
               ].map(({ Icon, title, sub }) => (
                 <div key={title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
