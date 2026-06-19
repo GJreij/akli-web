@@ -13,7 +13,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Screen    = "landing" | "signin" | "onboarding" | "home" | "delivery";
+type Screen    = "landing" | "signin" | "forgot" | "onboarding" | "home" | "delivery";
 type Step      = "goal" | "basics" | "activity" | "manual" | "result" | "save";
 type Goal      = "lose" | "maintain" | "build" | "health";
 type Sex       = "female" | "male";
@@ -189,10 +189,18 @@ export default function AkliApp({
   const progress = Math.round(((idx + 1) / path.length) * 100);
 
   // ── Sign-in ──
-  const [siEmail, setSiEmail]       = useState("");
-  const [siPassword, setSiPassword] = useState("");
-  const [siError, setSiError]       = useState<string | null>(null);
-  const [siLoading, setSiLoading]   = useState(false);
+  const [siEmail, setSiEmail]         = useState("");
+  const [siPassword, setSiPassword]   = useState("");
+  const [siShowPw, setSiShowPw]       = useState(false);
+  const [siRemember, setSiRemember]   = useState(true);
+  const [siError, setSiError]         = useState<string | null>(null);
+  const [siLoading, setSiLoading]     = useState(false);
+
+  // ── Forgot password ──
+  const [fpEmail, setFpEmail]         = useState("");
+  const [fpLoading, setFpLoading]     = useState(false);
+  const [fpSent, setFpSent]           = useState(false);
+  const [fpError, setFpError]         = useState<string | null>(null);
 
   // ── Onboarding ──
   const [goal, setGoal]         = useState<Goal>("maintain");
@@ -377,7 +385,22 @@ export default function AkliApp({
     setSiError(null); setSiLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email: siEmail, password: siPassword });
     if (error) { setSiError(error.message); setSiLoading(false); return; }
+    if (!siRemember) {
+      // Sign out when the tab/window closes
+      window.addEventListener("beforeunload", () => supabase.auth.signOut(), { once: true });
+    }
     window.location.href = "/home";
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setFpError(null); setFpLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(fpEmail, {
+      redirectTo: window.location.origin,
+    });
+    setFpLoading(false);
+    if (error) { setFpError(error.message); return; }
+    setFpSent(true);
   }
 
   async function handleSave() {
@@ -595,14 +618,14 @@ export default function AkliApp({
 
               {/* Delivery strip */}
               <div style={{
-                background: C.teal, borderRadius: 12,
+                background: "#e8f0f0", borderRadius: 12,
                 padding: "13px 16px", display: "flex",
                 alignItems: "center", gap: 12,
               }}>
-                <IconTruck size={18} color="#fff" style={{ flexShrink: 0 }} />
+                <IconTruck size={18} color={C.tealDark} style={{ flexShrink: 0 }} />
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", margin: "0 0 2px" }}>Free delivery on orders over $25</p>
-                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", margin: 0 }}>Each daily order above $25 delivers free — order one day or a full month.</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.primary, margin: "0 0 2px" }}>Free delivery on orders over $25</p>
+                  <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Each daily order above $25 delivers free — order one day or a full month.</p>
                 </div>
               </div>
             </div>
@@ -638,10 +661,50 @@ export default function AkliApp({
                 <input type="email" placeholder="Email address" autoComplete="email"
                   value={siEmail} onChange={e => setSiEmail(e.target.value)} />
               </div>
-              <div style={{ marginBottom: 16 }}>
-                <input type="password" placeholder="Password" autoComplete="current-password"
-                  value={siPassword} onChange={e => setSiPassword(e.target.value)} />
+
+              {/* Password with show/hide */}
+              <div style={{ position: "relative", marginBottom: 10 }}>
+                <input
+                  type={siShowPw ? "text" : "password"}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  value={siPassword}
+                  onChange={e => setSiPassword(e.target.value)}
+                  style={{ paddingRight: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setSiShowPw(v => !v)}
+                  style={{
+                    position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", cursor: "pointer",
+                    fontSize: 12, color: C.light, fontWeight: 500, padding: 0,
+                  }}
+                >
+                  {siShowPw ? "Hide" : "Show"}
+                </button>
               </div>
+
+              {/* Remember me + forgot */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 12.5, color: C.muted }}>
+                  <input
+                    type="checkbox"
+                    checked={siRemember}
+                    onChange={e => setSiRemember(e.target.checked)}
+                    style={{ width: 15, height: 15, accentColor: C.tealDark, cursor: "pointer" }}
+                  />
+                  Keep me logged in
+                </label>
+                <a
+                  href="#"
+                  onClick={e => { e.preventDefault(); setFpEmail(siEmail); setFpSent(false); setFpError(null); transition("forgot"); }}
+                  style={{ fontSize: 12.5, color: C.teal, textDecoration: "none", fontWeight: 500 }}
+                >
+                  Forgot password?
+                </a>
+              </div>
+
               {siError && (
                 <div style={{ fontSize: 12.5, color: C.error, background: "#fdf0ef", padding: "8px 12px", borderRadius: 7, marginBottom: 12 }}>
                   {siError}
@@ -657,6 +720,54 @@ export default function AkliApp({
               <a href="#" onClick={e => { e.preventDefault(); startOnboarding(); }}
                 style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}>
                 Get started
+              </a>
+            </p>
+          </div>
+        )}
+
+        {/* ────────── FORGOT PASSWORD ────────── */}
+        {screen === "forgot" && (
+          <div>
+            {!fpSent ? (
+              <>
+                <h3 style={{ margin: "0 0 4px", fontSize: 22 }}>Reset your password</h3>
+                <p style={{ fontSize: 13, color: C.muted, margin: "0 0 22px", lineHeight: 1.6 }}>
+                  Enter your email and we&apos;ll send you a link to set a new password.
+                </p>
+                <form onSubmit={handleForgotPassword} noValidate>
+                  <div style={{ marginBottom: 16 }}>
+                    <input type="email" placeholder="Email address" autoComplete="email"
+                      value={fpEmail} onChange={e => setFpEmail(e.target.value)} />
+                  </div>
+                  {fpError && (
+                    <div style={{ fontSize: 12.5, color: C.error, background: "#fdf0ef", padding: "8px 12px", borderRadius: 7, marginBottom: 12 }}>
+                      {fpError}
+                    </div>
+                  )}
+                  <button type="submit" className="btn-primary" style={{ marginBottom: 14 }} disabled={fpLoading}>
+                    {fpLoading ? "Sending…" : "Send reset link"}
+                  </button>
+                </form>
+              </>
+            ) : (
+              <>
+                <div style={{ textAlign: "center", padding: "24px 0 20px" }}>
+                  <div style={{ fontSize: 40, marginBottom: 16 }}>✉️</div>
+                  <h3 style={{ margin: "0 0 8px", fontSize: 20 }}>Check your inbox</h3>
+                  <p style={{ fontSize: 13, color: C.muted, margin: "0 0 6px", lineHeight: 1.65 }}>
+                    We sent a reset link to
+                  </p>
+                  <p style={{ fontSize: 13.5, fontWeight: 600, color: C.primary, margin: "0 0 20px" }}>{fpEmail}</p>
+                  <p style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.65, margin: 0 }}>
+                    Click the link in the email to set a new password. It may take a minute or two.
+                  </p>
+                </div>
+              </>
+            )}
+            <p style={{ fontSize: 12.5, textAlign: "center", margin: "8px 0 0" }}>
+              <a href="#" onClick={e => { e.preventDefault(); transition("signin"); }}
+                style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}>
+                ← Back to sign in
               </a>
             </p>
           </div>
