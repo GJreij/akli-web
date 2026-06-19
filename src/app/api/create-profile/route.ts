@@ -2,6 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/supabase/types";
 
+export const runtime = "nodejs";
+
 // Server-only — service role key never reaches the browser
 const admin = createClient<Database>(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,8 +22,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Insert or upsert profile
-    const { error: profileError } = await admin.from("user").upsert({
+    // Insert or upsert profile — cast needed because supabase-js generic inference
+    // narrows upsert input too aggressively on some versions
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: profileError } = await (admin.from("user") as any).upsert({
       id: userId,
       name,
       last_name,
@@ -39,8 +43,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: profileError.message }, { status: 500 });
     }
 
-    // Insert macro target
-    const { error: macroError } = await admin.from("daily_macro_target").insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: macroError } = await (admin.from("daily_macro_target") as any).insert({
       user_id: userId,
       tenant_id,
       kcal_target,
