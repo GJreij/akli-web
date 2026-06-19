@@ -56,14 +56,11 @@ function byPercent(kcal: number, diet: DietType) {
   return { protein: (kcal * pct.p) / 4, fat: (kcal * pct.f) / 9, carbs: (kcal * pct.c) / 4 };
 }
 
-function priceEstimate(kcal: number) {
-  // Fallback client-side estimate used only when Flask is unreachable
-  return `$${Math.round(kcal * 0.0155)}–${Math.round(kcal * 0.0185)}`;
-}
-
-function formatPrice(dayPrice: number | null, kcal: number) {
+function formatPrice(dayPrice: number | null, p: number, c: number, f: number) {
   if (dayPrice !== null) return `$${dayPrice.toFixed(2)}`;
-  return priceEstimate(kcal);
+  // Client-side fallback using same logic as Flask (midpoint per-gram rates)
+  const estimate = p * 0.018 + c * 0.006 + f * 0.022 + 1.8; // macro cost + avg packaging
+  return `~$${estimate.toFixed(2)}`;
 }
 
 const DIET_OPTIONS: {
@@ -887,7 +884,7 @@ export default function AkliApp({
                 {/* Price */}
                 <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "center", marginBottom: 16 }}>
                   <span style={{ fontSize: 13, color: C.muted }}>Around</span>
-                  <span style={{ fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>{formatPrice(dayPrice, kcalFixed)}</span>
+                  <span style={{ fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>{formatPrice(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}</span>
                   <span style={{ fontSize: 13, color: C.muted }}>a day</span>
                 </div>
 
@@ -1015,7 +1012,7 @@ export default function AkliApp({
                   {homeKcal ? `${Math.round(homeKcal).toLocaleString()} kcal` : "—"}
                 </p>
                 <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-                  {homeKcal ? `${formatPrice(dayPrice, homeKcal)} / day` : ""}
+                  {homeKcal ? `${formatPrice(dayPrice, homeP ?? 0, homeC ?? 0, homeF ?? 0)} / day` : ""}
                 </p>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
