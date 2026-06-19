@@ -131,7 +131,7 @@ function Header({
               onClick={onSignIn}
               style={{
                 background: "none", border: "none", padding: 0, cursor: "pointer",
-                fontSize: 13, color: C.teal, fontWeight: 600,
+                fontSize: 13, color: "#67b1b0", fontWeight: 600,
               }}
             >
               Sign in
