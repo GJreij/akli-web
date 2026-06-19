@@ -8,6 +8,7 @@ import type { Database } from "@/lib/supabase/types";
 import {
   IconTrendingDown, IconScale, IconTrendingUp, IconHeart,
   IconBolt, IconMinus, IconPlus, IconBrandWhatsapp, IconChevronDown,
+  IconLeaf, IconTruck, IconChartBar,
 } from "@tabler/icons-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -479,34 +480,74 @@ export default function AkliApp({
 
         {/* ────────── LANDING ────────── */}
         {screen === "landing" && (
-          <div>
-            <h3 style={{ margin: "0 0 6px", fontSize: 22 }}>Real food, real numbers</h3>
-            <p style={{ fontSize: 13, color: C.muted, margin: "0 0 22px", lineHeight: 1.6 }}>
-              No guesswork. See your plan before you sign up for anything.
-            </p>
-
-            <div className="info-card" style={{ marginBottom: 22, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <p style={{ fontSize: 11, color: C.light, margin: "0 0 2px" }}>e.g. a typical plan</p>
-                <p style={{ fontSize: 17, fontWeight: 500, margin: 0 }}>2,100 kcal</p>
-              </div>
-              <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>$32 to 37 / day</p>
+          <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 64px)", paddingBottom: 8 }}>
+            {/* Hero */}
+            <div style={{ marginBottom: 28 }}>
+              <p style={{ fontSize: 12.5, color: C.teal, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 8px" }}>
+                Your meal plan, built for you
+              </p>
+              <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 600, lineHeight: 1.25, margin: "0 0 10px", color: C.primary }}>
+                Eat well.<br />Hit your numbers.
+              </h2>
+              <p style={{ fontSize: 14, color: C.muted, margin: 0, lineHeight: 1.65 }}>
+                Tell us your goal — we&apos;ll build a plan around your macros and deliver real food to your door.
+              </p>
             </div>
 
-            <button className="btn-primary" style={{ marginBottom: 14 }} onClick={startOnboarding}>
-              Get started
-            </button>
+            {/* Trust anchors */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
+              {[
+                { Icon: IconChartBar, title: "Macro-matched meals",  sub: "Every dish is calculated to hit your daily protein, carbs & fat targets." },
+                { Icon: IconLeaf,     title: "Fresh, weekly menu",   sub: "New recipes every week — no repetitive meal prepping." },
+                { Icon: IconTruck,    title: "Free delivery over $25", sub: "Delivered to your door. No minimum commitment." },
+              ].map(({ Icon, title, sub }) => (
+                <div key={title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                  <div style={{
+                    width: 38, height: 38, borderRadius: 10, background: "#f0f7f7",
+                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                  }}>
+                    <Icon size={18} color={C.tealDark} />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: C.primary, margin: "0 0 2px" }}>{title}</p>
+                    <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.55 }}>{sub}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-            <p style={{ fontSize: 12.5, textAlign: "center", margin: 0 }}>
-              Already have an account?{" "}
-              <a
-                href="#"
-                onClick={e => { e.preventDefault(); transition("signin"); }}
-                style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}
-              >
-                Sign in
-              </a>
-            </p>
+            {/* Example plan chip */}
+            <div style={{
+              background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+              padding: "12px 16px", display: "flex", justifyContent: "space-between",
+              alignItems: "center", marginBottom: 24,
+            }}>
+              <div>
+                <p style={{ fontSize: 11, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>e.g. a typical plan</p>
+                <p style={{ fontSize: 16, fontWeight: 600, margin: 0, color: C.primary }}>2,100 kcal / day</p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontSize: 11, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>estimated</p>
+                <p style={{ fontSize: 16, fontWeight: 600, margin: 0, color: C.primary }}>$32–37 / day</p>
+              </div>
+            </div>
+
+            {/* CTA — pushed to bottom */}
+            <div style={{ marginTop: "auto" }}>
+              <button className="btn-primary" style={{ marginBottom: 12 }} onClick={startOnboarding}>
+                Build my plan
+              </button>
+              <p style={{ fontSize: 12.5, textAlign: "center", margin: 0 }}>
+                Already have an account?{" "}
+                <a
+                  href="#"
+                  onClick={e => { e.preventDefault(); transition("signin"); }}
+                  style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}
+                >
+                  Sign in
+                </a>
+              </p>
+            </div>
           </div>
         )}
 
