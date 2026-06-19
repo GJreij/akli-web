@@ -50,8 +50,9 @@ export default async function HomePage() {
 
   const menuRecipes: RecipeRow[] = [];
   const seen = new Set<number>();
-  if (menuRes.data?.weekly_menu_recipe) {
-    for (const wmr of menuRes.data.weekly_menu_recipe as { recipe: RecipeRow | null }[]) {
+  const menuData = menuRes.data as { weekly_menu_recipe: { recipe: RecipeRow | null }[] } | null;
+  if (menuData?.weekly_menu_recipe) {
+    for (const wmr of menuData.weekly_menu_recipe) {
       if (wmr.recipe && !seen.has(wmr.recipe.id)) {
         seen.add(wmr.recipe.id);
         menuRecipes.push(wmr.recipe);
