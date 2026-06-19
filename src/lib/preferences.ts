@@ -15,16 +15,16 @@ export async function upsertRecipePref(
   const supabase = createClient();
 
   if (rating === null) {
-    await supabase
-      .from("user_recipe_preferences")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase.from("user_recipe_preferences") as any)
       .delete()
       .eq("user_id", userId)
       .eq("recipe_id", recipeId);
     return;
   }
 
-  await supabase
-    .from("user_recipe_preferences")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from("user_recipe_preferences") as any)
     .upsert(
       {
         user_id:      userId,
