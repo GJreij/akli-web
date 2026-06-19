@@ -1,5 +1,40 @@
 const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL ?? "https://aklilebapp-72376dbe3cc8.herokuapp.com";
 
+// ─── /simple_price_simulator ────────────────────────────────────────────────
+
+export interface PriceSimulatorRequest {
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  meals_per_day: number;
+  avg_subrecipes_per_meal: number;
+  apply_kcal_discount?: boolean;
+}
+
+export interface PriceSimulatorResponse {
+  avg_day_price: number;
+  breakdown: {
+    base_macro_cost: number;
+    kcal_discount_pct: number;
+    macro_cost_after_discount: number;
+    day_packaging_cost: number;
+    recipes_packaging_cost: number;
+    subrecipes_packaging_cost: number;
+  };
+}
+
+export async function simplePriceSimulator(
+  req: PriceSimulatorRequest
+): Promise<PriceSimulatorResponse> {
+  const res = await fetch(`${FLASK_URL}/simple_price_simulator`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`price_simulator error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 // ─── /generate_meal_plan ────────────────────────────────────────────────────
 // The solver fetches recipes and macro targets itself from Supabase using
 // user_id + dates. Only pass what's listed below.

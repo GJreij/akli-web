@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { simplePriceSimulator } from "@/lib/flask";
 import { COUNTRY_CODES } from "@/lib/theme";
 import type { Database } from "@/lib/supabase/types";
 import {
@@ -55,10 +56,14 @@ function byPercent(kcal: number, diet: DietType) {
   return { protein: (kcal * pct.p) / 4, fat: (kcal * pct.f) / 9, carbs: (kcal * pct.c) / 4 };
 }
 
-function priceRange(kcal: number) {
-  // TODO: replace with POST /checkout_summary from Flask once ordering flow is built
-  // Centralising pricing in the backend means any price change propagates everywhere automatically
+function priceEstimate(kcal: number) {
+  // Fallback client-side estimate used only when Flask is unreachable
   return `$${Math.round(kcal * 0.0155)}–${Math.round(kcal * 0.0185)}`;
+}
+
+function formatPrice(dayPrice: number | null, kcal: number) {
+  if (dayPrice !== null) return `$${dayPrice.toFixed(2)}`;
+  return priceEstimate(kcal);
 }
 
 const DIET_OPTIONS: {
@@ -198,6 +203,8 @@ export default function AkliApp({
   const [showUpdated, setShowUpdated]   = useState(false);
   const [finetuneNote, setFinetuneNote] = useState("");
   const [resultSubtitle, setResultSubtitle] = useState("Not a verdict. Adjust anytime.");
+  const [dayPrice, setDayPrice]         = useState<number | null>(null);
+  const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Save form ──
   const [fname, setFname]       = useState("");
@@ -244,9 +251,31 @@ export default function AkliApp({
     flashTimer.current = setTimeout(() => setShowUpdated(false), 900);
   }
 
+  function fetchPrice(p: number, c: number, f: number) {
+    if (priceTimer.current) clearTimeout(priceTimer.current);
+    // Debounce 400ms so we don't spam Flask on every nudge
+    priceTimer.current = setTimeout(async () => {
+      try {
+        const res = await simplePriceSimulator({
+          protein_g: Math.round(p),
+          carbs_g: Math.round(c),
+          fat_g: Math.round(f),
+          meals_per_day: 3,
+          avg_subrecipes_per_meal: 1.5,
+          apply_kcal_discount: true,
+        });
+        setDayPrice(res.avg_day_price);
+      } catch {
+        // Flask unreachable — fall back to client estimate silently
+        setDayPrice(null);
+      }
+    }, 400);
+  }
+
   function repaint(kcal: number, diet: DietType) {
     const m = getMacros(kcal, diet);
     setLastMacros({ p: m.protein, c: m.carbs, f: m.fat });
+    fetchPrice(m.protein, m.carbs, m.fat);
     flash();
   }
 
@@ -307,6 +336,7 @@ export default function AkliApp({
     setResultSubtitle("Not a verdict. Adjust anytime.");
     const m = byWeight(kcal, weight, diet);
     setLastMacros({ p: m.protein, c: m.carbs, f: m.fat });
+    fetchPrice(m.protein, m.carbs, m.fat);
   }
 
   function fillResultFromManual() {
@@ -314,6 +344,7 @@ export default function AkliApp({
     setKcalFixed(kcalIn); setKcalDefault(kcalIn); setNote(kcalIn);
     const m = byPercent(kcalIn, dietType);
     setLastMacros({ p: m.protein, c: m.carbs, f: m.fat });
+    fetchPrice(m.protein, m.carbs, m.fat);
     setResultSubtitle("Looks good. Fine-tune the calories if needed.");
   }
 
@@ -802,6 +833,13 @@ export default function AkliApp({
                   </div>
                 </div>
 
+                {/* Method note — shown only on the calculated path, not manual */}
+                {path !== SKIP_PATH && (
+                  <p style={{ fontSize: 10.5, color: C.light, textAlign: "center", margin: "6px 0 2px", letterSpacing: "0.01em" }}>
+                    Estimated using the Mifflin-St Jeor equation
+                  </p>
+                )}
+
                 {finetuneNote && (
                   <p style={{ fontSize: 11.5, color: C.sand, textAlign: "center", margin: "4px 0 2px" }}>{finetuneNote}</p>
                 )}
@@ -849,7 +887,7 @@ export default function AkliApp({
                 {/* Price */}
                 <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "center", marginBottom: 16 }}>
                   <span style={{ fontSize: 13, color: C.muted }}>Around</span>
-                  <span style={{ fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>{priceRange(kcalFixed)}</span>
+                  <span style={{ fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>{formatPrice(dayPrice, kcalFixed)}</span>
                   <span style={{ fontSize: 13, color: C.muted }}>a day</span>
                 </div>
 
@@ -977,7 +1015,7 @@ export default function AkliApp({
                   {homeKcal ? `${Math.round(homeKcal).toLocaleString()} kcal` : "—"}
                 </p>
                 <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-                  {homeKcal ? `${priceRange(homeKcal)} / day` : ""}
+                  {homeKcal ? `${formatPrice(dayPrice, homeKcal)} / day` : ""}
                 </p>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
