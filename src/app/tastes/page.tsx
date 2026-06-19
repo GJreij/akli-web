@@ -31,10 +31,11 @@ export default async function TastesPage() {
   ]);
 
   // Build week groups with deduped recipes
-  const weeks = (menusRes.data ?? []).map(w => {
+  type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { recipe: RecipeRow | null }[] };
+  const weeks = ((menusRes.data ?? []) as unknown as RawWeek[]).map(w => {
     const seen = new Set<number>();
     const recipes: RecipeRow[] = [];
-    for (const wmr of (w.weekly_menu_recipe ?? []) as { recipe: RecipeRow | null }[]) {
+    for (const wmr of (w.weekly_menu_recipe ?? [])) {
       if (wmr.recipe && !seen.has(wmr.recipe.id)) {
         seen.add(wmr.recipe.id);
         recipes.push(wmr.recipe);
