@@ -46,8 +46,9 @@ export default async function TastesPage() {
 
   // Build prefs map: recipe_id → rating
   const initialPrefs: Record<number, PrefRating> = {};
-  for (const p of prefsRes.data ?? []) {
-    if (p.recipe_id) initialPrefs[p.recipe_id] = parsePref(p as { like: boolean | null; dislike: boolean | null; dont_include: boolean | null });
+  type PrefRow = { recipe_id: number | null; like: boolean | null; dislike: boolean | null; dont_include: boolean | null };
+  for (const p of (prefsRes.data ?? []) as unknown as PrefRow[]) {
+    if (p.recipe_id) initialPrefs[p.recipe_id] = parsePref(p);
   }
 
   return (
