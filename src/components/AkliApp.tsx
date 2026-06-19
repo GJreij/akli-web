@@ -593,15 +593,16 @@ export default function AkliApp({
                 </div>
               </div>
 
-              {/* Price strip */}
+              {/* Delivery strip */}
               <div style={{
-                background: "#f5f2ef", borderRadius: 12,
-                padding: "12px 16px", display: "flex",
-                alignItems: "center", justifyContent: "space-between",
+                background: C.teal, borderRadius: 12,
+                padding: "13px 16px", display: "flex",
+                alignItems: "center", gap: 12,
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <IconTruck size={16} color={C.tealDark} />
-                  <p style={{ fontSize: 12.5, color: C.muted, margin: 0 }}>Free delivery over $25</p>
+                <IconTruck size={18} color="#fff" style={{ flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", margin: "0 0 2px" }}>Free delivery on orders over $25</p>
+                  <p style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", margin: 0 }}>Every daily order above $25 ships free — no monthly commitment needed.</p>
                 </div>
               </div>
             </div>
