@@ -8,7 +8,7 @@ import type { Database } from "@/lib/supabase/types";
 import {
   IconTrendingDown, IconScale, IconTrendingUp, IconHeart,
   IconBolt, IconMinus, IconPlus, IconBrandWhatsapp, IconChevronDown,
-  IconLeaf, IconTruck, IconChartBar,
+  IconTruck, IconChartBar, IconCalendarEvent, IconAdjustments,
 } from "@tabler/icons-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -480,60 +480,122 @@ export default function AkliApp({
 
         {/* ────────── LANDING ────────── */}
         {screen === "landing" && (
-          <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 64px)", paddingBottom: 8 }}>
-            {/* Hero */}
-            <div style={{ marginBottom: 28 }}>
-              <p style={{ fontSize: 12.5, color: C.teal, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 8px" }}>
-                Your meal plan, built for you
-              </p>
-              <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 28, fontWeight: 600, lineHeight: 1.25, margin: "0 0 10px", color: C.primary }}>
-                Meal prep that fits<br />your life.
-              </h2>
-              <p style={{ fontSize: 14, color: C.muted, margin: 0, lineHeight: 1.65 }}>
-                Tell us your goal — we handle the rest. Real food, real macros, delivered around your schedule.
-              </p>
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 64px)" }}>
 
-            {/* Trust anchors */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
-              {[
-                { Icon: IconChartBar, title: "Macro-matched meals",  sub: "Every dish is calculated to hit your daily protein, carbs & fat targets." },
-                { Icon: IconLeaf,     title: "Menu refreshes bi-weekly", sub: "New recipes every two weeks — variety without the guesswork." },
-                { Icon: IconTruck,    title: "Free delivery over $25", sub: "Delivered to your door. No minimum commitment." },
-              ].map(({ Icon, title, sub }) => (
-                <div key={title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 10, background: "#f0f7f7",
-                    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                  }}>
-                    <Icon size={18} color={C.tealDark} />
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: C.primary, margin: "0 0 2px" }}>{title}</p>
-                    <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.55 }}>{sub}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Example plan chip */}
+            {/* ── Hero band ── */}
             <div style={{
-              background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
-              padding: "12px 16px", display: "flex", justifyContent: "space-between",
-              alignItems: "center", marginBottom: 24,
+              margin: "-24px -20px 0", padding: "32px 24px 28px",
+              background: C.primary, position: "relative", overflow: "hidden",
             }}>
-              <div>
-                <p style={{ fontSize: 11, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>e.g. a typical plan</p>
-                <p style={{ fontSize: 16, fontWeight: 600, margin: 0, color: C.primary }}>2,100 kcal / day</p>
+              {/* Decorative circle */}
+              <div style={{
+                position: "absolute", top: -60, right: -60,
+                width: 200, height: 200, borderRadius: "50%",
+                background: "rgba(103,177,176,0.12)", pointerEvents: "none",
+              }} />
+              <p style={{
+                fontSize: 11.5, color: C.teal, fontWeight: 700,
+                letterSpacing: "0.1em", textTransform: "uppercase", margin: "0 0 12px",
+              }}>
+                Meal prep · Delivered
+              </p>
+              <h2 style={{
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: 32, fontWeight: 600, lineHeight: 1.2,
+                color: "#fff", margin: "0 0 14px",
+              }}>
+                Meal prep that<br />adapts to your life.
+              </h2>
+              <p style={{ fontSize: 14, color: "rgba(255,255,255,0.68)", margin: 0, lineHeight: 1.7 }}>
+                Order a single day or a full month. Skip a meal, drop a day, swap what you don&apos;t like — your plan bends around you, not the other way around.
+              </p>
+            </div>
+
+            {/* ── Feature cards ── */}
+            <div style={{ flex: 1, paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+
+              {/* Flexibility card */}
+              <div style={{
+                background: C.white, border: `1px solid ${C.border}`,
+                borderRadius: 14, padding: "16px 18px",
+                display: "flex", gap: 14, alignItems: "flex-start",
+              }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 11, background: "#f0f7f7",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                }}>
+                  <IconCalendarEvent size={19} color={C.tealDark} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
+                    One day or one month
+                  </p>
+                  <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
+                    Pick any range of days. No subscription, no lock-in. Order what fits your week.
+                  </p>
+                </div>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <p style={{ fontSize: 11, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.06em" }}>estimated</p>
-                <p style={{ fontSize: 16, fontWeight: 600, margin: 0, color: C.primary }}>$32–37 / day</p>
+
+              {/* Customise card */}
+              <div style={{
+                background: C.white, border: `1px solid ${C.border}`,
+                borderRadius: 14, padding: "16px 18px",
+                display: "flex", gap: 14, alignItems: "flex-start",
+              }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 11, background: "#f0f7f7",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                }}>
+                  <IconAdjustments size={19} color={C.tealDark} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
+                    Fully customisable
+                  </p>
+                  <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
+                    Skip breakfast, remove a meal, mark what you love or hate — the plan adjusts automatically.
+                  </p>
+                </div>
+              </div>
+
+              {/* Macros card */}
+              <div style={{
+                background: C.white, border: `1px solid ${C.border}`,
+                borderRadius: 14, padding: "16px 18px",
+                display: "flex", gap: 14, alignItems: "flex-start",
+              }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: 11, background: "#f0f7f7",
+                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                }}>
+                  <IconChartBar size={19} color={C.tealDark} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
+                    Built around your numbers
+                  </p>
+                  <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
+                    Every meal is calculated to hit your daily protein, carbs & fat targets — not just a rough estimate.
+                  </p>
+                </div>
+              </div>
+
+              {/* Price strip */}
+              <div style={{
+                background: "#f5f2ef", borderRadius: 12,
+                padding: "12px 16px", display: "flex",
+                alignItems: "center", justifyContent: "space-between",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <IconTruck size={16} color={C.tealDark} />
+                  <p style={{ fontSize: 12.5, color: C.muted, margin: 0 }}>Free delivery over $25</p>
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: C.primary, margin: 0 }}>From $32 / day</p>
               </div>
             </div>
 
-            {/* CTA — pushed to bottom */}
-            <div style={{ marginTop: "auto" }}>
+            {/* ── CTA ── */}
+            <div style={{ paddingTop: 24, paddingBottom: 4 }}>
               <button className="btn-primary" style={{ marginBottom: 12 }} onClick={startOnboarding}>
                 Build my plan
               </button>
@@ -548,6 +610,7 @@ export default function AkliApp({
                 </a>
               </p>
             </div>
+
           </div>
         )}
 
