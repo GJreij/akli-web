@@ -183,9 +183,19 @@ export async function confirmOrder(
 
 // ─── /update_meal_plan ───────────────────────────────────────────────────────
 
+export interface ChangeLog {
+  date: string;
+  created_at: string;    // ISO string
+  meal_key?: string;     // omit for full-day delete
+  Delete?: boolean;
+  old_recipe_id?: number;
+  new_recipe_id?: number;
+  include_macros_in_rest?: boolean; // true = spread to other meals, false = eating out (reduce day kcal)
+}
+
 export async function updateMealPlan(
   original_plan: GenerateMealPlanResponse,
-  change_logs: unknown[]
+  change_logs: ChangeLog[]
 ): Promise<GenerateMealPlanResponse> {
   const res = await fetch(`${FLASK_URL}/update_meal_plan`, {
     method: "POST",

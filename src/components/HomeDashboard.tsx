@@ -1,20 +1,208 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 
-type UserRow = Database["public"]["Tables"]["user"]["Row"];
+type UserRow  = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
+
+type RecipeRow = {
+  id: number;
+  name: string | null;
+  description: string | null;
+  photo: string | null;
+  could_be_breakfast: boolean | null;
+  could_be_lunch: boolean | null;
+  could_be_dinner: boolean | null;
+  could_be_snack: boolean | null;
+};
+
+const C = {
+  primary:  "#063330",
+  teal:     "#67b1b0",
+  tealDark: "#437b7b",
+  sand:     "#bfa280",
+  cream:    "#dacab6",
+  offWhite: "#eee9e6",
+  muted:    "#5c5c5c",
+  light:    "#9a9a9a",
+  border:   "#e0dbd5",
+  white:    "#ffffff",
+};
+
+function mealLabel(r: RecipeRow): string {
+  if (r.could_be_breakfast) return "Breakfast";
+  if (r.could_be_lunch)     return "Lunch";
+  if (r.could_be_dinner)    return "Dinner";
+  if (r.could_be_snack)     return "Snack";
+  return "Meal";
+}
+
+// ── Macro ring ───────────────────────────────────────────────────────────────
+
+// Brighter colors that pop on the dark green hero background
+const RING = { protein: "#e8a87c", carbs: "#c9a84c", fat: "#7abfbe" };
+
+function MacroRing({ p, c, f, kcal }: { p: number; c: number; f: number; kcal: number }) {
+  const total = p * 4 + c * 4 + f * 9;
+  const pPct  = total ? (p * 4 / total) * 100 : 33;
+  const cPct  = total ? (c * 4 / total) * 100 : 33;
+  const fPct  = 100 - pPct - cPct;
+
+  const r = 42, cx = 54, cy = 54, stroke = 11;
+  const circ = 2 * Math.PI * r;
+  const gap = 2.5;
+
+  function arc(offset: number, pct: number, color: string) {
+    const len = Math.max(0, circ * (pct / 100) - gap);
+    return (
+      <circle
+        cx={cx} cy={cy} r={r}
+        fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={`${len} ${circ}`}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        style={{ transform: "rotate(-90deg)", transformOrigin: `${cx}px ${cy}px` }}
+      />
+    );
+  }
+
+  const o1 = 0;
+  const o2 = -(circ * (pPct / 100));
+  const o3 = -(circ * ((pPct + cPct) / 100));
+
+  return (
+    <div style={{ position: "relative", width: 108, height: 108, flexShrink: 0 }}>
+      <svg width={108} height={108} viewBox="0 0 108 108">
+        {/* Track */}
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={stroke} />
+        {arc(o1, pPct, RING.protein)}
+        {arc(o2, cPct, RING.carbs)}
+        {arc(o3, fPct, RING.fat)}
+      </svg>
+      <div style={{
+        position: "absolute", inset: 0,
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      }}>
+        <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 500, color: C.white, lineHeight: 1 }}>
+          {kcal.toLocaleString("en-US")}
+        </span>
+        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>kcal</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Recipe modal ─────────────────────────────────────────────────────────────
+
+function RecipeModal({ recipe, onClose }: { recipe: RecipeRow; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 50,
+        background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)",
+        display: "flex", alignItems: "flex-end", justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: "100%", maxWidth: 480,
+          background: C.white, borderRadius: "18px 18px 0 0",
+          overflow: "hidden",
+          animation: "slideUp 0.22s ease",
+        }}
+      >
+        {recipe.photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={recipe.photo}
+            alt={recipe.name ?? ""}
+            style={{ width: "100%", height: 240, objectFit: "cover" }}
+          />
+        )}
+        <div style={{ padding: "20px 22px 32px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 20 }}>{recipe.name}</h3>
+            <span style={{
+              fontSize: 11, fontWeight: 600, color: C.tealDark,
+              background: "#e8f4f4", padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", marginLeft: 10,
+            }}>
+              {mealLabel(recipe)}
+            </span>
+          </div>
+          {recipe.description && (
+            <p style={{ fontSize: 13.5, color: C.muted, margin: 0, lineHeight: 1.65 }}>{recipe.description}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Recipe card ───────────────────────────────────────────────────────────────
+
+function RecipeCard({ recipe, onClick }: { recipe: RecipeRow; onClick: () => void }) {
+  const [imgErr, setImgErr] = useState(false);
+
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flexShrink: 0, width: 160, borderRadius: 14,
+        overflow: "hidden", border: `1px solid ${C.border}`,
+        background: C.white, padding: 0, textAlign: "left",
+        cursor: "pointer", position: "relative",
+      }}
+    >
+      {recipe.photo && !imgErr ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={recipe.photo}
+          alt={recipe.name ?? ""}
+          onError={() => setImgErr(true)}
+          style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }}
+        />
+      ) : (
+        <div style={{ width: "100%", height: 110, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <IconLeaf size={28} color={C.light} />
+        </div>
+      )}
+      {/* Meal type badge */}
+      <span style={{
+        position: "absolute", top: 8, left: 8,
+        fontSize: 10, fontWeight: 600, color: C.white,
+        background: "rgba(6,51,48,0.72)", backdropFilter: "blur(4px)",
+        padding: "3px 7px", borderRadius: 20,
+      }}>
+        {mealLabel(recipe)}
+      </span>
+      <div style={{ padding: "10px 11px 12px" }}>
+        <p style={{ fontSize: 12.5, fontWeight: 600, margin: 0, color: "#1a1a1a", lineHeight: 1.35, WebkitLineClamp: 2, display: "-webkit-box", WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {recipe.name}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function HomeDashboard({
   profile,
   macroTarget,
+  menuRecipes = [],
 }: {
-  profile: UserRow | null;
-  macroTarget: MacroRow | null;
+  profile:      UserRow | null;
+  macroTarget:  MacroRow | null;
+  menuRecipes?: RecipeRow[];
 }) {
   const router = useRouter();
+  const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
 
   async function signOut() {
     const supabase = createClient();
@@ -23,76 +211,184 @@ export default function HomeDashboard({
     router.refresh();
   }
 
-  const name = profile?.name ?? "there";
-  const kcal = macroTarget?.kcal_target ?? null;
-  const protein = macroTarget?.protein_g ?? null;
-  const carbs = macroTarget?.carbs_g ?? null;
-  const fat = macroTarget?.fat_g ?? null;
+  const name    = profile?.name ?? "";
+  const kcal    = Math.round(macroTarget?.kcal_target ?? 0);
+  const protein = Math.round(macroTarget?.protein_g   ?? 0);
+  const carbs   = Math.round(macroTarget?.carbs_g     ?? 0);
+  const fat     = Math.round(macroTarget?.fat_g       ?? 0);
+  const hasPlan = kcal > 0;
+
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
+
+  const dayStr = new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div className="min-h-screen bg-akli-cream">
-      {/* Top bar */}
-      <header className="px-6 py-4 flex items-center justify-between max-w-lg mx-auto">
-        <span className="text-2xl font-bold text-akli-green">akli</span>
-        <button onClick={signOut} className="text-sm text-akli-muted underline">
-          Sign out
-        </button>
-      </header>
+    <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
 
-      <main className="max-w-lg mx-auto px-6 pb-10">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-akli-charcoal">
-            Hey {name} 👋
-          </h1>
-          <p className="text-akli-muted text-sm mt-1">
-            {new Date().toLocaleDateString("en-GB", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-            })}
-          </p>
+      {/* ── Hero header ── */}
+      <div style={{
+        background: C.primary,
+        padding: "20px 20px 28px",
+        position: "relative", overflow: "hidden",
+      }}>
+        {/* subtle texture overlay */}
+        <div style={{
+          position: "absolute", inset: 0, opacity: 0.04,
+          backgroundImage: "radial-gradient(circle at 70% 30%, #fff 0%, transparent 60%)",
+          pointerEvents: "none",
+        }} />
+
+        {/* top bar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, position: "relative" }}>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: C.white, fontWeight: 500, letterSpacing: "0.01em" }}>
+            akli
+          </span>
+          <button
+            onClick={signOut}
+            style={{ background: "none", border: "none", fontSize: 12, color: "rgba(255,255,255,0.45)", padding: 0, cursor: "pointer" }}
+          >
+            Sign out
+          </button>
         </div>
 
-        {/* Today's plan card */}
-        {kcal ? (
-          <div className="card mb-5">
-            <div className="text-sm font-medium text-akli-muted mb-3">Today&apos;s target</div>
-            <div className="text-4xl font-bold text-akli-charcoal mb-4">{kcal} kcal</div>
+        {/* greeting */}
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.55)", margin: "0 0 2px", position: "relative" }}>{dayStr}</p>
+        <h2 style={{
+          fontFamily: "'Playfair Display', serif",
+          fontSize: name ? 26 : 22, fontWeight: 500,
+          color: C.white, margin: "0 0 20px", position: "relative",
+        }}>
+          {name ? `${greeting}, ${name}.` : greeting + "."}
+        </h2>
 
-            <div className="grid grid-cols-3 gap-3 mb-4">
+        {/* Macro card inside hero */}
+        {hasPlan ? (
+          <div style={{
+            background: "rgba(255,255,255,0.07)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 16, padding: "18px",
+            display: "flex", gap: 18, alignItems: "center",
+          }}>
+            <MacroRing p={protein} c={carbs} f={fat} kcal={kcal} />
+
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Your daily plan
+              </p>
               {[
-                { label: "Protein", value: protein, color: "text-blue-600 bg-blue-50" },
-                { label: "Carbs", value: carbs, color: "text-yellow-700 bg-yellow-50" },
-                { label: "Fat", value: fat, color: "text-orange-600 bg-orange-50" },
-              ].map((m) => (
-                <div key={m.label} className={`rounded-xl p-3 text-center ${m.color}`}>
-                  <div className="font-bold text-lg">{m.value ? `${Math.round(m.value)}g` : "—"}</div>
-                  <div className="text-xs">{m.label}</div>
+                { label: "Protein", val: protein, color: RING.protein },
+                { label: "Carbs",   val: carbs,   color: RING.carbs },
+                { label: "Fat",     val: fat,      color: RING.fat },
+              ].map(({ label, val, color }) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                  <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.55)" }}>{label}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color }}>{val}g</span>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="card mb-5 text-center py-8">
-            <p className="text-akli-muted mb-3">No macro plan set yet.</p>
-            <a href="/onboarding/goal" className="text-akli-green underline text-sm">
-              Set up your plan
-            </a>
+          <div style={{
+            background: "rgba(255,255,255,0.07)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 16, padding: "18px",
+            color: "rgba(255,255,255,0.6)", fontSize: 13, textAlign: "center",
+          }}>
+            No macro plan set yet.{" "}
+            <a href="/onboarding/goal" style={{ color: C.teal, textDecoration: "underline" }}>Set one up</a>
           </div>
         )}
+      </div>
 
-        {/* Start an order CTA */}
-        <button
-          onClick={() => router.push("/order/new")}
-          className="btn-primary w-full text-base py-4 mb-4"
-        >
-          Start an order
-        </button>
+      {/* ── Body ── */}
+      <div style={{ flex: 1, padding: "22px 20px 40px" }}>
 
-        <p className="text-center text-xs text-akli-muted">
-          Questions? Message us on WhatsApp.
-        </p>
-      </main>
+        {/* CTA buttons */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+          <button
+            className="btn-primary"
+            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 14 }}
+            onClick={() => router.push("/order/new")}
+          >
+            <IconShoppingBag size={16} />
+            Order this week
+          </button>
+          <button
+            style={{ flex: "0 0 auto", padding: "11px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: C.muted }}
+            onClick={() => router.push("/orders")}
+          >
+            <IconClockHour4 size={15} />
+            My orders
+          </button>
+          <button
+            style={{ flex: "0 0 auto", padding: "11px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: C.muted }}
+            onClick={() => router.push("/tastes")}
+          >
+            <IconHeart size={15} />
+            My Tastes
+          </button>
+        </div>
+
+        {/* This week's menu */}
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 17 }}>On the menu</h3>
+            <button
+              onClick={() => router.push("/menu")}
+              style={{ background: "none", border: "none", padding: 0, fontSize: 12.5, color: C.teal, fontWeight: 500, cursor: "pointer" }}
+            >
+              View all →
+            </button>
+          </div>
+
+          {menuRecipes.length > 0 ? (
+            <>
+              <div style={{
+                display: "flex", gap: 10,
+                overflowX: "auto", paddingBottom: 6,
+                scrollSnapType: "x mandatory",
+                marginLeft: -20, marginRight: -20,
+                paddingLeft: 20, paddingRight: 20,
+              }}>
+                {menuRecipes.slice(0, 5).map(r => (
+                  <div key={r.id} style={{ scrollSnapAlign: "start" }}>
+                    <RecipeCard recipe={r} onClick={() => setActiveRecipe(r)} />
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize: 12, color: C.light, marginTop: 10, textAlign: "center" }}>
+                Tap a dish to read more · Menu rotates weekly
+              </p>
+            </>
+          ) : (
+            <div style={{
+              border: `1px dashed ${C.border}`, borderRadius: 12,
+              padding: "28px 20px", textAlign: "center",
+              color: C.light, fontSize: 13,
+            }}>
+              This week&apos;s menu isn&apos;t published yet. Check back soon.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recipe modal */}
+      {activeRecipe && (
+        <RecipeModal recipe={activeRecipe} onClose={() => setActiveRecipe(null)} />
+      )}
+
+      {/* slide-up animation */}
+      <style>{`
+        @keyframes slideUp {
+          from { transform: translateY(40px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
