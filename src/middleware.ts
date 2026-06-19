@@ -24,6 +24,11 @@ export async function middleware(request: NextRequest) {
   // Refresh session — required for SSR auth
   await supabase.auth.getUser();
 
+  // Let reset-password through regardless — it handles its own auth client-side
+  if (request.nextUrl.pathname === "/reset-password") {
+    return supabaseResponse;
+  }
+
   return supabaseResponse;
 }
 
