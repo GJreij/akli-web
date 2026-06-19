@@ -106,9 +106,9 @@ function LogoImage() {
 // ─── Header ───────────────────────────────────────────────────────────────────
 
 function Header({
-  showProgress, progress, onLogoClick,
+  showProgress, progress, onLogoClick, onSignIn,
 }: {
-  showProgress: boolean; progress: number; onLogoClick: () => void;
+  showProgress: boolean; progress: number; onLogoClick: () => void; onSignIn?: () => void;
 }) {
   return (
     <div style={{ background: "#063330", padding: "14px 20px", flexShrink: 0 }}>
@@ -125,8 +125,20 @@ function Header({
           akli
         </button>
 
-        {/* Logo image — place your logo at public/logo.png */}
-        <LogoImage />
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {onSignIn && (
+            <button
+              onClick={onSignIn}
+              style={{
+                background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontSize: 13, color: "rgba(255,255,255,0.75)", fontWeight: 500,
+              }}
+            >
+              Sign in
+            </button>
+          )}
+          <LogoImage />
+        </div>
       </div>
 
       {showProgress && (
@@ -470,6 +482,7 @@ export default function AkliApp({
         onLogoClick={() => transition(
           screen === "home" || screen === "delivery" ? "home" : "signin"
         )}
+        onSignIn={screen === "landing" ? () => transition("signin") : undefined}
       />
 
       {/* ── Screen content ── */}
@@ -590,7 +603,6 @@ export default function AkliApp({
                   <IconTruck size={16} color={C.tealDark} />
                   <p style={{ fontSize: 12.5, color: C.muted, margin: 0 }}>Free delivery over $25</p>
                 </div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: C.primary, margin: 0 }}>From $32 / day</p>
               </div>
             </div>
 
