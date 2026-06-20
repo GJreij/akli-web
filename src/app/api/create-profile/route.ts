@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const {
       userId, name, last_name, phone_number, email, dob,
       tenant_id, kcal_target, protein_g, carbs_g, fat_g, diet_type,
+      goal, sex, height_cm, weight_kg, activity_level, method,
     } = body;
 
     if (!userId || !name || !email) {
@@ -52,6 +53,13 @@ export async function POST(req: NextRequest) {
       carbs_g: Math.round(carbs_g),
       fat_g: Math.round(fat_g),
       diet_type,
+      goal: goal || null,
+      sex: sex || null,
+      height_cm: height_cm ?? null,
+      weight_kg: weight_kg ?? null,
+      activity_level: activity_level ?? null,
+      method: method || null,
+      source: "onboarding",
     });
 
     if (macroError) {

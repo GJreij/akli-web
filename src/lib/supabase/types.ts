@@ -14,113 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      ai_feedback_logs: {
-        Row: {
-          created_at: string
-          explanation: string | null
-          id: number
-          source: string | null
-          suggestion: string | null
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          explanation?: string | null
-          id?: number
-          source?: string | null
-          suggestion?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          explanation?: string | null
-          id?: number
-          source?: string | null
-          suggestion?: string | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_feedback_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      daily_macro_adjustment: {
-        Row: {
-          adjustment_date: string | null
-          carbs_g_diff: number | null
-          created_at: string
-          fat_g_diff: number | null
-          fiber_g_diff: number | null
-          id: number
-          is_locked: boolean | null
-          kcal_diff: number | null
-          protein_g_diff: number | null
-          saturated_fat_g_diff: number | null
-          source: string | null
-          sugar_g_diff: number | null
-          tenant_id: number | null
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          adjustment_date?: string | null
-          carbs_g_diff?: number | null
-          created_at?: string
-          fat_g_diff?: number | null
-          fiber_g_diff?: number | null
-          id?: number
-          is_locked?: boolean | null
-          kcal_diff?: number | null
-          protein_g_diff?: number | null
-          saturated_fat_g_diff?: number | null
-          source?: string | null
-          sugar_g_diff?: number | null
-          tenant_id?: number | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          adjustment_date?: string | null
-          carbs_g_diff?: number | null
-          created_at?: string
-          fat_g_diff?: number | null
-          fiber_g_diff?: number | null
-          id?: number
-          is_locked?: boolean | null
-          kcal_diff?: number | null
-          protein_g_diff?: number | null
-          saturated_fat_g_diff?: number | null
-          source?: string | null
-          sugar_g_diff?: number | null
-          tenant_id?: number | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "daily_macro_adjustment_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "daily_macro_adjustment_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       daily_macro_order: {
         Row: {
           carbs_ordered: number | null
@@ -203,117 +96,72 @@ export type Database = {
           },
         ]
       }
-      daily_macro_override: {
-        Row: {
-          carbs_override: number | null
-          created_at: string
-          date: string | null
-          fat_override: number | null
-          fiber_override: number | null
-          id: number
-          kcal_override: number | null
-          note: string | null
-          protein_override: number | null
-          sat_fat_override: number | null
-          sugar_override: number | null
-          tenant_id: number | null
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          carbs_override?: number | null
-          created_at?: string
-          date?: string | null
-          fat_override?: number | null
-          fiber_override?: number | null
-          id?: number
-          kcal_override?: number | null
-          note?: string | null
-          protein_override?: number | null
-          sat_fat_override?: number | null
-          sugar_override?: number | null
-          tenant_id?: number | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          carbs_override?: number | null
-          created_at?: string
-          date?: string | null
-          fat_override?: number | null
-          fiber_override?: number | null
-          id?: number
-          kcal_override?: number | null
-          note?: string | null
-          protein_override?: number | null
-          sat_fat_override?: number | null
-          sugar_override?: number | null
-          tenant_id?: number | null
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "daily_macro_override_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "daily_macro_override_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       daily_macro_target: {
         Row: {
+          activity_level: number | null
           carbs_g: number | null
           created_at: string
           diet_type: string | null
           fat_g: number | null
           fiber_g: number | null
+          goal: string | null
+          height_cm: number | null
           id: number
           kcal_target: number | null
+          method: string | null
           protein_g: number | null
           saturated_fat_g: number | null
+          sex: string | null
+          source: string | null
           sugar_g: number | null
           tenant_id: number | null
           updated_at: string | null
           user_id: string | null
+          weight_kg: number | null
         }
         Insert: {
+          activity_level?: number | null
           carbs_g?: number | null
           created_at?: string
           diet_type?: string | null
           fat_g?: number | null
           fiber_g?: number | null
+          goal?: string | null
+          height_cm?: number | null
           id?: number
           kcal_target?: number | null
+          method?: string | null
           protein_g?: number | null
           saturated_fat_g?: number | null
+          sex?: string | null
+          source?: string | null
           sugar_g?: number | null
           tenant_id?: number | null
           updated_at?: string | null
           user_id?: string | null
+          weight_kg?: number | null
         }
         Update: {
+          activity_level?: number | null
           carbs_g?: number | null
           created_at?: string
           diet_type?: string | null
           fat_g?: number | null
           fiber_g?: number | null
+          goal?: string | null
+          height_cm?: number | null
           id?: number
           kcal_target?: number | null
+          method?: string | null
           protein_g?: number | null
           saturated_fat_g?: number | null
+          sex?: string | null
+          source?: string | null
           sugar_g?: number | null
           tenant_id?: number | null
           updated_at?: string | null
           user_id?: string | null
+          weight_kg?: number | null
         }
         Relationships: [
           {
@@ -1409,67 +1257,46 @@ export type Database = {
       }
       user: {
         Row: {
-          address: string | null
-          akli_partner: boolean | null
           created_at: string
-          delivery_address: string | null
           DoB: string | null
           email: string | null
           id: string
           last_name: string | null
           name: string | null
-          non_akli_partner: boolean | null
           onboarding: boolean | null
           phone_number: string | null
-          reference: string | null
           role: string | null
-          self_built_diet: boolean | null
           status: string | null
           tenant_id: number | null
           updated_at: string | null
-          usage_mode: string | null
         }
         Insert: {
-          address?: string | null
-          akli_partner?: boolean | null
           created_at?: string
-          delivery_address?: string | null
           DoB?: string | null
           email?: string | null
           id: string
           last_name?: string | null
           name?: string | null
-          non_akli_partner?: boolean | null
           onboarding?: boolean | null
           phone_number?: string | null
-          reference?: string | null
           role?: string | null
-          self_built_diet?: boolean | null
           status?: string | null
           tenant_id?: number | null
           updated_at?: string | null
-          usage_mode?: string | null
         }
         Update: {
-          address?: string | null
-          akli_partner?: boolean | null
           created_at?: string
-          delivery_address?: string | null
           DoB?: string | null
           email?: string | null
           id?: string
           last_name?: string | null
           name?: string | null
-          non_akli_partner?: boolean | null
           onboarding?: boolean | null
           phone_number?: string | null
-          reference?: string | null
           role?: string | null
-          self_built_diet?: boolean | null
           status?: string | null
           tenant_id?: number | null
           updated_at?: string | null
-          usage_mode?: string | null
         }
         Relationships: [
           {
@@ -1557,56 +1384,6 @@ export type Database = {
           },
           {
             foreignKeyName: "user_delivery_preference_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      user_preference: {
-        Row: {
-          comment: string | null
-          created_at: string
-          day_composition_pref: string | null
-          delivery_date_pref: string | null
-          dislikes: boolean | null
-          dont_include: boolean | null
-          id: number
-          likes: boolean | null
-          updated_at: string | null
-          user_id: string | null
-          week_composition_pref: string | null
-        }
-        Insert: {
-          comment?: string | null
-          created_at?: string
-          day_composition_pref?: string | null
-          delivery_date_pref?: string | null
-          dislikes?: boolean | null
-          dont_include?: boolean | null
-          id?: number
-          likes?: boolean | null
-          updated_at?: string | null
-          user_id?: string | null
-          week_composition_pref?: string | null
-        }
-        Update: {
-          comment?: string | null
-          created_at?: string
-          day_composition_pref?: string | null
-          delivery_date_pref?: string | null
-          dislikes?: boolean | null
-          dont_include?: boolean | null
-          id?: number
-          likes?: boolean | null
-          updated_at?: string | null
-          user_id?: string | null
-          week_composition_pref?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_prefrence_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "user"
@@ -1747,83 +1524,6 @@ export type Database = {
             columns: ["weekly_menu_id"]
             isOneToOne: false
             referencedRelation: "weekly_menu"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      weekly_menu_template: {
-        Row: {
-          created_at: string
-          description: string | null
-          id: number
-          template_name: string | null
-          updated_at: string | null
-          weekly_menu_id: number | null
-        }
-        Insert: {
-          created_at?: string
-          description?: string | null
-          id?: number
-          template_name?: string | null
-          updated_at?: string | null
-          weekly_menu_id?: number | null
-        }
-        Update: {
-          created_at?: string
-          description?: string | null
-          id?: number
-          template_name?: string | null
-          updated_at?: string | null
-          weekly_menu_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "weekly_menu_template_weekly_menu_id_fkey"
-            columns: ["weekly_menu_id"]
-            isOneToOne: false
-            referencedRelation: "weekly_menu"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      weekly_menu_template_recipe: {
-        Row: {
-          created_at: string
-          id: number
-          meal_type: string | null
-          recipe_id: number | null
-          template_id: number | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: number
-          meal_type?: string | null
-          recipe_id?: number | null
-          template_id?: number | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: number
-          meal_type?: string | null
-          recipe_id?: number | null
-          template_id?: number | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "weekly_menu_template_recipe_recipe_id_fkey"
-            columns: ["recipe_id"]
-            isOneToOne: false
-            referencedRelation: "recipe"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "weekly_menu_template_recipe_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "weekly_menu_template"
             referencedColumns: ["id"]
           },
         ]
