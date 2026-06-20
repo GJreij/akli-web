@@ -440,6 +440,12 @@ export default function AkliApp({
         carbs_g: lastMacros.c,
         fat_g: lastMacros.f,
         diet_type: dietType,
+        goal,
+        sex: weightKnown ? sex : null,
+        height_cm: weightKnown ? height : null,
+        weight_kg: weightKnown ? weight : null,
+        activity_level: weightKnown ? activity : null,
+        method: weightKnown ? "guided" : "manual",
       }),
     });
 

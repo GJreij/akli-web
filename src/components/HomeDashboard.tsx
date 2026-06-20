@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart } from "@tabler/icons-react";
+import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
+import DietWizard from "@/components/DietWizard";
 
 type UserRow  = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
@@ -203,6 +204,7 @@ export default function HomeDashboard({
 }) {
   const router = useRouter();
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
+  const [dietWizardOpen, setDietWizardOpen] = useState(false);
 
   async function signOut() {
     const supabase = createClient();
@@ -248,12 +250,21 @@ export default function HomeDashboard({
           <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: C.white, fontWeight: 500, letterSpacing: "0.01em" }}>
             akli
           </span>
-          <button
-            onClick={signOut}
-            style={{ background: "none", border: "none", fontSize: 12, color: "rgba(255,255,255,0.45)", padding: 0, cursor: "pointer" }}
-          >
-            Sign out
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button
+              onClick={() => router.push("/profile")}
+              title="Profile"
+              style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex" }}
+            >
+              <IconUserCircle size={22} />
+            </button>
+            <button
+              onClick={signOut}
+              style={{ background: "none", border: "none", fontSize: 12, color: "rgba(255,255,255,0.45)", padding: 0, cursor: "pointer" }}
+            >
+              Sign out
+            </button>
+          </div>
         </div>
 
         {/* greeting */}
@@ -266,7 +277,7 @@ export default function HomeDashboard({
           {name ? `${greeting}, ${name}.` : greeting + "."}
         </h2>
 
-        {/* Macro card inside hero */}
+        {/* Macro card inside hero — edit icon opens the diet wizard */}
         {hasPlan ? (
           <div style={{
             background: "rgba(255,255,255,0.07)",
@@ -277,9 +288,18 @@ export default function HomeDashboard({
             <MacroRing p={protein} c={carbs} f={fat} kcal={kcal} />
 
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Your daily plan
-              </p>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", margin: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Your daily plan
+                </p>
+                <button
+                  onClick={() => setDietWizardOpen(true)}
+                  title="Update your diet"
+                  style={{ background: "none", border: "none", padding: 4, color: "rgba(255,255,255,0.55)", cursor: "pointer", display: "flex" }}
+                >
+                  <IconPencil size={14} />
+                </button>
+              </div>
               {[
                 { label: "Protein", val: protein, color: RING.protein },
                 { label: "Carbs",   val: carbs,   color: RING.carbs },
@@ -300,7 +320,12 @@ export default function HomeDashboard({
             color: "rgba(255,255,255,0.6)", fontSize: 13, textAlign: "center",
           }}>
             No macro plan set yet.{" "}
-            <a href="/onboarding/goal" style={{ color: C.teal, textDecoration: "underline" }}>Set one up</a>
+            <button
+              onClick={() => setDietWizardOpen(true)}
+              style={{ background: "none", border: "none", padding: 0, color: C.teal, textDecoration: "underline", fontSize: 13, cursor: "pointer" }}
+            >
+              Set one up
+            </button>
           </div>
         )}
       </div>
@@ -380,6 +405,16 @@ export default function HomeDashboard({
       {/* Recipe modal */}
       {activeRecipe && (
         <RecipeModal recipe={activeRecipe} onClose={() => setActiveRecipe(null)} />
+      )}
+
+      {/* Diet wizard */}
+      {dietWizardOpen && profile?.id && (
+        <DietWizard
+          userId={profile.id}
+          currentMacro={macroTarget}
+          onClose={() => setDietWizardOpen(false)}
+          onSaved={() => { setDietWizardOpen(false); router.refresh(); }}
+        />
       )}
 
       {/* slide-up animation */}
