@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
-  IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown,
+  IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import {
@@ -56,6 +56,14 @@ const MEAL_LABELS: Record<MealType, string> = {
   lunch:     "Lunch",
   dinner:    "Dinner",
   snack:     "Snack",
+};
+
+// Approximate % of daily kcal per meal — used to reduce target when user is "eating out"
+const MEAL_KCAL_PCT: Record<MealType, number> = {
+  breakfast: 0.25,
+  lunch:     0.30,
+  dinner:    0.35,
+  snack:     0.10,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -298,31 +306,196 @@ function StepHeader({ step, total, title, subtitle, onBack }: {
 
 // ─── Generating screen ────────────────────────────────────────────────────────
 
-const MSGS = [
-  "Balancing your macros…",
-  "Picking the tastiest combinations…",
-  "Making sure it all adds up…",
-  "Running the optimizer…",
-  "Almost ready…",
+const GEN_SCENES = [
+  { msg: "Opening the weekly menu…" },
+  { msg: "Flipping the perfect crepe…" },
+  { msg: "Balancing your macros…" },
+  { msg: "Packaging it all up for you…" },
 ];
 
+function SceneCalendar() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes calCell {
+          0%,100% { opacity:0; transform:scale(.3); transform-box:fill-box; transform-origin:center; }
+          40%,60% { opacity:1; transform:scale(1);   transform-box:fill-box; transform-origin:center; }
+        }
+        @keyframes calBounce {
+          0%,100% { transform:translateY(0); }
+          50%      { transform:translateY(-5px); }
+        }
+      `}</style>
+      <g style={{ animation: "calBounce 2s ease-in-out infinite" }}>
+        <rect x="15" y="22" width="70" height="68" rx="7" fill="#fff" stroke={C.teal} strokeWidth="2.5"/>
+        <rect x="15" y="22" width="70" height="22" rx="7" fill={C.teal}/>
+        <rect x="15" y="36" width="70" height="8"  fill={C.teal}/>
+        <rect x="33" y="15" width="5" height="14" rx="2.5" fill={C.primary}/>
+        <rect x="62" y="15" width="5" height="14" rx="2.5" fill={C.primary}/>
+        <text x="50" y="34" textAnchor="middle" fill="#fff" fontSize="8.5" fontFamily="sans-serif" fontWeight="bold">JUNE</text>
+        {[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,17,18].map((i) => {
+          const col = i % 7, row = Math.floor(i / 7);
+          const cx = 22 + col * 9, cy = 50 + row * 11;
+          const delay = ((i * 0.15) % 2).toFixed(2);
+          return (
+            <rect key={i} x={cx} y={cy} width="7" height="7" rx="2"
+              fill={i % 5 === 0 ? C.teal : "#eee9e6"} stroke={C.border} strokeWidth="0.5"
+              style={{ animation: `calCell 2s ease-in-out ${delay}s infinite` }}
+            />
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+function ScenePan() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes crepeFlip {
+          0%,100% { transform:translateY(0)   rotate(0deg);   transform-box:fill-box; transform-origin:center; }
+          25%      { transform:translateY(-30px) rotate(0deg);   transform-box:fill-box; transform-origin:center; }
+          50%      { transform:translateY(-34px) rotate(180deg); transform-box:fill-box; transform-origin:center; }
+          75%      { transform:translateY(-28px) rotate(360deg); transform-box:fill-box; transform-origin:center; }
+        }
+        @keyframes steamPuff {
+          0%,100% { opacity:0; transform:translateY(0)   scale(1);   transform-box:fill-box; transform-origin:center; }
+          50%      { opacity:.5; transform:translateY(-10px) scale(1.3); transform-box:fill-box; transform-origin:center; }
+        }
+      `}</style>
+      {/* Handle */}
+      <rect x="66" y="63" width="25" height="8" rx="4" fill={C.primary}/>
+      {/* Pan shadow */}
+      <ellipse cx="44" cy="76" rx="28" ry="5" fill="rgba(0,0,0,0.07)"/>
+      {/* Pan body */}
+      <ellipse cx="44" cy="72" rx="28" ry="8.5" fill={C.primary}/>
+      <ellipse cx="44" cy="67" rx="28" ry="8.5" fill="#1d5048"/>
+      <ellipse cx="44" cy="64" rx="24" ry="6.5" fill={C.primary}/>
+      <ellipse cx="44" cy="62" rx="20" ry="5"   fill="#1d5048"/>
+      {/* Crepe */}
+      <ellipse cx="44" cy="61" rx="16" ry="4" fill="#f5c84a"
+        style={{ animation: "crepeFlip 2.4s ease-in-out infinite" }}/>
+      {/* Steam */}
+      {[38, 50, 44].map((x, i) => (
+        <ellipse key={i} cx={x} cy={50} rx="2.5" ry="3.5" fill={C.teal} opacity="0"
+          style={{ animation: `steamPuff 1.6s ease-in-out ${(i * 0.45).toFixed(2)}s infinite` }}/>
+      ))}
+    </svg>
+  );
+}
+
+function SceneScale() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes scaleBeam { 0%,100%{transform:rotate(-13deg)} 50%{transform:rotate(13deg)} }
+        @keyframes plateLeft  { 0%,100%{transform:translateY(7px)}  50%{transform:translateY(-7px)} }
+        @keyframes plateRight { 0%,100%{transform:translateY(-7px)} 50%{transform:translateY(7px)} }
+      `}</style>
+      {/* Base */}
+      <rect x="34" y="84" width="32" height="7" rx="3.5" fill={C.primary}/>
+      {/* Pole */}
+      <rect x="47" y="38" width="6" height="47" rx="3" fill={C.primary}/>
+      {/* Top knob */}
+      <circle cx="50" cy="38" r="5" fill={C.teal}/>
+      {/* Beam */}
+      <rect x="16" y="35" width="68" height="6" rx="3" fill={C.teal}
+        style={{ animation: "scaleBeam 2s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "center" }}/>
+      {/* Left side */}
+      <g style={{ animation: "plateLeft 2s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "24px 38px" }}>
+        <line x1="24" y1="38" x2="24" y2="60" stroke={C.teal} strokeWidth="1.5"/>
+        <ellipse cx="24" cy="63" rx="13" ry="4" fill={C.teal}/>
+        <circle cx="20" cy="58" r="5" fill="#e8895a"/>
+        <circle cx="28" cy="59" r="3.5" fill="#67b1b0"/>
+      </g>
+      {/* Right side */}
+      <g style={{ animation: "plateRight 2s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "76px 38px" }}>
+        <line x1="76" y1="38" x2="76" y2="60" stroke={C.teal} strokeWidth="1.5"/>
+        <ellipse cx="76" cy="63" rx="13" ry="4" fill={C.teal}/>
+        <circle cx="76" cy="58" r="5" fill="#f5c84a"/>
+      </g>
+    </svg>
+  );
+}
+
+function SceneBox() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes lidDown {
+          0%,20%  { transform:translateY(-18px); }
+          55%,100%{ transform:translateY(0); }
+        }
+        @keyframes boxPop {
+          0%,100%{ transform:translateY(0); }
+          50%    { transform:translateY(-5px); }
+        }
+        @keyframes bowAppear {
+          0%,50% { opacity:0; transform:scale(.2); transform-box:fill-box; transform-origin:center; }
+          75%,100%{ opacity:1; transform:scale(1);  transform-box:fill-box; transform-origin:center; }
+        }
+      `}</style>
+      <g style={{ animation: "boxPop 2.4s ease-in-out infinite" }}>
+        {/* Box body */}
+        <rect x="20" y="52" width="60" height="40" rx="5" fill={C.teal}/>
+        <rect x="20" y="52" width="60" height="40" rx="5" fill="none" stroke={C.primary} strokeWidth="1.5"/>
+        {/* Vertical ribbon */}
+        <rect x="47" y="52" width="6" height="40" fill={C.primary} opacity="0.35"/>
+        {/* Lid */}
+        <g style={{ animation: "lidDown 2.4s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "50px 52px" }}>
+          <rect x="18" y="42" width="64" height="12" rx="5" fill={C.primary}/>
+          <rect x="18" y="50" width="64" height="4"  fill="rgba(0,0,0,0.2)"/>
+          {/* Horizontal ribbon on lid */}
+          <rect x="18" y="46" width="64" height="5" fill={C.teal} opacity="0.4"/>
+        </g>
+        {/* Bow — appears after lid closes */}
+        <g style={{ animation: "bowAppear 2.4s ease-in-out infinite" }}>
+          <ellipse cx="43" cy="42" rx="7" ry="4.5" fill={C.teal} transform="rotate(-20,43,42)"/>
+          <ellipse cx="57" cy="42" rx="7" ry="4.5" fill={C.teal} transform="rotate(20,57,42)"/>
+          <circle  cx="50" cy="42" r="4" fill={C.teal}/>
+          <circle  cx="50" cy="42" r="2" fill="#fff" opacity="0.4"/>
+        </g>
+      </g>
+    </svg>
+  );
+}
+
 function GeneratingScreen() {
-  const [idx, setIdx] = useState(0);
+  const [scene, setScene] = useState(0);
+  const [visible, setVisible] = useState(true);
+
   useEffect(() => {
-    const t = setInterval(() => setIdx(i => (i + 1) % MSGS.length), 1800);
+    const t = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setScene(s => (s + 1) % GEN_SCENES.length);
+        setVisible(true);
+      }, 350);
+    }, 3400);
     return () => clearInterval(t);
   }, []);
+
+  const scenes = [SceneCalendar, ScenePan, SceneScale, SceneBox];
+  const SceneComp = scenes[scene];
+
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 40, background: C.offWhite }}>
-      <svg width={68} height={68} viewBox="0 0 68 68" style={{ marginBottom: 28, animation: "spin 1.1s linear infinite" }}>
-        <circle cx={34} cy={34} r={26} fill="none" stroke={C.border} strokeWidth={5} />
-        <circle cx={34} cy={34} r={26} fill="none" stroke={C.teal}   strokeWidth={5}
-          strokeDasharray="56 108" strokeLinecap="round"
-          style={{ transform: "rotate(-90deg)", transformOrigin: "34px 34px" }} />
-      </svg>
-      <h3 style={{ margin: "0 0 8px", fontSize: 20, textAlign: "center" }}>Building your plan</h3>
-      <p style={{ fontSize: 13, color: C.muted, margin: 0, textAlign: "center", minHeight: 22 }}>{MSGS[idx]}</p>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.35s ease",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 20,
+      }}>
+        <SceneComp />
+        <div style={{ textAlign: "center" }}>
+          <h3 style={{ margin: "0 0 6px", fontSize: 20, fontFamily: "'Playfair Display', serif", fontWeight: 500 }}>
+            Building your plan
+          </h3>
+          <p style={{ fontSize: 13, color: C.muted, margin: 0, minHeight: 20 }}>
+            {GEN_SCENES[scene].msg}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -362,12 +535,23 @@ function MealRow({ meal, onRemove, onReplace }: { meal: Meal; onRemove: () => vo
 
 // ─── Day card ─────────────────────────────────────────────────────────────────
 
+type MacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
+
+const MEAL_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
+
 function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal }: {
   day: PlanDay;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
 }) {
+  const macros = [
+    { label: "Protein", value: day.totals.protein, fmt: (v: number) => `${Math.round(v)}g` },
+    { label: "Carbs",   value: day.totals.carbs,   fmt: (v: number) => `${Math.round(v)}g` },
+    { label: "Fat",     value: day.totals.fat,      fmt: (v: number) => `${Math.round(v)}g` },
+    { label: "Kcal",    value: day.totals.kcal,     fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
+  ];
+
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px 11px", background: "#faf9f7", borderBottom: `1px solid ${C.border}` }}>
@@ -377,20 +561,15 @@ function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal }: {
         </button>
       </div>
       <div style={{ padding: "0 14px" }}>
-        {day.meals.map((meal) => (
+        {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
           <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
         ))}
       </div>
       <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderTop: `1px solid ${C.border}` }}>
-        {[
-          { label: "Protein", val: `${Math.round(day.totals.protein)}g` },
-          { label: "Carbs",   val: `${Math.round(day.totals.carbs)}g` },
-          { label: "Fat",     val: `${Math.round(day.totals.fat)}g` },
-          { label: "Kcal",    val: Math.round(day.totals.kcal).toLocaleString("en-US") },
-        ].map(({ label, val }) => (
+        {macros.map(({ label, value, fmt }) => (
           <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px" }}>
-            <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 1px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
-            <p style={{ fontSize: 12, fontWeight: 600, margin: 0 }}>{val}</p>
+            <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
+            <p style={{ fontSize: 12, fontWeight: 600, margin: 0 }}>{fmt(value)}</p>
           </div>
         ))}
       </div>
@@ -470,22 +649,57 @@ function ReplaceMealSheet({ meal, recipes, onClose, onSelect }: {
 // ─── Recipe preferences section (step 1) ─────────────────────────────────────
 
 function PreferencesSection({
-  userId, weeks, initialPrefs,
+  userId, weeks, initialPrefs, selectedDates, excludedMeals,
 }: {
   userId: string;
   weeks: OrderableWeek[];
   initialPrefs: Record<number, PrefRating>;
+  selectedDates: Set<string>;
+  excludedMeals: Set<MealType>;
 }) {
   const [open, setOpen] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<MealType | null>(null);
+  const [excludedNote, setExcludedNote] = useState<MealType | null>(null);
 
-  const allRecipes = Array.from(new Map(
-    weeks.flatMap(w => w.recipes).map(r => [r.id, r])
-  ).values());
+  const ALL: MealType[] = ["breakfast", "lunch", "snack", "dinner"];
+  const includedMealTypes = ALL.filter(m => !excludedMeals.has(m));
 
-  const ratedCount = allRecipes.filter(r => initialPrefs[r.id] != null).length;
+  const relevantWeeks = selectedDates.size > 0
+    ? weeks.filter(w => w.weekdays.some(d => selectedDates.has(d)))
+    : weeks;
+
+  const baseRecipes = Array.from(new Map(
+    relevantWeeks.flatMap(w => w.recipes).map(r => [r.id, r])
+  ).values()).filter(r =>
+    includedMealTypes.some(m => r[`could_be_${m}` as keyof RecipeRow])
+  );
+
+  // When a filter is active, further narrow by that meal type
+  const visibleRecipes = activeFilter
+    ? baseRecipes.filter(r => r[`could_be_${activeFilter}` as keyof RecipeRow])
+    : baseRecipes;
+
+  const ratedCount = baseRecipes.filter(r => initialPrefs[r.id] != null).length;
+
+  const subtitle = selectedDates.size === 0
+    ? "Pick dates first to see your menu"
+    : baseRecipes.length === 0
+      ? "No recipes found for these dates"
+      : ratedCount > 0
+        ? `${ratedCount} rated · ${baseRecipes.length} recipes in your selection`
+        : `${baseRecipes.length} recipes · optional to rate`;
+
+  function handleFilterPill(meal: MealType) {
+    if (excludedMeals.has(meal)) {
+      setExcludedNote(n => n === meal ? null : meal);
+      return;
+    }
+    setExcludedNote(null);
+    setActiveFilter(f => f === meal ? null : meal);
+  }
 
   return (
-    <div style={{ marginTop: 24 }}>
+    <div style={{ marginTop: 8 }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -497,9 +711,7 @@ function PreferencesSection({
       >
         <div style={{ textAlign: "left" }}>
           <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600 }}>Recipe preferences</p>
-          <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>
-            {ratedCount > 0 ? `${ratedCount} rated — solver will use these` : "Optional · tell us what you love or skip"}
-          </p>
+          <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{subtitle}</p>
         </div>
         <IconChevronDown
           size={16} color={C.light}
@@ -508,32 +720,77 @@ function PreferencesSection({
       </button>
 
       {open && (
-        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", padding: "4px 14px 6px" }}>
-          {allRecipes.length === 0 ? (
-            <p style={{ fontSize: 13, color: C.light, padding: "16px 0", textAlign: "center" }}>No recipes in upcoming weeks yet.</p>
-          ) : (
-            allRecipes.map((recipe, i) => (
-              <div key={recipe.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "11px 0", borderBottom: i < allRecipes.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                <div style={{ width: 42, height: 42, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {recipe.photo
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={recipe.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <IconLeaf size={14} color={C.light} />
-                  }
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {recipe.name}
-                  </p>
-                  <RecipeRater userId={userId} recipeId={recipe.id} initialRating={initialPrefs[recipe.id] ?? null} />
-                </div>
-              </div>
-            ))
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px" }}>
+
+          {/* Filter pills */}
+          <div style={{ display: "flex", gap: 6, padding: "12px 14px 10px", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
+            {ALL.map(meal => {
+              const isExcluded = excludedMeals.has(meal);
+              const isActive   = activeFilter === meal && !isExcluded;
+              return (
+                <button
+                  key={meal}
+                  onClick={() => handleFilterPill(meal)}
+                  style={{
+                    padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none",
+                    background: isActive ? C.teal : isExcluded ? "#f0f0f0" : C.offWhite,
+                    color: isActive ? C.white : isExcluded ? "#c0bab5" : C.muted,
+                    textDecoration: isExcluded ? "line-through" : "none",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  {MEAL_LABELS[meal]}
+                </button>
+              );
+            })}
+            {activeFilter && (
+              <button
+                onClick={() => { setActiveFilter(null); setExcludedNote(null); }}
+                style={{ padding: "5px 10px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: `1px solid ${C.border}`, background: C.white, color: C.light }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Excluded meal note */}
+          {excludedNote && (
+            <p style={{ fontSize: 12, color: C.muted, margin: 0, padding: "8px 14px", background: "#faf9f7", borderBottom: `1px solid ${C.border}` }}>
+              {MEAL_LABELS[excludedNote]} is excluded from your plan — those recipes won&apos;t appear in your order.
+            </p>
           )}
-          <p style={{ fontSize: 11, color: C.light, textAlign: "center", padding: "10px 0 6px" }}>
-            Manage all preferences in{" "}
-            <a href="/tastes" style={{ color: "#437b7b", textDecoration: "underline" }}>My Tastes</a>
-          </p>
+
+          <div style={{ padding: "4px 14px 6px" }}>
+            {selectedDates.size === 0 ? (
+              <p style={{ fontSize: 13, color: C.light, padding: "16px 0", textAlign: "center" }}>Select your dates above to see which recipes are on the menu.</p>
+            ) : visibleRecipes.length === 0 ? (
+              <p style={{ fontSize: 13, color: C.light, padding: "16px 0", textAlign: "center" }}>
+                {activeFilter ? `No ${MEAL_LABELS[activeFilter].toLowerCase()} recipes in your selection.` : "No recipes available for these dates and meal types."}
+              </p>
+            ) : (
+              visibleRecipes.map((recipe, i) => (
+                <div key={recipe.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "11px 0", borderBottom: i < visibleRecipes.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {recipe.photo
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={recipe.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <IconLeaf size={14} color={C.light} />
+                    }
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {recipe.name}
+                    </p>
+                    <RecipeRater userId={userId} recipeId={recipe.id} initialRating={initialPrefs[recipe.id] ?? null} />
+                  </div>
+                </div>
+              ))
+            )}
+            <p style={{ fontSize: 11, color: C.light, textAlign: "center", padding: "10px 0 6px" }}>
+              Manage all preferences in{" "}
+              <a href="/tastes" style={{ color: "#437b7b", textDecoration: "underline" }}>My Tastes</a>
+            </p>
+          </div>
         </div>
       )}
     </div>
@@ -610,17 +867,51 @@ export default function OrderFlow({
     }
   }
 
-  const ALL_MEALS: MealType[] = ["breakfast", "lunch", "dinner", "snack"];
+  const ALL_MEALS: MealType[] = ["breakfast", "lunch", "snack", "dinner"];
   const [excludedMeals, setExcludedMeals] = useState<Set<MealType>>(new Set());
   const [mealEatingOut, setMealEatingOut] = useState<Record<MealType, boolean>>({
     breakfast: false, lunch: false, dinner: false, snack: false,
   });
+  const [mealTypesOpen, setMealTypesOpen] = useState(false);
+  const [kcalAdjustment, setKcalAdjustment] = useState(0);
+
+  // Reset manual kcal adjustment whenever eating-out selections change
+  useEffect(() => { setKcalAdjustment(0); }, [mealEatingOut]);
+
+  // ── Derived kcal target ───────────────────────────────────────────────────────
+
+  const eatingOutMeals = ALL_MEALS.filter(m => excludedMeals.has(m) && mealEatingOut[m]);
+  const eatingOutReduction = eatingOutMeals.reduce((sum, m) => sum + MEAL_KCAL_PCT[m], 0);
+  const originalKcal  = macroTarget?.kcal_target ?? null;
+  const suggestedKcal = originalKcal !== null && eatingOutReduction > 0
+    ? Math.round(originalKcal * (1 - eatingOutReduction))
+    : null;
+  // User can nudge ±50 kcal from the suggestion; floor at 500
+  const finalKcalOverride = suggestedKcal !== null
+    ? Math.max(500, suggestedKcal + kcalAdjustment)
+    : undefined;
 
   // ── Plan state ────────────────────────────────────────────────────────────────
 
-  const [plan, setPlan]            = useState<GenerateMealPlanResponse | null>(null);
-  const [generateError, setGenErr] = useState<string | null>(null);
+  const [plan, setPlan]             = useState<GenerateMealPlanResponse | null>(null);
+  const [originalPlan, setOriginalPlan] = useState<GenerateMealPlanResponse | null>(null);
+  const [planHistory, setPlanHistory]   = useState<GenerateMealPlanResponse[]>([]);
+  const [generateError, setGenErr]  = useState<string | null>(null);
   const [updatingPlan, setUpdating] = useState(false);
+
+  function pushHistory() {
+    if (plan) setPlanHistory(h => [...h, plan]);
+  }
+  function undoChange() {
+    if (planHistory.length === 0) return;
+    setPlan(planHistory[planHistory.length - 1]);
+    setPlanHistory(h => h.slice(0, -1));
+  }
+  function revertToOriginal() {
+    if (!originalPlan) return;
+    setPlan(originalPlan);
+    setPlanHistory([]);
+  }
 
   type RemoveTarget  = { date: string; meal: Meal };
   type ReplaceTarget = { date: string; meal: Meal };
@@ -637,19 +928,24 @@ export default function OrderFlow({
   const [address, setAddress]           = useState(profile?.delivery_address ?? profile?.address ?? "");
   const [confirming, setConfirming]     = useState(false);
   const [confirmErr, setConfirmErr]     = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "whish" | "neo" | null>(null);
 
   const [estDayPrice, setEstDayPrice] = useState<number | null>(null);
   useEffect(() => {
     if (!macroTarget) return;
+    const includedMealCount = Math.max(1, ALL_MEALS.length - excludedMeals.size);
+    // Scale macros to the final kcal target so packaging + macro costs both reflect exclusions
+    const baseKcal = macroTarget.kcal_target ?? 1;
+    const scale    = finalKcalOverride ? finalKcalOverride / baseKcal : 1;
     simplePriceSimulator({
-      protein_g:               macroTarget.protein_g   ?? 0,
-      carbs_g:                 macroTarget.carbs_g     ?? 0,
-      fat_g:                   macroTarget.fat_g       ?? 0,
-      meals_per_day:           3,
-      avg_subrecipes_per_meal: 2,
+      protein_g:               (macroTarget.protein_g ?? 0) * scale,
+      carbs_g:                 (macroTarget.carbs_g   ?? 0) * scale,
+      fat_g:                   (macroTarget.fat_g     ?? 0) * scale,
+      meals_per_day:           includedMealCount,
+      avg_subrecipes_per_meal: 2.5,
     }).then(r => setEstDayPrice(r.avg_day_price)).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [macroTarget, excludedMeals, finalKcalOverride]);
 
   const allRecipes = Array.from(new Map(
     orderableWeeks.flatMap(w => w.recipes).map(r => [r.id, r])
@@ -707,9 +1003,12 @@ export default function OrderFlow({
         end_date:   sorted[sorted.length - 1],
         include_weekends: false,
         meals: mealsParam,
+        kcal_override: finalKcalOverride,
       });
       result.days = result.days.filter(d => selected.has(d.date));
       setPlan(result);
+      setOriginalPlan(result);
+      setPlanHistory([]);
       setStep("review");
     } catch (e) {
       setGenErr(e instanceof Error ? e.message : "Something went wrong. Please try again.");
@@ -721,11 +1020,13 @@ export default function OrderFlow({
 
   function removePlanDay(date: string) {
     if (!plan || plan.days.length <= 1) return;
+    pushHistory();
     setPlan({ ...plan, days: plan.days.filter(d => d.date !== date) });
   }
 
   async function applyChange(logs: ChangeLog[]) {
     if (!plan) return;
+    pushHistory();
     setUpdating(true);
     try { setPlan(await updateMealPlan(plan, logs)); }
     catch { /* keep existing */ }
@@ -776,11 +1077,11 @@ export default function OrderFlow({
   }
 
   async function handleConfirm() {
-    if (!plan || !checkoutData || !slotId) return;
+    if (!plan || !checkoutData || !slotId || !paymentMethod) return;
     setConfirming(true);
     setConfirmErr(null);
     try {
-      const res = await confirmOrder(userId, plan, checkoutData, slotId);
+      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod, address || undefined);
       if (res.success) setStep("confirmed");
       else setConfirmErr(res.error ?? "Something went wrong.");
     } catch (e) {
@@ -852,95 +1153,164 @@ export default function OrderFlow({
             />
           )}
 
-          {/* ── Meal type preferences ── */}
-          <p style={{ fontSize: 11, color: C.light, margin: "0 0 10px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Meal types
-          </p>
-          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 13, overflow: "hidden", marginBottom: 8 }}>
-            {ALL_MEALS.map((meal, i) => {
-              const excluded = excludedMeals.has(meal);
-              const isLast   = i === ALL_MEALS.length - 1;
-              return (
-                <div key={meal}>
-                  <div style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "14px 16px",
-                    borderBottom: (!isLast || excluded) ? `1px solid ${C.border}` : "none",
-                  }}>
-                    <div>
-                      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: excluded ? C.light : "#1a1a1a" }}>
-                        {MEAL_LABELS[meal]}
-                      </p>
-                      {excluded && (
-                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light }}>Not included</p>
-                      )}
-                    </div>
-                    {/* Toggle switch */}
-                    <button
-                      onClick={() => toggleMeal(meal)}
-                      aria-label={excluded ? `Enable ${meal}` : `Disable ${meal}`}
-                      style={{
-                        width: 44, height: 26, borderRadius: 13, border: "none", cursor: "pointer", flexShrink: 0,
-                        background: excluded ? C.border : C.teal,
-                        position: "relative", transition: "background 0.2s",
-                      }}
-                    >
-                      <span style={{
-                        position: "absolute", top: 3, width: 20, height: 20,
-                        borderRadius: "50%", background: C.white,
-                        left: excluded ? 3 : 21,
-                        transition: "left 0.2s",
-                      }} />
-                    </button>
-                  </div>
+          {/* ── Meal type preferences (collapsible) ── */}
+          {(() => {
+            const includedCount = ALL_MEALS.length - excludedMeals.size;
+            const allExcluded   = excludedMeals.size >= ALL_MEALS.length;
+            const summaryText   = excludedMeals.size === 0
+              ? "All meals included — optional to change"
+              : allExcluded
+                ? "No meals selected"
+                : `${includedCount} of ${ALL_MEALS.length} meals included`;
 
-                  {/* Sub-question when excluded */}
-                  {excluded && (
-                    <div style={{ padding: "12px 16px 14px", background: "#faf9f7", borderBottom: !isLast ? `1px solid ${C.border}` : "none" }}>
-                      <p style={{ margin: "0 0 9px", fontSize: 12.5, color: C.muted }}>
-                        What will you do for {meal}?
-                      </p>
-                      <div style={{ display: "flex", gap: 7 }}>
-                        <button
-                          onClick={() => setMealEatingOut(p => ({ ...p, [meal]: false }))}
-                          style={{
-                            flex: 1, padding: "9px 8px", borderRadius: 9, fontSize: 12, cursor: "pointer",
-                            border: `2px solid ${!mealEatingOut[meal] ? C.tealDark : C.border}`,
-                            background: !mealEatingOut[meal] ? "#f0f7f7" : C.white,
-                            fontWeight: !mealEatingOut[meal] ? 600 : 400,
-                            color: !mealEatingOut[meal] ? C.tealDark : C.muted,
-                          }}
-                        >
-                          Spread to other meals
-                        </button>
-                        <button
-                          onClick={() => setMealEatingOut(p => ({ ...p, [meal]: true }))}
-                          style={{
-                            flex: 1, padding: "9px 8px", borderRadius: 9, fontSize: 12, cursor: "pointer",
-                            border: `2px solid ${mealEatingOut[meal] ? C.tealDark : C.border}`,
-                            background: mealEatingOut[meal] ? "#f0f7f7" : C.white,
-                            fontWeight: mealEatingOut[meal] ? 600 : 400,
-                            color: mealEatingOut[meal] ? C.tealDark : C.muted,
-                          }}
-                        >
-                          Eating out / reduce kcal
-                        </button>
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <button
+                  onClick={() => setMealTypesOpen(o => !o)}
+                  style={{
+                    width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    background: C.white,
+                    border: allExcluded ? `1px solid ${C.error}` : `1px solid ${C.border}`,
+                    borderRadius: mealTypesOpen ? "12px 12px 0 0" : 12,
+                    padding: "14px 16px", cursor: "pointer", transition: "border-radius 0.2s",
+                  }}
+                >
+                  <div style={{ textAlign: "left" }}>
+                    <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600, color: allExcluded ? C.error : "#1a1a1a" }}>
+                      Meal types
+                    </p>
+                    <p style={{ margin: 0, fontSize: 11.5, color: allExcluded ? C.error : C.light }}>
+                      {summaryText}
+                    </p>
+                  </div>
+                  <IconChevronDown
+                    size={16} color={allExcluded ? C.error : C.light}
+                    style={{ transform: mealTypesOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}
+                  />
+                </button>
+
+                {mealTypesOpen && (
+                  <div style={{ background: C.white, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+                    {ALL_MEALS.map((meal, i) => {
+                      const excluded = excludedMeals.has(meal);
+                      const isLast   = i === ALL_MEALS.length - 1;
+                      return (
+                        <div key={meal}>
+                          <div style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            padding: "14px 16px",
+                            borderBottom: (!isLast || excluded) ? `1px solid ${C.border}` : "none",
+                          }}>
+                            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: excluded ? C.light : "#1a1a1a" }}>
+                              {MEAL_LABELS[meal]}
+                            </p>
+                            <button
+                              onClick={() => toggleMeal(meal)}
+                              aria-label={excluded ? `Enable ${meal}` : `Skip ${meal}`}
+                              style={{
+                                width: 44, height: 26, borderRadius: 13, border: "none", cursor: "pointer", flexShrink: 0,
+                                background: excluded ? C.border : C.teal,
+                                position: "relative", transition: "background 0.2s",
+                              }}
+                            >
+                              <span style={{
+                                position: "absolute", top: 3, width: 20, height: 20,
+                                borderRadius: "50%", background: C.white,
+                                left: excluded ? 3 : 21,
+                                transition: "left 0.2s",
+                              }} />
+                            </button>
+                          </div>
+
+                          {excluded && (
+                            <div style={{ padding: "11px 16px 13px", background: "#faf9f7", borderBottom: !isLast ? `1px solid ${C.border}` : "none" }}>
+                              <p style={{ margin: "0 0 8px", fontSize: 12, color: C.muted }}>
+                                What happens to those calories?
+                              </p>
+                              <div style={{ display: "flex", gap: 7 }}>
+                                <button
+                                  onClick={() => setMealEatingOut(p => ({ ...p, [meal]: false }))}
+                                  style={{
+                                    flex: 1, padding: "9px 8px", borderRadius: 9, fontSize: 12, cursor: "pointer",
+                                    border: `2px solid ${!mealEatingOut[meal] ? C.tealDark : C.border}`,
+                                    background: !mealEatingOut[meal] ? "#f0f7f7" : C.white,
+                                    fontWeight: !mealEatingOut[meal] ? 600 : 400,
+                                    color: !mealEatingOut[meal] ? C.tealDark : C.muted,
+                                  }}
+                                >
+                                  Spread across my meals
+                                </button>
+                                <button
+                                  onClick={() => setMealEatingOut(p => ({ ...p, [meal]: true }))}
+                                  style={{
+                                    flex: 1, padding: "9px 8px", borderRadius: 9, fontSize: 12, cursor: "pointer",
+                                    border: `2px solid ${mealEatingOut[meal] ? C.tealDark : C.border}`,
+                                    background: mealEatingOut[meal] ? "#f0f7f7" : C.white,
+                                    fontWeight: mealEatingOut[meal] ? 600 : 400,
+                                    color: mealEatingOut[meal] ? C.tealDark : C.muted,
+                                  }}
+                                >
+                                  I&apos;ll sort this one myself
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Kcal target widget — only when at least one meal is "eating out" */}
+                    {suggestedKcal !== null && originalKcal !== null && (
+                      <div style={{ padding: "14px 16px", borderTop: `1px solid ${C.border}`, background: "#f5fafa" }}>
+                        <p style={{ margin: "0 0 4px", fontSize: 12.5, fontWeight: 600, color: C.tealDark }}>Adjusted daily target</p>
+                        <p style={{ margin: "0 0 14px", fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
+                          Without{" "}
+                          <strong>{eatingOutMeals.map(m => MEAL_LABELS[m]).join(" & ")}</strong>,
+                          your day goes from{" "}
+                          <strong>{Math.round(originalKcal).toLocaleString()} kcal</strong> to{" "}
+                          <strong>{suggestedKcal.toLocaleString()} kcal</strong>.
+                          Nudge it if you&apos;ll eat more or less at that meal.
+                        </p>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+                          <button
+                            onClick={() => setKcalAdjustment(a => a - 50)}
+                            disabled={finalKcalOverride! <= 500}
+                            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}
+                          >−</button>
+                          <div style={{ textAlign: "center", minWidth: 90 }}>
+                            <p style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 500 }}>
+                              {finalKcalOverride!.toLocaleString()}
+                            </p>
+                            <p style={{ margin: 0, fontSize: 11, color: C.light }}>kcal / day</p>
+                          </div>
+                          <button
+                            onClick={() => setKcalAdjustment(a => a + 50)}
+                            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}
+                          >+</button>
+                        </div>
+                        {kcalAdjustment !== 0 && (
+                          <button
+                            onClick={() => setKcalAdjustment(0)}
+                            style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", fontSize: 11.5, color: C.light, cursor: "pointer", textDecoration: "underline" }}
+                          >
+                            Reset to suggested ({suggestedKcal.toLocaleString()} kcal)
+                          </button>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 0" }}>
-            Disabling a meal type lets you tell us whether to adjust your daily calorie target or spread those macros to your remaining meals.
-          </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Recipe preferences (collapsible) ── */}
           <PreferencesSection
             userId={userId}
             weeks={orderableWeeks}
             initialPrefs={initialPrefs}
+            selectedDates={selected}
+            excludedMeals={excludedMeals}
           />
 
           {generateError && (
@@ -977,7 +1347,7 @@ export default function OrderFlow({
           </button>
           {excludedMeals.size >= ALL_MEALS.length && (
             <p style={{ fontSize: 12, color: C.error, textAlign: "center", margin: "8px 0 0" }}>
-              Please include at least one meal type.
+              Bold move — but we need at least one meal to cook for you.
             </p>
           )}
         </div>
@@ -997,6 +1367,24 @@ export default function OrderFlow({
           onBack={() => setStep("days")}
         />
         <div style={{ flex: 1, padding: "18px 20px 110px" }}>
+          {/* Daily goal summary — shown once at the top */}
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+            <p style={{ fontSize: 11, color: C.light, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Daily goal</p>
+            <div style={{ display: "flex", gap: 6 }}>
+              {([
+                { label: "Protein", value: plan.daily_macro_target.protein_g, fmt: (v: number) => `${Math.round(v)}g` },
+                { label: "Carbs",   value: plan.daily_macro_target.carbs_g,   fmt: (v: number) => `${Math.round(v)}g` },
+                { label: "Fat",     value: plan.daily_macro_target.fat_g,      fmt: (v: number) => `${Math.round(v)}g` },
+                { label: "Kcal",    value: plan.daily_macro_target.kcal,       fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
+              ] as { label: string; value: number; fmt: (v: number) => string }[]).map(({ label, value, fmt }) => (
+                <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px" }}>
+                  <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{fmt(value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
@@ -1009,15 +1397,34 @@ export default function OrderFlow({
           ))}
         </div>
 
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
-          <button
-            className="btn-primary"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
-            onClick={goToCheckout}
-            disabled={checkoutLoading || plan.days.length === 0 || updatingPlan}
-          >
-            {checkoutLoading ? "Loading…" : <>Looks good <IconArrowRight size={16} /></>}
-          </button>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "12px 20px 28px" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: planHistory.length > 0 || plan !== originalPlan ? 8 : 0 }}>
+            {planHistory.length > 0 && (
+              <button
+                onClick={undoChange}
+                disabled={updatingPlan}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "0 16px", height: 48, borderRadius: 12, border: `1px solid ${C.border}`, background: C.white, fontSize: 13, fontWeight: 500, color: C.muted, cursor: "pointer", flexShrink: 0 }}
+              >
+                <IconArrowBackUp size={16} /> Undo
+              </button>
+            )}
+            <button
+              className="btn-primary"
+              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+              onClick={goToCheckout}
+              disabled={checkoutLoading || plan.days.length === 0 || updatingPlan}
+            >
+              {checkoutLoading ? "Loading…" : <>Looks good <IconArrowRight size={16} /></>}
+            </button>
+          </div>
+          {plan !== originalPlan && (
+            <button
+              onClick={revertToOriginal}
+              style={{ display: "block", width: "100%", background: "none", border: "none", fontSize: 12, color: C.light, cursor: "pointer", textDecoration: "underline", textAlign: "center" }}
+            >
+              Revert all changes to original plan
+            </button>
+          )}
         </div>
 
         {removeTarget && (
@@ -1031,7 +1438,12 @@ export default function OrderFlow({
         {replaceTarget && (
           <ReplaceMealSheet
             meal={replaceTarget.meal}
-            recipes={allRecipes}
+            recipes={
+              orderableWeeks.find(w =>
+                replaceTarget.date >= w.week_start_date &&
+                replaceTarget.date <= w.week_end_date
+              )?.recipes ?? allRecipes
+            }
             onClose={() => setReplaceTarget(null)}
             onSelect={handleReplaceMeal}
           />
@@ -1147,6 +1559,102 @@ export default function OrderFlow({
               onChange={e => setAddress(e.target.value)} style={{ resize: "none" }} />
           </div>
 
+          {/* Payment method */}
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+            <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 12px" }}>Payment method</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+              {/* Cash on delivery */}
+              <button
+                onClick={() => setPaymentMethod("cash")}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "13px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",
+                  border: `2px solid ${paymentMethod === "cash" ? C.tealDark : C.border}`,
+                  background: paymentMethod === "cash" ? "#f0f7f7" : C.white,
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+              >
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: "#f5f0eb", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20 }}>
+                  💵
+                </div>
+                <div>
+                  <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600 }}>Cash on delivery</p>
+                  <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>Pay when your order arrives</p>
+                </div>
+                {paymentMethod === "cash" && (
+                  <div style={{ marginLeft: "auto", width: 20, height: 20, borderRadius: "50%", background: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                )}
+              </button>
+
+              {/* Whish Money */}
+              <button
+                onClick={() => setPaymentMethod("whish")}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "13px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",
+                  border: `2px solid ${paymentMethod === "whish" ? C.tealDark : C.border}`,
+                  background: paymentMethod === "whish" ? "#f0f7f7" : C.white,
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+              >
+                {/* Whish logo */}
+                <div style={{ width: 38, height: 38, borderRadius: 10, overflow: "hidden", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/Whish_Logo.jpg" alt="Whish" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600 }}>Whish Money</p>
+                  <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>Transfer to +81 567 192 · Georges Jreij</p>
+                </div>
+                {paymentMethod === "whish" && (
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                )}
+              </button>
+              {paymentMethod === "whish" && (
+                <div style={{ background: "#fff5f7", border: "1px solid #fbc4cf", borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: "#c0143c" }}>
+                  Send the exact total to <strong>+81 567 192</strong> on Whish, then send us the screenshot on WhatsApp.
+                </div>
+              )}
+
+              {/* Neo */}
+              <button
+                onClick={() => setPaymentMethod("neo")}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "13px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",
+                  border: `2px solid ${paymentMethod === "neo" ? C.tealDark : C.border}`,
+                  background: paymentMethod === "neo" ? "#f0f7f7" : C.white,
+                  transition: "border-color 0.15s, background 0.15s",
+                }}
+              >
+                <div style={{ width: 38, height: 38, borderRadius: 10, overflow: "hidden", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/Neo_Logo.jpg" alt="Neo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600 }}>Neo</p>
+                  <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>Contact us to arrange payment</p>
+                </div>
+                {paymentMethod === "neo" && (
+                  <div style={{ width: 20, height: 20, borderRadius: "50%", background: C.teal, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 11 11"><path d="M2 5.5L4.5 8L9 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                )}
+              </button>
+              {paymentMethod === "neo" && (
+                <div style={{ background: "#f0f2ff", border: "1px solid #c5caf5", borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: "#3a3fa0" }}>
+                  Contact us on WhatsApp at <strong>+81 567 192</strong> to complete your Neo payment.
+                </div>
+              )}
+
+            </div>
+          </div>
+
           {confirmErr && (
             <div style={{ background: "#fdf0ef", border: `1px solid ${C.error}`, borderRadius: 10, padding: "12px 14px", fontSize: 12.5, color: C.error }}>
               {confirmErr}
@@ -1157,11 +1665,17 @@ export default function OrderFlow({
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
           <button
             className="btn-primary"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}
             onClick={handleConfirm}
-            disabled={confirming || !slotId}
+            disabled={confirming || !slotId || !paymentMethod}
           >
             {confirming ? "Confirming…" : <><IconCheck size={16} /> Confirm order</>}
+          </button>
+          <button
+            onClick={() => { setStep("days"); setPlan(null); setOriginalPlan(null); setPlanHistory([]); setCheckoutData(null); setPaymentMethod(null); }}
+            style={{ display: "block", width: "100%", background: "none", border: "none", fontSize: 12, color: C.light, cursor: "pointer", textDecoration: "underline", textAlign: "center" }}
+          >
+            Start over
           </button>
         </div>
       </div>
