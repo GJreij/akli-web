@@ -186,12 +186,15 @@ export default function TastesManager({
 
       {/* Header */}
       <div style={{ background: C.primary, padding: "20px 20px 24px" }}>
-        <button
-          onClick={() => router.back()}
-          style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 16 }}
-        >
-          <IconArrowLeft size={16} /> Back
-        </button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <button
+            onClick={() => router.back()}
+            style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}
+          >
+            <IconArrowLeft size={16} /> Back
+          </button>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>akli</span>
+        </div>
         <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 500, color: "#fff", margin: "0 0 4px" }}>
           My Tastes
         </h2>

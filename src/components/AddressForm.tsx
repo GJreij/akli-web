@@ -48,6 +48,9 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
   const [saving, setSaving]   = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
   const [geocoding, setGeocoding] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searching, setSearching]     = useState(false);
+  const [searchErr, setSearchErr]     = useState<string | null>(null);
 
   async function reverseGeocode(lat: number, lng: number) {
     setGeocoding(true);
@@ -69,6 +72,26 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
     reverseGeocode(lat, lng);
   }
 
+  async function searchAddress() {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    setSearchErr(null);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(searchQuery.trim())}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const results = res.ok ? await res.json() : [];
+      if (!results?.length) { setSearchErr("Couldn't find that place — try a different search."); return; }
+      const { lat, lon, display_name } = results[0];
+      setMapOpen(true);
+      setPin({ lat: Number(lat), lng: Number(lon) });
+      setText(display_name as string);
+    } catch {
+      setSearchErr("Couldn't search right now — try again.");
+    } finally { setSearching(false); }
+  }
+
   function pinMyLocation() {
     if (!navigator.geolocation) { setPinErr("Location isn't available on this device."); return; }
     if (!window.isSecureContext) {
@@ -81,12 +104,14 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
       (pos) => { placePin(pos.coords.latitude, pos.coords.longitude); setPinning(false); },
       (err) => {
         const messages: Record<number, string> = {
-          1: "Location permission was denied — allow it in your browser/site settings and try again.",
-          2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window.",
-          3: "Getting your location took too long. Try again.",
+          1: "Location permission was denied. Check both your browser/site settings AND your device's system location setting — if either is off, you'll see this. Or set your address manually on the map below.",
+          2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window — or set it manually on the map below.",
+          3: "Getting your location took too long. Try again, or set it manually on the map below.",
         };
         setPinErr(messages[err.code] ?? `Couldn't get your location (${err.message || "unknown error"}).`);
         setPinning(false);
+        setMapOpen(true);
+        setPin(p => p ?? DEFAULT_MAP_CENTER);
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
@@ -122,7 +147,8 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
   return (
     <div>
       <input type="text" placeholder="Label (e.g. Home, Office)" value={label}
-        onChange={e => setLabel(e.target.value)} style={{ marginBottom: 8 }} />
+        onChange={e => setLabel(e.target.value)} style={{ marginBottom: 4 }} />
+      <p style={{ fontSize: 11, color: C.light, margin: "0 0 8px" }}>Optional — helps you tell addresses apart later.</p>
       <textarea rows={2} placeholder="Building, street, area" value={text}
         onChange={e => setText(e.target.value)} style={{ resize: "none", marginBottom: 8 }} />
 
@@ -156,6 +182,17 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
           <p style={{ fontSize: 11.5, color: C.muted, margin: "0 0 6px" }}>
             Drag the pin (or tap anywhere on the map) to move it — e.g. set it to your home even if you&apos;re ordering from somewhere else.
           </p>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input type="text" placeholder="Search for a place or address" value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && (e.preventDefault(), searchAddress())}
+              style={{ flex: 1, fontSize: 12.5, padding: "8px 10px" }} />
+            <button type="button" onClick={searchAddress} disabled={searching || !searchQuery.trim()}
+              style={{ padding: "8px 12px", fontSize: 12.5, flexShrink: 0 }}>
+              {searching ? "…" : "Search"}
+            </button>
+          </div>
+          {searchErr && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{searchErr}</p>}
           <LocationPickerMap
             lat={pin.lat}
             lng={pin.lng}

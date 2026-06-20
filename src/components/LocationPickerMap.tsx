@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { useEffect, useMemo } from "react";
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -21,6 +21,15 @@ function ClickToMove({ onMove }: { onMove: (lat: number, lng: number) => void })
   useMapEvents({
     click(e) { onMove(e.latlng.lat, e.latlng.lng); },
   });
+  return null;
+}
+
+// MapContainer's `center` prop only sets the *initial* view — it ignores later
+// prop changes, so re-pressing "pin my location" wouldn't re-center the map
+// unless we explicitly drive it here.
+function RecenterOnChange({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => { map.setView(center); }, [map, center]);
   return null;
 }
 
@@ -54,6 +63,7 @@ export default function LocationPickerMap({ lat, lng, onChange }: {
         }}
       />
       <ClickToMove onMove={onChange} />
+      <RecenterOnChange center={center} />
     </MapContainer>
   );
 }

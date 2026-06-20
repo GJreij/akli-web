@@ -7,7 +7,7 @@ export default async function ProfilePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
 
-  const [profileRes, macroHistoryRes, addressesRes, deliveriesRes] = await Promise.all([
+  const [profileRes, macroHistoryRes, addressesRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*")
       .eq("user_id", user.id)
@@ -17,10 +17,6 @@ export default async function ProfilePage() {
       .eq("user_id", user.id)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false }),
-    supabase.from("deliveries").select("id, delivery_date, status, delivery_address")
-      .eq("user_id", user.id)
-      .order("delivery_date", { ascending: false })
-      .limit(5),
   ]);
 
   return (
@@ -29,7 +25,6 @@ export default async function ProfilePage() {
       profile={profileRes.data}
       macroHistory={macroHistoryRes.data ?? []}
       addresses={addressesRes.data ?? []}
-      recentDeliveries={deliveriesRes.data ?? []}
     />
   );
 }

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  IconArrowLeft, IconUser, IconChevronDown, IconClockHour4,
-  IconTruck, IconPencil, IconCheck,
+  IconArrowLeft, IconUser, IconChevronDown,
+  IconPencil, IconCheck,
 } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/client";
 import ProfileAddresses from "@/components/ProfileAddresses";
@@ -14,7 +14,6 @@ import type { Database } from "@/lib/supabase/types";
 type UserRow    = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow   = Database["public"]["Tables"]["daily_macro_target"]["Row"];
 type AddressRow = Database["public"]["Tables"]["user_delivery_address"]["Row"];
-type DeliveryRow = { id: number; delivery_date: string | null; status: string | null; delivery_address: string | null };
 
 const C = {
   primary:  "#063330",
@@ -138,14 +137,17 @@ function AccountInfo({ profile }: { profile: UserRow | null }) {
 
 // ─── Diet section ────────────────────────────────────────────────────────────────
 
-function DietSection({ userId, macroHistory, onWizardSaved }: {
+function DietSection({ userId, profile, macroHistory, onWizardSaved }: {
   userId: string;
+  profile: UserRow | null;
   macroHistory: MacroRow[];
   onWizardSaved: (m: MacroRow) => void;
 }) {
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const current = macroHistory[0] ?? null;
-  const history = macroHistory.slice(1);
+  const fullHistory = macroHistory.slice(1);
+  const history = showAllHistory ? fullHistory : fullHistory.slice(0, 3);
 
   return (
     <>
@@ -204,6 +206,14 @@ function DietSection({ userId, macroHistory, onWizardSaved }: {
               </div>
             ))}
           </div>
+          {fullHistory.length > 3 && (
+            <button
+              onClick={() => setShowAllHistory(s => !s)}
+              style={{ background: "none", border: "none", padding: 0, marginTop: 10, color: C.tealDark, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              {showAllHistory ? "Show less" : `View all history (${fullHistory.length})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -211,6 +221,7 @@ function DietSection({ userId, macroHistory, onWizardSaved }: {
         <DietWizard
           userId={userId}
           currentMacro={current}
+          profile={profile}
           onClose={() => setWizardOpen(false)}
           onSaved={(m) => { onWizardSaved(m); setWizardOpen(false); }}
         />
@@ -219,47 +230,13 @@ function DietSection({ userId, macroHistory, onWizardSaved }: {
   );
 }
 
-// ─── Recent deliveries ───────────────────────────────────────────────────────────
-
-function DeliveriesSection({ deliveries }: { deliveries: DeliveryRow[] }) {
-  const router = useRouter();
-  return (
-    <>
-      {deliveries.length === 0 ? (
-        <p style={{ fontSize: 13, color: C.light, margin: "0 0 12px" }}>No deliveries yet.</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-          {deliveries.map(d => (
-            <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", border: `1px solid ${C.border}`, borderRadius: 8 }}>
-              <IconTruck size={15} color={C.light} style={{ flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>{d.delivery_date ? fmtDate(d.delivery_date) : "—"}</p>
-                {d.delivery_address && (
-                  <p style={{ margin: 0, fontSize: 11.5, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.delivery_address}</p>
-                )}
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 600, color: C.tealDark, background: "#e8f4f4", padding: "3px 8px", borderRadius: 20, textTransform: "capitalize", flexShrink: 0 }}>
-                {d.status ?? "pending"}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      <button onClick={() => router.push("/orders")} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, color: C.tealDark, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-        <IconClockHour4 size={14} /> View full order history
-      </button>
-    </>
-  );
-}
-
 // ─── Main ────────────────────────────────────────────────────────────────────────
 
-export default function Profile({ userId, profile, macroHistory, addresses, recentDeliveries }: {
+export default function Profile({ userId, profile, macroHistory, addresses }: {
   userId: string;
   profile: UserRow | null;
   macroHistory: MacroRow[];
   addresses: AddressRow[];
-  recentDeliveries: DeliveryRow[];
 }) {
   const router = useRouter();
   const [macroHistoryState, setMacroHistoryState] = useState(macroHistory);
@@ -282,11 +259,14 @@ export default function Profile({ userId, profile, macroHistory, addresses, rece
     <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
       {/* Hero header */}
       <div style={{ background: C.primary, padding: "18px 20px 26px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button onClick={() => router.push("/home")} style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex" }}>
-            <IconArrowLeft size={18} />
-          </button>
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>Back to home</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => router.push("/home")} style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex" }}>
+              <IconArrowLeft size={18} />
+            </button>
+            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.55)" }}>Back to home</span>
+          </div>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>akli</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -315,15 +295,11 @@ export default function Profile({ userId, profile, macroHistory, addresses, rece
         </Section>
 
         <Section title="Your diet" subtitle="Current target, history, and updates" defaultOpen>
-          <DietSection userId={userId} macroHistory={macroHistoryState} onWizardSaved={handleDietSaved} />
+          <DietSection userId={userId} profile={profile} macroHistory={macroHistoryState} onWizardSaved={handleDietSaved} />
         </Section>
 
         <Section title="Delivery addresses" subtitle="Manage where Akli delivers to you">
           <ProfileAddresses userId={userId} initialAddresses={addresses} />
-        </Section>
-
-        <Section title="Deliveries & orders" subtitle="Recent activity">
-          <DeliveriesSection deliveries={recentDeliveries} />
         </Section>
 
         <button onClick={signOut} style={{ display: "block", margin: "20px auto 0", background: "none", border: "none", fontSize: 13, color: C.light, cursor: "pointer", textDecoration: "underline" }}>
