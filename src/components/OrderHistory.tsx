@@ -227,23 +227,32 @@ function ReceiptModal({ plan, onClose }: { plan: MealPlan; onClose: () => void }
                   ))}
                 </div>
 
-                {/* Delivery status */}
-                {delivery && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: C.light }}>
-                    <IconTruck size={12} />
-                    {delivery.delivery_date ? `Delivery: ${fmtDate(delivery.delivery_date)}` : "Delivery scheduled"}
-                    {delivery.status && (
-                      <span style={{
-                        marginLeft: 4, padding: "1px 7px", borderRadius: 10, fontSize: 10.5,
-                        background: delivery.status === "delivered" ? "#e6f7f0" : C.offWhite,
-                        color: delivery.status === "delivered" ? "#15803d" : C.muted,
-                        display: "flex", alignItems: "center", gap: 3,
-                      }}>
-                        {DELIVERY_STATUS_ICON[delivery.status] ?? null}
-                        {delivery.status.charAt(0).toUpperCase() + delivery.status.slice(1)}
-                      </span>
+                {/* Delivery info */}
+                {delivery ? (
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: C.light }}>
+                      <IconTruck size={12} />
+                      {delivery.delivery_date ? `Delivery: ${fmtDate(delivery.delivery_date)}` : "Delivery scheduled"}
+                      {delivery.status && (
+                        <span style={{
+                          marginLeft: 4, padding: "1px 7px", borderRadius: 10, fontSize: 10.5,
+                          background: delivery.status === "delivered" ? "#e6f7f0" : C.offWhite,
+                          color: delivery.status === "delivered" ? "#15803d" : C.muted,
+                          display: "flex", alignItems: "center", gap: 3,
+                        }}>
+                          {DELIVERY_STATUS_ICON[delivery.status] ?? null}
+                          {delivery.status.charAt(0).toUpperCase() + delivery.status.slice(1)}
+                        </span>
+                      )}
+                    </div>
+                    {delivery.delivery_address && (
+                      <p style={{ margin: "3px 0 0 18px", fontSize: 11, color: C.light, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {delivery.delivery_address}
+                      </p>
                     )}
                   </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>Delivery details not available yet for this day.</p>
                 )}
 
                 {i < days.length - 1 && (
@@ -398,7 +407,7 @@ function OrderCard({ plan }: { plan: MealPlan }) {
 
               return (
                 <div key={day.id} style={{ paddingTop: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: delivery?.delivery_address ? 2 : 8 }}>
                     <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: C.primary }}>
                       {fmtDateLong(day.date)}
                     </p>
@@ -421,6 +430,12 @@ function OrderCard({ plan }: { plan: MealPlan }) {
                       )}
                     </div>
                   </div>
+                  {delivery?.delivery_address && (
+                    <p style={{ margin: "0 0 8px", fontSize: 10.5, color: C.light, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <IconTruck size={10} style={{ marginRight: 4, verticalAlign: "-1px" }} />
+                      {delivery.delivery_address}
+                    </p>
+                  )}
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {meals.length === 0 ? (
@@ -474,12 +489,15 @@ export default function OrderHistory({ plans, userId: _userId }: { plans: MealPl
 
       {/* Header */}
       <div style={{ background: C.primary, padding: "20px 20px 28px" }}>
-        <button
-          onClick={() => router.back()}
-          style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 18 }}
-        >
-          <IconArrowLeft size={16} /> Back
-        </button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+          <button
+            onClick={() => router.back()}
+            style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.6)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}
+          >
+            <IconArrowLeft size={16} /> Back
+          </button>
+          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>akli</span>
+        </div>
         <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: "#fff", margin: "0 0 4px" }}>
           My Orders
         </h2>

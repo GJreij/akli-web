@@ -549,7 +549,7 @@ export default function AkliApp({
                 Meal prep that<br />adapts to your life.
               </h2>
               <p style={{ fontSize: 14, color: "rgba(255,255,255,0.68)", margin: 0, lineHeight: 1.7 }}>
-                Order a single day or a full month. Skip a meal, drop a day, swap what you don&apos;t like — your plan bends around you, not the other way around.
+                Macro-balanced meals, built around your goals.
               </p>
             </div>
 
@@ -570,10 +570,10 @@ export default function AkliApp({
                 </div>
                 <div>
                   <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
-                    One day or one month
+                    Total flexibility
                   </p>
                   <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
-                    Pick any range of days. No subscription, no lock-in. Order what fits your week.
+                    Any range of days. No subscription, no lock-in.
                   </p>
                 </div>
               </div>
@@ -595,7 +595,7 @@ export default function AkliApp({
                     Fully customisable
                   </p>
                   <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
-                    Skip breakfast, remove a meal, mark what you love or hate — the plan adjusts automatically.
+                    Skip a meal, swap what you don&apos;t like.
                   </p>
                 </div>
               </div>
@@ -614,10 +614,10 @@ export default function AkliApp({
                 </div>
                 <div>
                   <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
-                    Built around your numbers
+                    Built around your goals
                   </p>
                   <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
-                    Every meal is calculated to hit your daily protein, carbs & fat targets — not just a rough estimate.
+                    Every meal hits your daily macros.
                   </p>
                 </div>
               </div>
@@ -630,8 +630,8 @@ export default function AkliApp({
               }}>
                 <IconTruck size={18} color={C.tealDark} style={{ flexShrink: 0 }} />
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: C.primary, margin: "0 0 2px" }}>Free delivery on orders over $25</p>
-                  <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Each daily order above $25 delivers free — order one day or a full month.</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.primary, margin: "0 0 2px" }}>Free delivery over $25</p>
+                  <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Order 48h ahead — delivered the evening before.</p>
                 </div>
               </div>
             </div>
@@ -908,8 +908,20 @@ export default function AkliApp({
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
                     <span>Height</span><span style={{ fontWeight: 500, color: "#1a1a1a" }}>{height} cm</span>
                   </div>
-                  <input type="range" min={140} max={210} value={height} step={1}
-                    onChange={e => setHeight(Number(e.target.value))} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button type="button" onClick={() => setHeight(h => Math.max(140, h - 1))}
+                      aria-label="Decrease height"
+                      style={{ width: 32, height: 32, flexShrink: 0, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white, color: C.primary, fontSize: 16, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      −
+                    </button>
+                    <input type="range" min={140} max={210} value={height} step={1}
+                      onChange={e => setHeight(Number(e.target.value))} style={{ flex: 1 }} />
+                    <button type="button" onClick={() => setHeight(h => Math.min(210, h + 1))}
+                      aria-label="Increase height"
+                      style={{ width: 32, height: 32, flexShrink: 0, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white, color: C.primary, fontSize: 16, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      +
+                    </button>
+                  </div>
                 </div>
 
                 {/* Weight */}
@@ -917,8 +929,20 @@ export default function AkliApp({
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
                     <span>Weight</span><span style={{ fontWeight: 500, color: "#1a1a1a" }}>{weight} kg</span>
                   </div>
-                  <input type="range" min={40} max={150} value={weight} step={1}
-                    onChange={e => setWeight(Number(e.target.value))} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <button type="button" onClick={() => setWeight(w => Math.max(40, w - 1))}
+                      aria-label="Decrease weight"
+                      style={{ width: 32, height: 32, flexShrink: 0, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white, color: C.primary, fontSize: 16, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      −
+                    </button>
+                    <input type="range" min={40} max={150} value={weight} step={1}
+                      onChange={e => setWeight(Number(e.target.value))} style={{ flex: 1 }} />
+                    <button type="button" onClick={() => setWeight(w => Math.min(150, w + 1))}
+                      aria-label="Increase weight"
+                      style={{ width: 32, height: 32, flexShrink: 0, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white, color: C.primary, fontSize: 16, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      +
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

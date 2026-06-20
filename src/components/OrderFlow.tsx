@@ -115,25 +115,27 @@ function localISO(d: Date): string {
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, onPick, onRemoveDay }: {
+function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, onPick, onRemoveDay }: {
   orderableWeeks: OrderableWeek[];
   rangeStart: string | null;
   rangeEnd:   string | null;
   removed:    Set<string>;
+  orderedDays: Set<string>;
   onPick:      (iso: string) => void;
   onRemoveDay: (iso: string) => void;
 }) {
   const today        = localISO(new Date());
   const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
 
-  // Derive all ISOs in the selected range (available weekdays minus removed)
+  // Derive all ISOs in the selected range (available weekdays minus removed minus already-ordered days —
+  // you can't have two orders covering the same day, so those are auto-skipped rather than blocking the whole range)
   const selectedInRange = new Set<string>();
   if (rangeStart && rangeEnd) {
     const cur = new Date(rangeStart + "T12:00:00");
     const end = new Date(rangeEnd   + "T12:00:00");
     while (cur <= end) {
       const iso = localISO(cur);
-      if (availableSet.has(iso) && !removed.has(iso)) selectedInRange.add(iso);
+      if (availableSet.has(iso) && !removed.has(iso) && !orderedDays.has(iso)) selectedInRange.add(iso);
       cur.setDate(cur.getDate() + 1);
     }
   }
@@ -159,6 +161,12 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, onPick, on
             ? "Now tap an end date"
             : `${sortedSelected.length} day${sortedSelected.length !== 1 ? "s" : ""} selected — tap a day to reset`}
       </p>
+      {orderedDays.size > 0 && (
+        <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.light, margin: "0 0 12px" }}>
+          <span style={{ width: 11, height: 11, borderRadius: 3, background: "#bfa280", display: "inline-block" }} />
+          Already ordered — skipped automatically if inside your range
+        </p>
+      )}
 
       {/* Calendar months */}
       {months.map(({ year, month }) => {
@@ -202,7 +210,10 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, onPick, on
                   const isAvail     = availableSet.has(iso);
                   const isPast      = iso < today;
                   const isToday     = iso === today;
-                  const disabled    = isWeekend || isPast || !isAvail;
+                  const isOrdered   = orderedDays.has(iso);
+                  // Already-ordered days can't be picked as a start/end point — but they're still
+                  // allowed to fall *inside* a chosen range, where they just get auto-skipped.
+                  const disabled    = isWeekend || isPast || !isAvail || isOrdered;
                   const isStart     = iso === rangeStart;
                   const isEnd       = iso === rangeEnd;
                   const inRange     = rangeStart && rangeEnd && iso >= rangeStart && iso <= rangeEnd && isAvail;
@@ -217,7 +228,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, onPick, on
                   let border = "none";
                   let opacity = 1;
 
-                  if (isStart || isEnd) {
+                  if (isOrdered) {
+                    bg = "#bfa280"; color = C.white; fontWeight = 600;
+                  } else if (isStart || isEnd) {
                     bg = C.primary; color = C.white; fontWeight = 700;
                   } else if (isSelected) {
                     bg = "#e8f4f4"; color = C.tealDark; fontWeight = 600;
@@ -235,7 +248,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, onPick, on
                       key={iso}
                       onClick={() => !disabled && onPick(iso)}
                       disabled={disabled}
+                      title={isOrdered ? "You already have an order on this day — it's skipped automatically" : undefined}
                       style={{
+                        position: "relative",
                         height: 34, borderRadius: 7, border, background: bg, color,
                         fontSize: 12.5, fontWeight,
                         cursor: disabled ? "default" : "pointer",
@@ -285,20 +300,22 @@ function StepHeader({ step, total, title, subtitle, onBack }: {
 }) {
   return (
     <div style={{ background: C.primary, padding: "18px 20px 22px", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         {onBack ? (
           <button onClick={onBack} style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.55)", cursor: "pointer", display: "flex" }}>
             <IconArrowLeft size={18} />
           </button>
         ) : <div style={{ width: 18 }} />}
-        <div style={{ flex: 1, display: "flex", gap: 5 }}>
-          {Array.from({ length: total }, (_, i) => (
-            <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i < step ? C.teal : "rgba(255,255,255,0.18)" }} />
-          ))}
-        </div>
-        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", minWidth: 32, textAlign: "right" }}>
+        <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 15, color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>akli</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
           {step}/{total}
         </span>
+      </div>
+      <div style={{ display: "flex", gap: 5, marginBottom: 16 }}>
+        {Array.from({ length: total }, (_, i) => (
+          <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i < step ? C.teal : "rgba(255,255,255,0.18)" }} />
+        ))}
       </div>
       <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 500, color: C.white, margin: subtitle ? "0 0 4px" : 0 }}>
         {title}
@@ -679,11 +696,12 @@ type MacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: nu
 
 const MEAL_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
 
-function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal }: {
+function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
   day: PlanDay;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
+  isOnlyDay: boolean;
 }) {
   const macros = [
     { label: "Protein", value: day.totals.protein, fmt: (v: number) => `${Math.round(v)}g` },
@@ -696,10 +714,24 @@ function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal }: {
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px 11px", background: "#faf9f7", borderBottom: `1px solid ${C.border}` }}>
         <span style={{ fontSize: 13.5, fontWeight: 600 }}>{fmtDayFull(day.date)}</span>
-        <button onClick={onRemoveDay} style={{ background: "none", border: "none", fontSize: 12, color: C.light, padding: "3px 0", cursor: "pointer" }}>
+        <button
+          onClick={onRemoveDay}
+          disabled={isOnlyDay}
+          title={isOnlyDay ? "Your plan needs at least one day — remove this from the days step instead" : undefined}
+          style={{
+            background: "none", border: "none", fontSize: 12,
+            color: isOnlyDay ? "#c9c4be" : C.light, padding: "3px 0",
+            cursor: isOnlyDay ? "not-allowed" : "pointer",
+          }}
+        >
           Remove day
         </button>
       </div>
+      {isOnlyDay && (
+        <p style={{ margin: 0, padding: "0 14px 8px", fontSize: 11.5, color: C.light, background: "#faf9f7" }}>
+          This is your only day — go back to the days step if you want to remove it.
+        </p>
+      )}
       <div style={{ padding: "0 14px" }}>
         {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
           <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
@@ -952,21 +984,29 @@ function DailyBreakdown({ breakdown }: { breakdown: CheckoutSummaryResponse["pri
       </button>
       {open && (
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
-          {breakdown.map(d => (
-            <div key={d.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
-              <span style={{ color: C.muted }}>
-                {new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-              </span>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {d.delivery_applied && (
-                  <span style={{ fontSize: 11, color: d.delivery_fee === 0 ? C.tealDark : C.light }}>
-                    {d.delivery_fee === 0 ? "free delivery" : `+$${d.delivery_fee.toFixed(2)} delivery`}
-                  </span>
-                )}
-                <span style={{ fontWeight: 600 }}>${d.total_price_with_delivery.toFixed(2)}</span>
+          {breakdown.map(d => {
+            const dayDiscount = d.original_total_price - d.total_price;
+            return (
+              <div key={d.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
+                <span style={{ color: C.muted }}>
+                  {new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                </span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {dayDiscount > 0.005 && (
+                    <span style={{ fontSize: 11, color: C.tealDark }}>
+                      -${dayDiscount.toFixed(2)} promo
+                    </span>
+                  )}
+                  {d.delivery_applied && (
+                    <span style={{ fontSize: 11, color: d.delivery_fee === 0 ? C.tealDark : C.light }}>
+                      {d.delivery_fee === 0 ? "free delivery" : `+$${d.delivery_fee.toFixed(2)} delivery`}
+                    </span>
+                  )}
+                  <span style={{ fontWeight: 600 }}>${d.total_price_with_delivery.toFixed(2)}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -1082,7 +1122,7 @@ function AddressPicker({ userId, addresses, selectedId, onSelect, onAdded, onRem
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OrderFlow({
-  userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [],
+  userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1091,6 +1131,7 @@ export default function OrderFlow({
   deliverySlots: DeliverySlot[];
   initialPrefs?: Record<number, PrefRating>;
   addresses?: AddressRow[];
+  orderedDays?: string[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
@@ -1098,18 +1139,19 @@ export default function OrderFlow({
   // ── Step 1 state ──────────────────────────────────────────────────────────────
 
   const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
+  const orderedDaysSet = new Set(orderedDays);
   const [rangeStart, setRangeStart] = useState<string | null>(null);
   const [rangeEnd,   setRangeEnd]   = useState<string | null>(null);
   const [removed,    setRemoved]    = useState<Set<string>>(new Set());
 
-  // Derive selected: all available days in [rangeStart, rangeEnd] minus removed
+  // Derive selected: all available days in [rangeStart, rangeEnd] minus removed minus already-ordered
   const selected = new Set<string>();
   if (rangeStart && rangeEnd) {
     const cur = new Date(rangeStart + "T12:00:00");
     const end = new Date(rangeEnd   + "T12:00:00");
     while (cur <= end) {
       const iso = localISO(cur);
-      if (availableSet.has(iso) && !removed.has(iso)) selected.add(iso);
+      if (availableSet.has(iso) && !removed.has(iso) && !orderedDaysSet.has(iso)) selected.add(iso);
       cur.setDate(cur.getDate() + 1);
     }
   }
@@ -1326,11 +1368,31 @@ export default function OrderFlow({
     finally { setCoLoading(false); }
   }
 
+  // Some failures (timeouts, dropped responses) happen after the backend has
+  // already written the order — checking My Orders avoids telling the client
+  // "it failed" when it actually went through.
+  async function orderWasActuallyPlaced(sortedDates: string[]): Promise<boolean> {
+    if (sortedDates.length === 0) return false;
+    const supabase = createClient();
+    const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { data } = await supabase
+      .from("meal_plan")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("start_date", sortedDates[0])
+      .eq("end_date", sortedDates[sortedDates.length - 1])
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    return !!data && data.length > 0;
+  }
+
   async function handleConfirm() {
     if (!plan || !checkoutData || !slotId || !paymentMethod || !addressId) return;
     setConfirming(true);
     setConfirmErr(null);
     setStep("confirming");
+    const sortedDates = plan.days.map(d => d.date).sort();
     try {
       const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod, addressId);
       // confirmOrder() already throws on a non-2xx response, so reaching here without
@@ -1339,14 +1401,34 @@ export default function OrderFlow({
       if (res.error) { setConfirmErr(res.error); setStep("checkout"); }
       else setStep("confirmed");
     } catch (e) {
-      setConfirmErr(e instanceof Error ? e.message : "Something went wrong.");
-      setStep("checkout");
+      if (await orderWasActuallyPlaced(sortedDates)) {
+        // Backend committed the order despite the request erroring out — treat as success.
+        setStep("confirmed");
+      } else {
+        setConfirmErr(e instanceof Error ? e.message : "Something went wrong.");
+        setStep("checkout");
+      }
     } finally { setConfirming(false); }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Screens
   // ─────────────────────────────────────────────────────────────────────────────
+
+  if (!macroTarget?.kcal_target) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
+        <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, color: C.primary, fontWeight: 500, marginBottom: 24 }}>akli</span>
+        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, margin: "0 0 10px" }}>No diet set up yet</h2>
+        <p style={{ fontSize: 14, color: C.muted, margin: "0 0 28px", lineHeight: 1.65, maxWidth: 300 }}>
+          You&apos;ll need a daily macro target before we can build your meal plan.
+        </p>
+        <button className="btn-primary" style={{ maxWidth: 300 }} onClick={() => router.push("/home")}>
+          Set up my diet
+        </button>
+      </div>
+    );
+  }
 
   if (step === "generating") {
     return (
@@ -1369,6 +1451,7 @@ export default function OrderFlow({
   if (step === "confirmed") {
     return (
       <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
+        <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 18, color: C.primary, fontWeight: 500, marginBottom: 24 }}>akli</span>
         <div style={{ width: 68, height: 68, borderRadius: "50%", background: C.teal, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22 }}>
           <IconCheck size={30} color={C.white} />
         </div>
@@ -1412,6 +1495,7 @@ export default function OrderFlow({
               rangeStart={rangeStart}
               rangeEnd={rangeEnd}
               removed={removed}
+              orderedDays={orderedDaysSet}
               onPick={handlePickDay}
               onRemoveDay={handleRemoveDay}
             />
@@ -1654,6 +1738,7 @@ export default function OrderFlow({
           )}
           {plan.days.map(day => (
             <DayCard key={day.date} day={day}
+              isOnlyDay={plan.days.length <= 1}
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
               onReplaceMeal={meal => setReplaceTarget({ date: day.date, meal })}
@@ -1893,7 +1978,7 @@ export default function OrderFlow({
                 )}
               </button>
               {paymentMethod === "whish" && (
-                <div style={{ background: "#fff5f7", border: "1px solid #fbc4cf", borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: "#c0143c" }}>
+                <div style={{ background: "#f0f7f7", border: `1px solid ${C.teal}`, borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: C.tealDark }}>
                   Send the exact total to <strong>+81 567 192</strong> on Whish, then send us the screenshot on WhatsApp.
                 </div>
               )}
@@ -1940,9 +2025,13 @@ export default function OrderFlow({
               {confirmErr}
             </div>
           )}
-          {!addressId && (
+          {!confirming && (!slotId || !paymentMethod || !addressId) && (
             <p style={{ fontSize: 12, color: C.error, textAlign: "center", margin: "0 0 8px" }}>
-              Add or select a delivery address to confirm your order.
+              {!addressId
+                ? "Add or select a delivery address to confirm your order."
+                : !paymentMethod
+                  ? "Choose a payment method to confirm your order."
+                  : "Choose a delivery time to confirm your order."}
             </p>
           )}
           <button

@@ -11,6 +11,7 @@ import { simplePriceSimulator } from "@/lib/flask";
 import type { Database } from "@/lib/supabase/types";
 
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
+type UserRow  = Database["public"]["Tables"]["user"]["Row"];
 
 // ─── Same calculation model as the original onboarding flow ──────────────────
 
@@ -95,9 +96,10 @@ const C = {
   error:    "#c0392b",
 };
 
-export default function DietWizard({ userId, currentMacro, onClose, onSaved }: {
+export default function DietWizard({ userId, currentMacro, profile, onClose, onSaved }: {
   userId: string;
   currentMacro?: MacroRow | null;
+  profile?: UserRow | null;
   onClose: () => void;
   onSaved: (macro: MacroRow) => void;
 }) {
@@ -110,15 +112,22 @@ export default function DietWizard({ userId, currentMacro, onClose, onSaved }: {
     ? (currentMacro!.diet_type as DietType)
     : "balanced";
 
-  const [goal, setGoal] = useState<Goal>("maintain");
-  const [sex, setSex]   = useState<Sex>("female");
-  const [dob, setDob]   = useState("");
-  const [dobDay, setDobDay]     = useState("");
-  const [dobMonth, setDobMonth] = useState("");
-  const [dobYear, setDobYear]   = useState("");
-  const [height, setHeight] = useState(170);
-  const [weight, setWeight] = useState(70);
-  const [activity, setActivity] = useState(1.375);
+  const initialDob = profile?.DoB ?? "";
+  const [initDobY = "", initDobM = "", initDobD = ""] = initialDob ? initialDob.split("-") : [];
+
+  const [goal, setGoal] = useState<Goal>(
+    (currentMacro?.goal as Goal) && ["lose","maintain","build","health"].includes(currentMacro?.goal ?? "")
+      ? (currentMacro!.goal as Goal)
+      : "maintain"
+  );
+  const [sex, setSex]   = useState<Sex>(currentMacro?.sex === "male" ? "male" : "female");
+  const [dob, setDob]   = useState(initialDob);
+  const [dobDay, setDobDay]     = useState(initDobD ? String(Number(initDobD)) : "");
+  const [dobMonth, setDobMonth] = useState(initDobM ? String(Number(initDobM)) : "");
+  const [dobYear, setDobYear]   = useState(initDobY);
+  const [height, setHeight] = useState(Math.round(currentMacro?.height_cm ?? 170));
+  const [weight, setWeight] = useState(Math.round(currentMacro?.weight_kg ?? 70));
+  const [activity, setActivity] = useState(currentMacro?.activity_level ?? 1.375);
   const [kcalIn, setKcalIn] = useState(Math.round(currentMacro?.kcal_target ?? 2000));
   const [dietType, setDietType] = useState<DietType>(initialDiet);
   const [kcalFixed, setKcalFixed]     = useState(Math.round(currentMacro?.kcal_target ?? 2100));

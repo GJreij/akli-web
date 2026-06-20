@@ -25,7 +25,7 @@ export default async function OrderNewPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes] = await Promise.all([
+  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*").eq("user_id", user.id)
       .order("created_at", { ascending: false }).limit(1).single(),
@@ -43,7 +43,15 @@ export default async function OrderNewPage() {
       .eq("user_id", user.id)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false }),
+    supabase.from("meal_plan_day")
+      .select("date, meal_plan!inner(user_id)")
+      .eq("meal_plan.user_id", user.id)
+      .gte("date", today),
   ]);
+
+  const orderedDays = ((orderedDaysRes.data ?? []) as unknown as { date: string | null }[])
+    .map(d => d.date)
+    .filter((d): d is string => !!d);
 
   // Build orderable weeks — only future weekdays
   type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { recipe: RecipeRow | null }[] };
@@ -84,6 +92,7 @@ export default async function OrderNewPage() {
       deliverySlots={(slotsRes.data ?? []) as Database["public"]["Tables"]["delivery_slots"]["Row"][]}
       initialPrefs={initialPrefs}
       addresses={(addressesRes.data ?? []) as Database["public"]["Tables"]["user_delivery_address"]["Row"][]}
+      orderedDays={orderedDays}
     />
   );
 }

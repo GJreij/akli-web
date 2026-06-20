@@ -182,8 +182,11 @@ function RecipeCard({ recipe, onClick }: { recipe: RecipeRow; onClick: () => voi
       }}>
         {mealLabel(recipe)}
       </span>
-      <div style={{ padding: "10px 11px 12px" }}>
-        <p style={{ fontSize: 12.5, fontWeight: 600, margin: 0, color: "#1a1a1a", lineHeight: 1.35, WebkitLineClamp: 2, display: "-webkit-box", WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+      <div style={{ padding: "10px 11px 12px", height: 56, display: "flex", alignItems: "flex-start" }}>
+        <p style={{
+          fontSize: 12.5, fontWeight: 600, margin: 0, color: "#1a1a1a", lineHeight: 1.35,
+          WebkitLineClamp: 2, display: "-webkit-box", WebkitBoxOrient: "vertical", overflow: "hidden",
+        }}>
           {recipe.name}
         </p>
       </div>
@@ -205,8 +208,12 @@ export default function HomeDashboard({
   const router = useRouter();
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
   const [dietWizardOpen, setDietWizardOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [navigatingProfile, setNavigatingProfile] = useState(false);
 
   async function signOut() {
+    if (signingOut) return;
+    setSigningOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
@@ -250,19 +257,28 @@ export default function HomeDashboard({
           <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, color: C.white, fontWeight: 500, letterSpacing: "0.01em" }}>
             akli
           </span>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
-              onClick={() => router.push("/profile")}
+              onClick={() => { setNavigatingProfile(true); router.push("/profile"); }}
               title="Profile"
-              style={{ background: "none", border: "none", padding: 0, color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex" }}
+              style={{
+                background: "none", border: "none", padding: 10, margin: -10,
+                color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex",
+                opacity: navigatingProfile ? 0.5 : 1,
+              }}
             >
               <IconUserCircle size={22} />
             </button>
             <button
               onClick={signOut}
-              style={{ background: "none", border: "none", fontSize: 12, color: "rgba(255,255,255,0.45)", padding: 0, cursor: "pointer" }}
+              disabled={signingOut}
+              style={{
+                background: "none", border: "none", fontSize: 12, color: "rgba(255,255,255,0.45)",
+                padding: "10px 8px", margin: "-10px -8px -10px 0", cursor: "pointer",
+                opacity: signingOut ? 0.5 : 1,
+              }}
             >
-              Sign out
+              {signingOut ? "Signing out…" : "Sign out"}
             </button>
           </div>
         </div>
@@ -333,28 +349,38 @@ export default function HomeDashboard({
       {/* ── Body ── */}
       <div style={{ flex: 1, padding: "22px 20px 40px" }}>
 
-        {/* CTA buttons */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 28 }}>
+        {/* Primary CTA — the one action that matters most, full-width and unmistakable */}
+        <button
+          className="btn-primary"
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, padding: "14px 0", marginBottom: 14, lineHeight: 1 }}
+          onClick={() => router.push("/order/new")}
+        >
+          <IconShoppingBag size={17} style={{ flexShrink: 0, display: "block" }} />
+          <span style={{ lineHeight: 1 }}>Order this week</span>
+        </button>
+
+        {/* Secondary actions — clearly tappable cards, but visually a step down from the CTA above */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
           <button
-            className="btn-primary"
-            style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, fontSize: 14 }}
-            onClick={() => router.push("/order/new")}
-          >
-            <IconShoppingBag size={16} />
-            Order this week
-          </button>
-          <button
-            style={{ flex: "0 0 auto", padding: "11px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: C.muted }}
+            style={{
+              background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+              padding: "13px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+              fontSize: 12.5, fontWeight: 600, color: C.muted, cursor: "pointer",
+            }}
             onClick={() => router.push("/orders")}
           >
-            <IconClockHour4 size={15} />
+            <IconClockHour4 size={18} color={C.tealDark} />
             My orders
           </button>
           <button
-            style={{ flex: "0 0 auto", padding: "11px 14px", display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: C.muted }}
+            style={{
+              background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+              padding: "13px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+              fontSize: 12.5, fontWeight: 600, color: C.muted, cursor: "pointer",
+            }}
             onClick={() => router.push("/tastes")}
           >
-            <IconHeart size={15} />
+            <IconHeart size={18} color={C.tealDark} />
             My Tastes
           </button>
         </div>
@@ -412,6 +438,7 @@ export default function HomeDashboard({
         <DietWizard
           userId={profile.id}
           currentMacro={macroTarget}
+          profile={profile}
           onClose={() => setDietWizardOpen(false)}
           onSaved={() => { setDietWizardOpen(false); router.refresh(); }}
         />
