@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import OrderHistory from "@/components/OrderHistory";
 
 type RawPlan     = { id: number; start_date: string | null; end_date: string | null; created_at: string };
-type RawDay      = { id: number; meal_plan_id: number | null; date: string | null; status: string | null };
+type RawDay      = { id: number; meal_plan_id: number | null; date: string | null; status: string | null; delivery_id?: number | null };
 type RawPayment  = { id: number; meal_plan_day_id: number | null; amount: number | null; currency: string | null; status: string | null; provider: string | null; created_at: string };
 type RawRecipe   = { id: number; meal_plan_day_id: number | null; meal_type: string | null; label: string | null; recipe: { id: number; name: string | null; photo: string | null } | null };
 type RawDelivery = { id: number; meal_plan_day_id: number | null; delivery_date: string | null; status: string | null; delivery_address: string | null };
@@ -33,7 +33,7 @@ export default async function OrdersPage() {
   // 2) Fetch days
   const daysRes = await supabase
     .from("meal_plan_day")
-    .select("id, meal_plan_id, date, status")
+    .select("id, meal_plan_id, date, status, delivery_id")
     .in("meal_plan_id", planIds);
 
   const days   = (daysRes.data ?? []) as RawDay[];
