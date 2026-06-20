@@ -45,6 +45,7 @@ export interface GenerateMealPlanRequest {
   end_date: string;                // "YYYY-MM-DD"
   include_weekends?: boolean;
   meals?: Record<string, string>;  // e.g. { breakfast: "breakfast", lunch: "lunch" }
+  kcal_override?: number;          // when user is "eating out" for excluded meals, reduces daily target
   kitchen_id?: number;
   day_build_tries?: number;
 }
@@ -170,12 +171,14 @@ export async function confirmOrder(
   user_id: string,
   meal_plan: GenerateMealPlanResponse,
   checkout_summary: CheckoutSummaryResponse,
-  delivery_slot_id: number
+  delivery_slot_id: number,
+  payment_method: "cash" | "whish" | "neo",
+  delivery_address?: string
 ): Promise<{ success: boolean; order_id?: number; error?: string }> {
   const res = await fetch(`${FLASK_URL}/confirm_order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id, meal_plan, checkout_summary, delivery_slot_id }),
+    body: JSON.stringify({ user_id, meal_plan, checkout_summary, delivery_slot_id, payment_method, delivery_address }),
   });
   if (!res.ok) throw new Error(`confirm_order error ${res.status}: ${await res.text()}`);
   return res.json();
