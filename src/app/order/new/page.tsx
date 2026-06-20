@@ -25,7 +25,7 @@ export default async function OrderNewPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [profileRes, macroRes, menusRes, slotsRes, prefsRes] = await Promise.all([
+  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*").eq("user_id", user.id)
       .order("created_at", { ascending: false }).limit(1).single(),
@@ -39,6 +39,10 @@ export default async function OrderNewPage() {
     supabase.from("user_recipe_preferences")
       .select("recipe_id, like, dislike, dont_include")
       .eq("user_id", user.id),
+    supabase.from("user_delivery_address").select("*")
+      .eq("user_id", user.id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false }),
   ]);
 
   // Build orderable weeks — only future weekdays
@@ -79,6 +83,7 @@ export default async function OrderNewPage() {
       orderableWeeks={weeks}
       deliverySlots={(slotsRes.data ?? []) as Database["public"]["Tables"]["delivery_slots"]["Row"][]}
       initialPrefs={initialPrefs}
+      addresses={(addressesRes.data ?? []) as Database["public"]["Tables"]["user_delivery_address"]["Row"][]}
     />
   );
 }

@@ -173,12 +173,12 @@ export async function confirmOrder(
   checkout_summary: CheckoutSummaryResponse,
   delivery_slot_id: number,
   payment_method: "cash" | "whish" | "neo",
-  delivery_address?: string
+  delivery_address_id: number
 ): Promise<{ success: boolean; order_id?: number; error?: string }> {
   const res = await fetch(`${FLASK_URL}/confirm_order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id, meal_plan, checkout_summary, delivery_slot_id, payment_method, delivery_address }),
+    body: JSON.stringify({ user_id, meal_plan, checkout_summary, delivery_slot_id, payment_method, delivery_address_id }),
   });
   if (!res.ok) throw new Error(`confirm_order error ${res.status}: ${await res.text()}`);
   return res.json();

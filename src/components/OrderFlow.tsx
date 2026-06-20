@@ -1,12 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
   IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
+  IconMapPin, IconPlus, IconTrash,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
+import { createClient } from "@/lib/supabase/client";
 import {
   generateMealPlan, getCheckoutSummary, confirmOrder, updateMealPlan, simplePriceSimulator,
   type GenerateMealPlanResponse, type CheckoutSummaryResponse, type PlanDay, type Meal, type ChangeLog,
@@ -14,9 +17,21 @@ import {
 import RecipeRater from "@/components/RecipeRater";
 import { type PrefRating } from "@/lib/preferences";
 
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), {
+  ssr: false,
+  loading: () => (
+    <div style={{ width: "100%", height: 260, borderRadius: 12, background: "#eee9e6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#9a9a9a" }}>
+      Loading map…
+    </div>
+  ),
+});
+
+// Beirut — default map center when we don't yet know the user's location
+const DEFAULT_MAP_CENTER = { lat: 33.8938, lng: 35.5018 };
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Step = "days" | "generating" | "review" | "checkout" | "confirmed";
+type Step = "days" | "generating" | "review" | "checkout" | "confirming" | "confirmed";
 type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 
 type RecipeRow = {
@@ -33,9 +48,10 @@ export type OrderableWeek = {
   recipes: RecipeRow[];
 };
 
-type DeliverySlot = Database["public"]["Tables"]["delivery_slots"]["Row"];
-type UserRow      = Database["public"]["Tables"]["user"]["Row"];
-type MacroRow     = Database["public"]["Tables"]["daily_macro_target"]["Row"];
+type DeliverySlot  = Database["public"]["Tables"]["delivery_slots"]["Row"];
+type UserRow       = Database["public"]["Tables"]["user"]["Row"];
+type MacroRow      = Database["public"]["Tables"]["daily_macro_target"]["Row"];
+type AddressRow    = Database["public"]["Tables"]["user_delivery_address"]["Row"];
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -461,7 +477,9 @@ function SceneBox() {
   );
 }
 
-function GeneratingScreen() {
+function ScenesPlayer({ title, messages, scenes }: {
+  title: string; messages: { msg: string }[]; scenes: Array<() => React.JSX.Element>;
+}) {
   const [scene, setScene] = useState(0);
   const [visible, setVisible] = useState(true);
 
@@ -469,15 +487,14 @@ function GeneratingScreen() {
     const t = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setScene(s => (s + 1) % GEN_SCENES.length);
+        setScene(s => (s + 1) % messages.length);
         setVisible(true);
       }, 350);
     }, 3400);
     return () => clearInterval(t);
-  }, []);
+  }, [messages.length]);
 
-  const scenes = [SceneCalendar, ScenePan, SceneScale, SceneBox];
-  const SceneComp = scenes[scene];
+  const SceneComp = scenes[scene % scenes.length];
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 40, background: C.offWhite }}>
@@ -489,15 +506,150 @@ function GeneratingScreen() {
         <SceneComp />
         <div style={{ textAlign: "center" }}>
           <h3 style={{ margin: "0 0 6px", fontSize: 20, fontFamily: "'Playfair Display', serif", fontWeight: 500 }}>
-            Building your plan
+            {title}
           </h3>
           <p style={{ fontSize: 13, color: C.muted, margin: 0, minHeight: 20 }}>
-            {GEN_SCENES[scene].msg}
+            {messages[scene % messages.length].msg}
           </p>
         </div>
       </div>
     </div>
   );
+}
+
+function GeneratingScreen() {
+  return <ScenesPlayer title="Building your plan" messages={GEN_SCENES} scenes={[SceneCalendar, ScenePan, SceneScale, SceneBox]} />;
+}
+
+// ─── Confirming screen scenes ──────────────────────────────────────────────────
+
+const CONFIRM_SCENES = [
+  { msg: "Sending your order to the kitchen…" },
+  { msg: "Akli's chefs are firing up the stove…" },
+  { msg: "Weighing every gram of your macros…" },
+  { msg: "Boxing it up and calling the scooter…" },
+];
+
+function SceneTicket() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes ticketPrint {
+          0%,15%  { transform:translateY(-26px); opacity:0; transform-box:fill-box; transform-origin:center; }
+          45%,100%{ transform:translateY(0);      opacity:1; transform-box:fill-box; transform-origin:center; }
+        }
+        @keyframes printerBlink { 0%,100%{opacity:1} 50%{opacity:.4} }
+        @keyframes bellShake {
+          0%,100%{ transform:rotate(0deg); transform-box:fill-box; transform-origin:50% 0%; }
+          20%{ transform:rotate(-8deg); } 40%{ transform:rotate(8deg); } 60%{ transform:rotate(-5deg); } 80%{ transform:rotate(5deg); }
+        }
+      `}</style>
+      {/* Printer body */}
+      <rect x="22" y="38" width="56" height="22" rx="5" fill={C.primary}/>
+      <circle cx="70" cy="49" r="2.5" fill={C.teal} style={{ animation: "printerBlink 1.4s ease-in-out infinite" }}/>
+      {/* Slot */}
+      <rect x="30" y="36" width="40" height="4" rx="2" fill="#1d5048"/>
+      {/* Printed ticket */}
+      <g style={{ animation: "ticketPrint 2.6s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "center" }}>
+        <rect x="33" y="14" width="34" height="40" rx="2" fill="#fff" stroke={C.border} strokeWidth="1"/>
+        {[0,1,2,3,4].map(i => (
+          <rect key={i} x="37" y={20 + i * 6} width={i % 2 === 0 ? 26 : 18} height="2.6" rx="1.3" fill={i === 0 ? C.teal : "#d8d3cd"}/>
+        ))}
+      </g>
+      {/* Base/legs */}
+      <rect x="26" y="60" width="48" height="6" rx="3" fill="#1d5048"/>
+      {/* Service bell on the side */}
+      <g style={{ animation: "bellShake 2.6s ease-in-out infinite 1.3s" }}>
+        <path d="M10 78 a9 9 0 0 1 18 0 z" fill={C.teal}/>
+        <rect x="8" y="78" width="22" height="3" rx="1.5" fill={C.teal}/>
+        <circle cx="19" cy="83" r="2" fill={C.primary}/>
+      </g>
+    </svg>
+  );
+}
+
+function SceneChef() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes stir { 0%,100%{ transform:rotate(-18deg); } 50%{ transform:rotate(18deg); } }
+        @keyframes potSteam {
+          0%,100% { opacity:0; transform:translateY(0) scale(.8); transform-box:fill-box; transform-origin:center; }
+          50%      { opacity:.55; transform:translateY(-14px) scale(1.25); transform-box:fill-box; transform-origin:center; }
+        }
+        @keyframes hatBob { 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-3px); } }
+      `}</style>
+      {/* Pot */}
+      <ellipse cx="50" cy="78" rx="26" ry="6" fill="rgba(0,0,0,0.07)"/>
+      <path d="M26 58 h48 l-5 20 a4 4 0 0 1 -4 4 h-30 a4 4 0 0 1 -4 -4 z" fill={C.teal}/>
+      <rect x="22" y="54" width="56" height="8" rx="4" fill={C.primary}/>
+      <rect x="14" y="56" width="10" height="4" rx="2" fill={C.primary}/>
+      <rect x="76" y="56" width="10" height="4" rx="2" fill={C.primary}/>
+      {/* Steam */}
+      {[40, 50, 60].map((x, i) => (
+        <ellipse key={i} cx={x} cy={46} rx="3" ry="4" fill="#fff" opacity="0"
+          style={{ animation: `potSteam 1.8s ease-in-out ${(i * 0.4).toFixed(2)}s infinite` }}/>
+      ))}
+      {/* Spoon stirring */}
+      <g style={{ animation: "stir 1.6s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "50px 56px" }}>
+        <rect x="48.5" y="20" width="3" height="38" rx="1.5" fill="#caa15a"/>
+        <ellipse cx="50" cy="20" rx="6" ry="4" fill="#caa15a"/>
+      </g>
+      {/* Chef hat peeking top-left */}
+      <g style={{ animation: "hatBob 2s ease-in-out infinite" }}>
+        <ellipse cx="16" cy="30" rx="10" ry="11" fill="#fff" stroke={C.border} strokeWidth="1"/>
+        <rect x="7" y="36" width="18" height="8" rx="3" fill="#fff" stroke={C.border} strokeWidth="1"/>
+      </g>
+    </svg>
+  );
+}
+
+function SceneScooter() {
+  return (
+    <svg viewBox="0 0 100 100" width={130} height={130}>
+      <style>{`
+        @keyframes scooterDrive {
+          0%,100% { transform:translateX(0); }
+          50%      { transform:translateX(8px); }
+        }
+        @keyframes wheelSpin { 0%{ transform:rotate(0deg); } 100%{ transform:rotate(360deg); } }
+        @keyframes dashMove { 0%{ stroke-dashoffset:0; } 100%{ stroke-dashoffset:-20; } }
+      `}</style>
+      {/* Motion lines */}
+      <g stroke={C.border} strokeWidth="2" strokeDasharray="6 6" style={{ animation: "dashMove 0.6s linear infinite" }}>
+        <line x1="8" y1="40" x2="26" y2="40"/>
+        <line x1="4" y1="50" x2="24" y2="50"/>
+        <line x1="10" y1="60" x2="28" y2="60"/>
+      </g>
+      <g style={{ animation: "scooterDrive 1.4s ease-in-out infinite", transformBox: "fill-box", transformOrigin: "center" }}>
+        {/* Delivery box on back */}
+        <rect x="62" y="38" width="22" height="20" rx="3" fill={C.teal}/>
+        <rect x="62" y="38" width="22" height="20" rx="3" fill="none" stroke={C.primary} strokeWidth="1.2"/>
+        <path d="M68 38 v20 M78 38 v20" stroke={C.primary} strokeWidth="1" opacity="0.4"/>
+        {/* Body */}
+        <path d="M30 64 h26 l8 -10 h12" stroke={C.primary} strokeWidth="4" fill="none" strokeLinecap="round"/>
+        <path d="M58 54 v-14" stroke={C.primary} strokeWidth="4" strokeLinecap="round"/>
+        <path d="M52 40 h14" stroke={C.primary} strokeWidth="4" strokeLinecap="round"/>
+        {/* Seat */}
+        <rect x="40" y="58" width="16" height="5" rx="2.5" fill={C.primary}/>
+        {/* Wheels */}
+        <g style={{ animation: "wheelSpin 0.5s linear infinite", transformBox: "fill-box", transformOrigin: "30px 70px" }}>
+          <circle cx="30" cy="70" r="8" fill="none" stroke={C.primary} strokeWidth="3"/>
+          <line x1="30" y1="64" x2="30" y2="76" stroke={C.primary} strokeWidth="1.5"/>
+          <line x1="24" y1="70" x2="36" y2="70" stroke={C.primary} strokeWidth="1.5"/>
+        </g>
+        <g style={{ animation: "wheelSpin 0.5s linear infinite", transformBox: "fill-box", transformOrigin: "68px 70px" }}>
+          <circle cx="68" cy="70" r="8" fill="none" stroke={C.primary} strokeWidth="3"/>
+          <line x1="68" y1="64" x2="68" y2="76" stroke={C.primary} strokeWidth="1.5"/>
+          <line x1="62" y1="70" x2="74" y2="70" stroke={C.primary} strokeWidth="1.5"/>
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+function ConfirmingScreen() {
+  return <ScenesPlayer title="Confirming your order" messages={CONFIRM_SCENES} scenes={[SceneTicket, SceneChef, SceneScale, SceneScooter]} />;
 }
 
 // ─── Meal row ─────────────────────────────────────────────────────────────────
@@ -833,10 +985,254 @@ function DailyBreakdown({ breakdown }: { breakdown: CheckoutSummaryResponse["pri
   );
 }
 
+// ─── Address picker (checkout) ────────────────────────────────────────────────
+
+function AddressPicker({ userId, addresses, selectedId, onSelect, onAdded, onRemoved, onDefaultChanged }: {
+  userId: string;
+  addresses: AddressRow[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  onAdded: (address: AddressRow) => void;
+  onRemoved: (id: number) => void;
+  onDefaultChanged: (id: number) => void;
+}) {
+  const [adding, setAdding]   = useState(addresses.length === 0);
+  const [label, setLabel]     = useState("");
+  const [text, setText]       = useState("");
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  const [removeErr, setRemoveErr]   = useState<string | null>(null);
+  const [pin, setPin]         = useState<{ lat: number; lng: number } | null>(null);
+  const [pinning, setPinning] = useState(false);
+  const [pinErr, setPinErr]   = useState<string | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [makeDefault, setMakeDefault] = useState(addresses.length === 0);
+  const [saving, setSaving]   = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [geocoding, setGeocoding] = useState(false);
+
+  async function reverseGeocode(lat: number, lng: number) {
+    setGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+        { headers: { Accept: "application/json" } }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.display_name) setText(data.display_name as string);
+    } catch {
+      // silent — reverse geocoding is a convenience, not required to save the address
+    } finally { setGeocoding(false); }
+  }
+
+  function placePin(lat: number, lng: number) {
+    setPin({ lat, lng });
+    reverseGeocode(lat, lng);
+  }
+
+  function pinMyLocation() {
+    if (!navigator.geolocation) { setPinErr("Location isn't available on this device."); return; }
+    if (!window.isSecureContext) {
+      setPinErr("Location only works over HTTPS (or localhost) — open this app via its https:// address to pin a location.");
+      return;
+    }
+    setPinning(true);
+    setPinErr(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { placePin(pos.coords.latitude, pos.coords.longitude); setPinning(false); },
+      (err) => {
+        const messages: Record<number, string> = {
+          1: "Location permission was denied — allow it in your browser/site settings and try again.",
+          2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window.",
+          3: "Getting your location took too long. Try again.",
+        };
+        setPinErr(messages[err.code] ?? `Couldn't get your location (${err.message || "unknown error"}).`);
+        setPinning(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
+  async function save() {
+    if (!text.trim()) return;
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      const supabase = createClient();
+      if (makeDefault) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from("user_delivery_address") as any).update({ is_default: false }).eq("user_id", userId).eq("is_default", true);
+      }
+      const { data, error } = await (supabase.from("user_delivery_address") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .insert({
+          user_id: userId,
+          label: label.trim() || null,
+          address_text: text.trim(),
+          lat: pin?.lat ?? null,
+          lng: pin?.lng ?? null,
+          is_default: makeDefault || addresses.length === 0,
+        }).select().single();
+      if (error || !data) throw new Error(error?.message ?? "Could not save address.");
+      onAdded(data as AddressRow);
+      setAdding(false);
+      setLabel(""); setText(""); setPin(null); setMakeDefault(false); setMapOpen(false);
+    } catch (e) {
+      setSaveErr(e instanceof Error ? e.message : "Could not save address.");
+    } finally { setSaving(false); }
+  }
+
+  async function removeAddress(id: number) {
+    if (!window.confirm("Remove this delivery address?")) return;
+    setRemovingId(id);
+    setRemoveErr(null);
+    try {
+      const supabase = createClient();
+      const removed = addresses.find(a => a.id === id);
+      const { error } = await supabase.from("user_delivery_address").delete().eq("id", id).eq("user_id", userId);
+      if (error) throw new Error(error.message);
+
+      // If the default address was just removed, promote another one so "default" stays meaningful.
+      const remaining = addresses.filter(a => a.id !== id);
+      if (removed?.is_default && remaining.length > 0) {
+        const promoted = remaining[0];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from("user_delivery_address") as any).update({ is_default: true }).eq("id", promoted.id);
+        onRemoved(id);
+        onDefaultChanged(promoted.id);
+      } else {
+        onRemoved(id);
+      }
+    } catch (e) {
+      setRemoveErr(e instanceof Error ? e.message : "Could not remove address.");
+    } finally { setRemovingId(null); }
+  }
+
+  return (
+    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+      <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 10px" }}>Delivery address</p>
+
+      {addresses.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: adding ? 12 : 0 }}>
+          {addresses.map(a => (
+            <div key={a.id} style={{
+              display: "flex", alignItems: "flex-start", gap: 10,
+              padding: "11px 12px", borderRadius: 10,
+              border: `2px solid ${selectedId === a.id ? C.tealDark : C.border}`,
+              background: selectedId === a.id ? "#f0f7f7" : C.white,
+              opacity: removingId === a.id ? 0.5 : 1,
+            }}>
+              <button onClick={() => onSelect(a.id)} disabled={removingId === a.id} style={{
+                flex: 1, minWidth: 0, display: "flex", gap: 10, textAlign: "left",
+                background: "none", border: "none", padding: 0, cursor: "pointer",
+              }}>
+                <IconMapPin size={16} color={selectedId === a.id ? C.tealDark : C.light} style={{ flexShrink: 0, marginTop: 1 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600 }}>
+                    {a.label || "Address"} {a.is_default && <span style={{ fontSize: 10.5, color: C.tealDark, fontWeight: 500 }}>· Default</span>}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 12.5, color: C.muted }}>{a.address_text}</p>
+                  {a.lat != null && a.lng != null && (
+                    <a href={`https://maps.google.com/?q=${a.lat},${a.lng}`} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 11, color: C.tealDark, textDecoration: "underline" }}>
+                      View pinned location
+                    </a>
+                  )}
+                </div>
+              </button>
+              <button
+                onClick={() => removeAddress(a.id)}
+                disabled={removingId === a.id}
+                title="Remove address"
+                style={{ flexShrink: 0, background: "none", border: "none", padding: 4, color: C.light, cursor: "pointer", display: "flex" }}
+              >
+                <IconTrash size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {removeErr && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 10px" }}>{removeErr}</p>}
+
+      {!adding ? (
+        <button onClick={() => setAdding(true)} style={{
+          display: "flex", alignItems: "center", gap: 6, marginTop: addresses.length > 0 ? 10 : 0,
+          background: "none", border: "none", padding: 0, color: C.tealDark, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+        }}>
+          <IconPlus size={14} /> Add new address
+        </button>
+      ) : (
+        <div>
+          <input type="text" placeholder="Label (e.g. Home, Office)" value={label}
+            onChange={e => setLabel(e.target.value)} style={{ marginBottom: 8 }} />
+          <textarea rows={2} placeholder="Building, street, area" value={text}
+            onChange={e => setText(e.target.value)} style={{ resize: "none", marginBottom: 8 }} />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={pinMyLocation} disabled={pinning} style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9,
+              border: `1px solid ${pin ? C.tealDark : C.border}`, background: pin ? "#f0f7f7" : C.white,
+              fontSize: 12.5, color: pin ? C.tealDark : C.muted, cursor: "pointer",
+            }}>
+              <IconMapPin size={14} />
+              {pinning ? "Pinning…" : pin ? "Location pinned ✓" : "Pin my location"}
+            </button>
+            <button type="button" onClick={() => { setMapOpen(o => !o); if (!pin) setPin(DEFAULT_MAP_CENTER); }} style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9,
+              border: `1px solid ${mapOpen ? C.tealDark : C.border}`, background: mapOpen ? "#f0f7f7" : C.white,
+              fontSize: 12.5, color: mapOpen ? C.tealDark : C.muted, cursor: "pointer",
+            }}>
+              <IconMapPin size={14} />
+              {mapOpen ? "Hide map" : "Adjust on map"}
+            </button>
+            {pin && !mapOpen && (
+              <a href={`https://maps.google.com/?q=${pin.lat},${pin.lng}`} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: C.tealDark, textDecoration: "underline" }}>
+                View on map
+              </a>
+            )}
+          </div>
+          {pinErr && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{pinErr}</p>}
+
+          {mapOpen && pin && (
+            <div style={{ marginBottom: 10 }}>
+              <p style={{ fontSize: 11.5, color: C.muted, margin: "0 0 6px" }}>
+                Drag the pin (or tap anywhere on the map) to move it — e.g. set it to your home even if you&apos;re ordering from somewhere else.
+              </p>
+              <LocationPickerMap
+                lat={pin.lat}
+                lng={pin.lng}
+                onChange={placePin}
+              />
+            </div>
+          )}
+          {geocoding && <p style={{ fontSize: 11.5, color: C.muted, margin: "0 0 8px" }}>Looking up the address for that pin…</p>}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: C.muted, marginBottom: 10, cursor: "pointer" }}>
+            <input type="checkbox" checked={makeDefault} onChange={e => setMakeDefault(e.target.checked)} disabled={addresses.length === 0} />
+            Set as default address
+          </label>
+
+          {saveErr && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{saveErr}</p>}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={save} disabled={saving || !text.trim()} style={{ flex: 1, padding: "9px 0", fontSize: 13 }}>
+              {saving ? "Saving…" : "Save address"}
+            </button>
+            {addresses.length > 0 && (
+              <button onClick={() => setAdding(false)} style={{ padding: "9px 14px", fontSize: 13, background: "none", border: `1px solid ${C.border}` }}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OrderFlow({
-  userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {},
+  userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [],
 }: {
   userId: string;
   profile: UserRow | null;
@@ -844,6 +1240,7 @@ export default function OrderFlow({
   orderableWeeks: OrderableWeek[];
   deliverySlots: DeliverySlot[];
   initialPrefs?: Record<number, PrefRating>;
+  addresses?: AddressRow[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
@@ -925,7 +1322,10 @@ export default function OrderFlow({
   const [promoInput, setPromoInput]     = useState("");
   const [promoApplied, setPromoApplied] = useState("");
   const [slotId, setSlotId]             = useState<number | null>(deliverySlots[0]?.id ?? null);
-  const [address, setAddress]           = useState(profile?.delivery_address ?? profile?.address ?? "");
+  const [addressList, setAddressList]   = useState<AddressRow[]>(addresses);
+  const [addressId, setAddressId]       = useState<number | null>(
+    addresses.find(a => a.is_default)?.id ?? addresses[0]?.id ?? null
+  );
   const [confirming, setConfirming]     = useState(false);
   const [confirmErr, setConfirmErr]     = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "whish" | "neo" | null>(null);
@@ -1077,15 +1477,20 @@ export default function OrderFlow({
   }
 
   async function handleConfirm() {
-    if (!plan || !checkoutData || !slotId || !paymentMethod) return;
+    if (!plan || !checkoutData || !slotId || !paymentMethod || !addressId) return;
     setConfirming(true);
     setConfirmErr(null);
+    setStep("confirming");
     try {
-      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod, address || undefined);
-      if (res.success) setStep("confirmed");
-      else setConfirmErr(res.error ?? "Something went wrong.");
+      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod, addressId);
+      // confirmOrder() already throws on a non-2xx response, so reaching here without
+      // an explicit error means the backend confirmed the order — don't rely solely
+      // on a `success` flag that some backend responses omit.
+      if (res.error) { setConfirmErr(res.error); setStep("checkout"); }
+      else setStep("confirmed");
     } catch (e) {
       setConfirmErr(e instanceof Error ? e.message : "Something went wrong.");
+      setStep("checkout");
     } finally { setConfirming(false); }
   }
 
@@ -1098,6 +1503,15 @@ export default function OrderFlow({
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
         <StepHeader step={2} total={3} title="Building your plan" />
         <GeneratingScreen />
+      </div>
+    );
+  }
+
+  if (step === "confirming") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+        <StepHeader step={3} total={3} title="Review & confirm" />
+        <ConfirmingScreen />
       </div>
     );
   }
@@ -1553,11 +1967,24 @@ export default function OrderFlow({
           </div>
 
           {/* Address */}
-          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
-            <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 10px" }}>Delivery address</p>
-            <textarea rows={2} placeholder="Building, street, area" value={address}
-              onChange={e => setAddress(e.target.value)} style={{ resize: "none" }} />
-          </div>
+          <AddressPicker
+            userId={userId}
+            addresses={addressList}
+            selectedId={addressId}
+            onSelect={setAddressId}
+            onAdded={(a) => { setAddressList(prev => [a, ...(a.is_default ? prev.map(p => ({ ...p, is_default: false })) : prev)]); setAddressId(a.id); }}
+            onRemoved={(id) => {
+              setAddressList(prev => prev.filter(a => a.id !== id));
+              setAddressId(prev => {
+                if (prev !== id) return prev;
+                const remaining = addressList.filter(a => a.id !== id);
+                return remaining.find(a => a.is_default)?.id ?? remaining[0]?.id ?? null;
+              });
+            }}
+            onDefaultChanged={(id) => {
+              setAddressList(prev => prev.map(a => ({ ...a, is_default: a.id === id })));
+            }}
+          />
 
           {/* Payment method */}
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
@@ -1655,19 +2082,24 @@ export default function OrderFlow({
             </div>
           </div>
 
-          {confirmErr && (
-            <div style={{ background: "#fdf0ef", border: `1px solid ${C.error}`, borderRadius: 10, padding: "12px 14px", fontSize: 12.5, color: C.error }}>
-              {confirmErr}
-            </div>
-          )}
         </div>
 
         <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
+          {confirmErr && (
+            <div style={{ background: "#fdf0ef", border: `1px solid ${C.error}`, borderRadius: 10, padding: "12px 14px", fontSize: 12.5, color: C.error, marginBottom: 10 }}>
+              {confirmErr}
+            </div>
+          )}
+          {!addressId && (
+            <p style={{ fontSize: 12, color: C.error, textAlign: "center", margin: "0 0 8px" }}>
+              Add or select a delivery address to confirm your order.
+            </p>
+          )}
           <button
             className="btn-primary"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}
             onClick={handleConfirm}
-            disabled={confirming || !slotId || !paymentMethod}
+            disabled={confirming || !slotId || !paymentMethod || !addressId}
           >
             {confirming ? "Confirming…" : <><IconCheck size={16} /> Confirm order</>}
           </button>
