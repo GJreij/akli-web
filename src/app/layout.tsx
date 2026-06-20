@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,7 +28,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <Suspense fallback={null}>
+          <AnalyticsTracker />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

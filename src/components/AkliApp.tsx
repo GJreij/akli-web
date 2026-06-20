@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { track, linkAnonToUser } from "@/lib/analytics";
 import { simplePriceSimulator } from "@/lib/flask";
 import { COUNTRY_CODES } from "@/lib/theme";
 import type { Database } from "@/lib/supabase/types";
@@ -322,10 +323,12 @@ export default function AkliApp({
   // ── Navigation ────────────────────────────────────────────────────────────────
 
   function startOnboarding() {
+    track("landing_cta_click", {}, "onboarding");
     transition("onboarding", () => { setPath(FULL_PATH); setIdx(0); });
   }
 
   function handleSkip() {
+    track("onboarding_skip_to_manual", {}, "onboarding");
     setPath(SKIP_PATH); setIdx(1);
   }
 
@@ -371,10 +374,11 @@ export default function AkliApp({
       setSaveErrors(p => ({ ...p, dob: "Please enter your date of birth" }));
       return;
     }
-    if (step === "activity") { fillResultFromBasics(); setIdx(i => i + 1); return; }
-    if (step === "manual")   { fillResultFromManual(); setIdx(i => i + 1); return; }
+    if (step === "activity") { fillResultFromBasics(); track("onboarding_step", { step: "activity" }, "onboarding"); setIdx(i => i + 1); return; }
+    if (step === "manual")   { fillResultFromManual();  track("onboarding_step", { step: "manual" },  "onboarding"); setIdx(i => i + 1); return; }
     if (step === "save")     { await handleSave(); return; }
     setSaveErrors({});
+    track("onboarding_step", { step }, "onboarding");
     setIdx(i => i + 1);
   }
 
@@ -383,8 +387,10 @@ export default function AkliApp({
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setSiError(null); setSiLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: siEmail, password: siPassword });
-    if (error) { setSiError(error.message); setSiLoading(false); return; }
+    const { data, error } = await supabase.auth.signInWithPassword({ email: siEmail, password: siPassword });
+    if (error) { track("signin_failed", { reason: error.message }, "auth"); setSiError(error.message); setSiLoading(false); return; }
+    if (data.user) await linkAnonToUser(data.user.id);
+    track("signin_completed", {}, "auth");
     if (!siRemember) {
       // Sign out when the tab/window closes
       window.addEventListener("beforeunload", () => supabase.auth.signOut(), { once: true });
@@ -418,10 +424,12 @@ export default function AkliApp({
 
     // 1. Create auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
-    if (authError) { setSaveError(authError.message); setSaveLoading(false); return; }
+    if (authError) { track("signup_failed", { reason: authError.message }, "auth"); setSaveError(authError.message); setSaveLoading(false); return; }
 
     const userId = authData.user?.id;
     if (!userId) { setSaveError("Sign-up failed. Please try again."); setSaveLoading(false); return; }
+    await linkAnonToUser(userId);
+    track("signup_completed", { method: weightKnown ? "guided" : "manual", goal }, "auth");
 
     // 2. Save profile + macros via server route (uses service role key, bypasses RLS)
     const res = await fetch("/api/create-profile", {
@@ -470,6 +478,7 @@ export default function AkliApp({
 
   async function handleSignOut(e: React.MouseEvent) {
     e.preventDefault();
+    track("signout", {}, "auth");
     await supabase.auth.signOut();
     window.location.href = "/";
   }

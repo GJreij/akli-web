@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { track } from "@/lib/analytics";
 import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import DietWizard from "@/components/DietWizard";
@@ -214,6 +215,7 @@ export default function HomeDashboard({
   async function signOut() {
     if (signingOut) return;
     setSigningOut(true);
+    track("signout", {}, "auth");
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/");
@@ -440,7 +442,7 @@ export default function HomeDashboard({
           currentMacro={macroTarget}
           profile={profile}
           onClose={() => setDietWizardOpen(false)}
-          onSaved={() => { setDietWizardOpen(false); router.refresh(); }}
+          onSaved={() => { track("diet_wizard_saved", {}, "diet"); setDietWizardOpen(false); router.refresh(); }}
         />
       )}
 
