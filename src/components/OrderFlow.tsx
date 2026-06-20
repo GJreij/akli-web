@@ -1669,7 +1669,7 @@ export default function OrderFlow({
         </div>
 
         {/* Sticky footer */}
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
             <span style={{ fontSize: 13.5, fontWeight: 600 }}>
               {!rangeStart
@@ -1746,7 +1746,7 @@ export default function OrderFlow({
           ))}
         </div>
 
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "12px 20px 28px" }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, background: C.white, borderTop: `1px solid ${C.border}`, padding: "12px 20px 28px" }}>
           <div style={{ display: "flex", gap: 8, marginBottom: planHistory.length > 0 || plan !== originalPlan ? 8 : 0 }}>
             {planHistory.length > 0 && (
               <button
@@ -2019,7 +2019,7 @@ export default function OrderFlow({
 
         </div>
 
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 30, background: C.white, borderTop: `1px solid ${C.border}`, padding: "14px 20px 28px" }}>
           {confirmErr && (
             <div style={{ background: "#fdf0ef", border: `1px solid ${C.error}`, borderRadius: 10, padding: "12px 14px", fontSize: 12.5, color: C.error, marginBottom: 10 }}>
               {confirmErr}
