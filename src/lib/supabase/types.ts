@@ -14,6 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_event: {
+        Row: {
+          anon_id: string | null
+          browser: string | null
+          created_at: string
+          device_type: string | null
+          event_category: string
+          event_name: string
+          id: number
+          metadata: Json | null
+          os: string | null
+          page: string | null
+          referrer: string | null
+          session_id: string | null
+          user_id: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+        }
+        Insert: {
+          anon_id?: string | null
+          browser?: string | null
+          created_at?: string
+          device_type?: string | null
+          event_category?: string
+          event_name: string
+          id?: never
+          metadata?: Json | null
+          os?: string | null
+          page?: string | null
+          referrer?: string | null
+          session_id?: string | null
+          user_id?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Update: {
+          anon_id?: string | null
+          browser?: string | null
+          created_at?: string
+          device_type?: string | null
+          event_category?: string
+          event_name?: string
+          id?: never
+          metadata?: Json | null
+          os?: string | null
+          page?: string | null
+          referrer?: string | null
+          session_id?: string | null
+          user_id?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_event_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_macro_order: {
         Row: {
           carbs_ordered: number | null
@@ -331,30 +396,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      event_log: {
-        Row: {
-          created_at: string | null
-          event_data: Json | null
-          event_type: string
-          id: number
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          event_data?: Json | null
-          event_type: string
-          id?: number
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          event_data?: Json | null
-          event_type?: string
-          id?: number
-          user_id?: string | null
-        }
-        Relationships: []
       }
       ingredient: {
         Row: {

@@ -9,6 +9,7 @@ import {
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
+import { track } from "@/lib/analytics";
 import {
   generateMealPlan, getCheckoutSummary, confirmOrder, updateMealPlan, simplePriceSimulator,
   type GenerateMealPlanResponse, type CheckoutSummaryResponse, type PlanDay, type Meal, type ChangeLog,
@@ -1281,6 +1282,7 @@ export default function OrderFlow({
     if (selected.size === 0 || !rangeStart || !rangeEnd) return;
     setGenErr(null);
     setStep("generating");
+    track("order_step", { step: "generating", day_count: selected.size }, "order");
     const sorted = [...selected].sort();
 
     const includedMeals = ALL_MEALS.filter(m => !excludedMeals.has(m));
@@ -1302,7 +1304,9 @@ export default function OrderFlow({
       setOriginalPlan(result);
       setPlanHistory([]);
       setStep("review");
+      track("order_step", { step: "review", day_count: result.days.length }, "order");
     } catch (e) {
+      track("order_generate_failed", { error: e instanceof Error ? e.message : String(e) }, "order");
       setGenErr(e instanceof Error ? e.message : "Something went wrong. Please try again.");
       setStep("days");
     }
@@ -1355,15 +1359,21 @@ export default function OrderFlow({
     try {
       setCheckoutData(await getCheckoutSummary(userId, plan, promoApplied || undefined));
     } catch { setCheckoutData(null); }
-    finally { setCoLoading(false); setStep("checkout"); }
+    finally {
+      setCoLoading(false);
+      setStep("checkout");
+      track("order_step", { step: "checkout", day_count: plan.days.length }, "order");
+    }
   }
 
   async function applyPromo() {
     if (!plan || !promoInput.trim()) return;
     setCoLoading(true);
     try {
-      setCheckoutData(await getCheckoutSummary(userId, plan, promoInput.trim()));
+      const data = await getCheckoutSummary(userId, plan, promoInput.trim());
+      setCheckoutData(data);
       setPromoApplied(promoInput.trim());
+      track("promo_applied", { code: promoInput.trim(), status: data.price_breakdown.promo_code_status }, "order");
     } catch { /* ignore */ }
     finally { setCoLoading(false); }
   }
@@ -1387,6 +1397,11 @@ export default function OrderFlow({
     return !!data && data.length > 0;
   }
 
+  function selectPaymentMethod(method: "cash" | "whish" | "neo") {
+    setPaymentMethod(method);
+    track("payment_method_selected", { method }, "order");
+  }
+
   async function handleConfirm() {
     if (!plan || !checkoutData || !slotId || !paymentMethod || !addressId) return;
     setConfirming(true);
@@ -1398,13 +1413,20 @@ export default function OrderFlow({
       // confirmOrder() already throws on a non-2xx response, so reaching here without
       // an explicit error means the backend confirmed the order — don't rely solely
       // on a `success` flag that some backend responses omit.
-      if (res.error) { setConfirmErr(res.error); setStep("checkout"); }
-      else setStep("confirmed");
+      if (res.error) {
+        track("order_confirm_failed", { error: res.error }, "order");
+        setConfirmErr(res.error); setStep("checkout");
+      } else {
+        track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, order_id: res.order_id ?? null }, "order");
+        setStep("confirmed");
+      }
     } catch (e) {
       if (await orderWasActuallyPlaced(sortedDates)) {
         // Backend committed the order despite the request erroring out — treat as success.
+        track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, recovered_from_error: true }, "order");
         setStep("confirmed");
       } else {
+        track("order_confirm_failed", { error: e instanceof Error ? e.message : String(e) }, "order");
         setConfirmErr(e instanceof Error ? e.message : "Something went wrong.");
         setStep("checkout");
       }
@@ -1928,7 +1950,7 @@ export default function OrderFlow({
 
               {/* Cash on delivery */}
               <button
-                onClick={() => setPaymentMethod("cash")}
+                onClick={() => selectPaymentMethod("cash")}
                 style={{
                   display: "flex", alignItems: "center", gap: 12,
                   padding: "13px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",
@@ -1953,7 +1975,7 @@ export default function OrderFlow({
 
               {/* Whish Money */}
               <button
-                onClick={() => setPaymentMethod("whish")}
+                onClick={() => selectPaymentMethod("whish")}
                 style={{
                   display: "flex", alignItems: "center", gap: 12,
                   padding: "13px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",
@@ -1985,7 +2007,7 @@ export default function OrderFlow({
 
               {/* Neo */}
               <button
-                onClick={() => setPaymentMethod("neo")}
+                onClick={() => selectPaymentMethod("neo")}
                 style={{
                   display: "flex", alignItems: "center", gap: 12,
                   padding: "13px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",

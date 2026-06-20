@@ -4,6 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { IconMapPin } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/client";
+import { track } from "@/lib/analytics";
 import type { Database } from "@/lib/supabase/types";
 
 type AddressRow = Database["public"]["Tables"]["user_delivery_address"]["Row"];
@@ -121,13 +122,18 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
     setPinning(true);
     setPinErr(null);
     navigator.geolocation.getCurrentPosition(
-      (pos) => { placePin(pos.coords.latitude, pos.coords.longitude); setPinning(false); },
+      (pos) => {
+        track("geolocation_granted", {}, "address");
+        placePin(pos.coords.latitude, pos.coords.longitude);
+        setPinning(false);
+      },
       (err) => {
         const messages: Record<number, string> = {
           1: "Location is blocked for this site. Check your phone's location settings — both the device-wide location toggle and the per-site/per-browser permission for this app — and make sure it's allowed. Then come back and try again, or just type your address above.",
           2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window — or just type your address above.",
           3: "Getting your location took too long. Try again, or just type your address above.",
         };
+        track("geolocation_denied", { error_code: err.code }, "address");
         setPinErr(messages[err.code] ?? `Couldn't get your location (${err.message || "unknown error"}). Just type your address above instead.`);
         setPinning(false);
       },
@@ -155,6 +161,7 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
           is_default: makeDefault || existingCount === 0,
         }).select().single();
       if (error || !data) throw new Error(error?.message ?? "Could not save address.");
+      track("address_added", { has_pin: !!pin }, "address");
       onSaved(data as AddressRow);
       setLabel(""); setText(""); setPin(null); setMakeDefault(false); setMapOpen(false);
     } catch (e) {
