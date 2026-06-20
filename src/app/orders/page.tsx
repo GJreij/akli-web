@@ -6,7 +6,7 @@ type RawPlan     = { id: number; start_date: string | null; end_date: string | n
 type RawDay      = { id: number; meal_plan_id: number | null; date: string | null; status: string | null; delivery_id: number | null };
 type RawPayment  = { id: number; meal_plan_day_id: number | null; amount: number | null; currency: string | null; status: string | null; provider: string | null; created_at: string };
 type RawRecipe   = { id: number; meal_plan_day_id: number | null; meal_type: string | null; label: string | null; recipe: { id: number; name: string | null; photo: string | null } | null };
-type RawDelivery = { id: number; meal_plan_day_id: number | null; delivery_date: string | null; status: string | null; delivery_address: string | null };
+type RawDelivery = { id: number; meal_plan_day_id: number | null; delivery_date: string | null; status: string | null; delivery_address: string | null; delivery_slot_id: number | null };
 
 export default async function OrdersPage() {
   const supabase = await createClient();
@@ -56,7 +56,7 @@ export default async function OrdersPage() {
       .in("meal_plan_day_id", dayIds),
     supabase
       .from("deliveries")
-      .select("id, meal_plan_day_id, delivery_date, status, delivery_address")
+      .select("id, meal_plan_day_id, delivery_date, status, delivery_address, delivery_slot_id")
       .in("meal_plan_day_id", dayIds),
   ]);
 
