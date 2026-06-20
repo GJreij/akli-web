@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
-import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil } from "@tabler/icons-react";
+import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil, IconChartBar } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import DietWizard from "@/components/DietWizard";
 
@@ -260,6 +260,18 @@ export default function HomeDashboard({
             akli
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {profile?.role === "admin" && (
+              <button
+                onClick={() => router.push("/admin/analytics")}
+                title="Analytics"
+                style={{
+                  background: "none", border: "none", padding: 10, margin: -10,
+                  color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex",
+                }}
+              >
+                <IconChartBar size={20} />
+              </button>
+            )}
             <button
               onClick={() => { setNavigatingProfile(true); router.push("/profile"); }}
               title="Profile"
