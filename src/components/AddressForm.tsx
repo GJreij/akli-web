@@ -124,7 +124,7 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
       (pos) => { placePin(pos.coords.latitude, pos.coords.longitude); setPinning(false); },
       (err) => {
         const messages: Record<number, string> = {
-          1: "Location permission was denied. You can try again — we'll always re-ask — or just type your address above; the map is optional.",
+          1: "Location is blocked for this site. Check your phone's location settings — both the device-wide location toggle and the per-site/per-browser permission for this app — and make sure it's allowed. Then come back and try again, or just type your address above.",
           2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window — or just type your address above.",
           3: "Getting your location took too long. Try again, or just type your address above.",
         };
