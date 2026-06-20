@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import OrderHistory from "@/components/OrderHistory";
 
 type RawPlan     = { id: number; start_date: string | null; end_date: string | null; created_at: string };
-type RawDay      = { id: number; meal_plan_id: number | null; date: string | null; status: string | null; delivery_id?: number | null };
+type RawDay      = { id: number; meal_plan_id: number | null; date: string | null; status: string | null; delivery_id: number | null };
 type RawPayment  = { id: number; meal_plan_day_id: number | null; amount: number | null; currency: string | null; status: string | null; provider: string | null; created_at: string };
 type RawRecipe   = { id: number; meal_plan_day_id: number | null; meal_type: string | null; label: string | null; recipe: { id: number; name: string | null; photo: string | null } | null };
 type RawDelivery = { id: number; meal_plan_day_id: number | null; delivery_date: string | null; status: string | null; delivery_address: string | null };
@@ -70,7 +70,10 @@ export default async function OrdersPage() {
     meal_plan_day: days
       .filter(d => d.meal_plan_id === plan.id)
       .map(day => ({
-        ...day,
+        id:                   day.id,
+        date:                 day.date,
+        status:               day.status,
+        delivery_id:          day.delivery_id ?? null,
         payment:              payments.filter(p => p.meal_plan_day_id === day.id),
         deliveries:           deliveries.filter(d => d.meal_plan_day_id === day.id),
         meal_plan_day_recipe: dayRecipes.filter(r => r.meal_plan_day_id === day.id),
