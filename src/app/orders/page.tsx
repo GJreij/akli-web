@@ -8,13 +8,15 @@ export default async function OrdersPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
 
+  type RawPlan = { id: number; start_date: string | null; end_date: string | null; created_at: string };
+
   // 1) Fetch meal plans
   const { data: rawPlans } = await supabase
     .from("meal_plan")
     .select("id, start_date, end_date, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
-    .limit(10);
+    .limit(10) as { data: RawPlan[] | null };
 
   if (!rawPlans || rawPlans.length === 0) {
     return <OrderHistory plans={[]} userId={user.id} />;
