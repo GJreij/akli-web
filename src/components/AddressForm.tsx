@@ -51,6 +51,7 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching]     = useState(false);
   const [searchErr, setSearchErr]     = useState<string | null>(null);
+  const [searchResults, setSearchResults] = useState<{ lat: string; lon: string; display_name: string }[]>([]);
 
   async function reverseGeocode(lat: number, lng: number) {
     setGeocoding(true);
@@ -72,30 +73,49 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
     reverseGeocode(lat, lng);
   }
 
+  async function runSearch(query: string) {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=lb&q=${encodeURIComponent(query)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    return res.ok ? await res.json() : [];
+  }
+
   async function searchAddress() {
-    if (!searchQuery.trim()) return;
+    const q = searchQuery.trim();
+    if (!q) return;
     setSearching(true);
     setSearchErr(null);
+    setSearchResults([]);
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(searchQuery.trim())}`,
-        { headers: { Accept: "application/json" } }
-      );
-      const results = res.ok ? await res.json() : [];
-      if (!results?.length) { setSearchErr("Couldn't find that place — try a different search."); return; }
-      const { lat, lon, display_name } = results[0];
-      setMapOpen(true);
-      setPin({ lat: Number(lat), lng: Number(lon) });
-      setText(display_name as string);
+      let results = await runSearch(q);
+      // Lebanese towns are often missing/mistyped in OSM — retry with the country
+      // name appended, which helps Nominatim's fuzzy matching find a result.
+      if (!results?.length && !/lebanon/i.test(q)) {
+        results = await runSearch(`${q}, Lebanon`);
+      }
+      if (!results?.length) {
+        setSearchErr("Couldn't find that place on the map. No problem — just type the address in the box above.");
+        return;
+      }
+      setSearchResults(results);
     } catch {
-      setSearchErr("Couldn't search right now — try again.");
+      setSearchErr("Couldn't search right now. No problem — just type the address in the box above.");
     } finally { setSearching(false); }
   }
 
+  function pickSearchResult(r: { lat: string; lon: string; display_name: string }) {
+    setMapOpen(true);
+    setPin({ lat: Number(r.lat), lng: Number(r.lon) });
+    setText(r.display_name);
+    setSearchResults([]);
+    setSearchQuery("");
+  }
+
   function pinMyLocation() {
-    if (!navigator.geolocation) { setPinErr("Location isn't available on this device."); return; }
+    if (!navigator.geolocation) { setPinErr("Location isn't available on this device — just type your address above instead."); return; }
     if (!window.isSecureContext) {
-      setPinErr("Location only works over HTTPS (or localhost) — open this app via its https:// address to pin a location.");
+      setPinErr("Location only works over HTTPS (or localhost) — just type your address above instead.");
       return;
     }
     setPinning(true);
@@ -104,14 +124,12 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
       (pos) => { placePin(pos.coords.latitude, pos.coords.longitude); setPinning(false); },
       (err) => {
         const messages: Record<number, string> = {
-          1: "Location permission was denied. Check both your browser/site settings AND your device's system location setting — if either is off, you'll see this. Or set your address manually on the map below.",
-          2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window — or set it manually on the map below.",
-          3: "Getting your location took too long. Try again, or set it manually on the map below.",
+          1: "Location permission was denied. You can try again — we'll always re-ask — or just type your address above; the map is optional.",
+          2: "Your device couldn't determine a location right now. Try again, ideally outdoors or near a window — or just type your address above.",
+          3: "Getting your location took too long. Try again, or just type your address above.",
         };
-        setPinErr(messages[err.code] ?? `Couldn't get your location (${err.message || "unknown error"}).`);
+        setPinErr(messages[err.code] ?? `Couldn't get your location (${err.message || "unknown error"}). Just type your address above instead.`);
         setPinning(false);
-        setMapOpen(true);
-        setPin(p => p ?? DEFAULT_MAP_CENTER);
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
@@ -150,7 +168,10 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
         onChange={e => setLabel(e.target.value)} style={{ marginBottom: 4 }} />
       <p style={{ fontSize: 11, color: C.light, margin: "0 0 8px" }}>Optional — helps you tell addresses apart later.</p>
       <textarea rows={2} placeholder="Building, street, area" value={text}
-        onChange={e => setText(e.target.value)} style={{ resize: "none", marginBottom: 8 }} />
+        onChange={e => setText(e.target.value)} style={{ resize: "none", marginBottom: 4 }} />
+      <p style={{ fontSize: 11, color: C.light, margin: "0 0 10px" }}>
+        This is what we&apos;ll use to deliver — the map below is just an optional way to pin it more precisely.
+      </p>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
         <button type="button" onClick={pinMyLocation} disabled={pinning} style={{
@@ -159,7 +180,7 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
           fontSize: 12.5, color: pin ? C.tealDark : C.muted, cursor: "pointer",
         }}>
           <IconMapPin size={14} />
-          {pinning ? "Pinning…" : pin ? "Location pinned ✓" : "Pin my location"}
+          {pinning ? "Pinning…" : pin ? "Location pinned ✓" : "Use my current location"}
         </button>
         <button type="button" onClick={() => { setMapOpen(o => !o); if (!pin) setPin(DEFAULT_MAP_CENTER); }} style={{
           display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 9,
@@ -167,7 +188,7 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
           fontSize: 12.5, color: mapOpen ? C.tealDark : C.muted, cursor: "pointer",
         }}>
           <IconMapPin size={14} />
-          {mapOpen ? "Hide map" : "Adjust on map"}
+          {mapOpen ? "Hide map" : "Pin on map"}
         </button>
         {pin && !mapOpen && (
           <a href={`https://maps.google.com/?q=${pin.lat},${pin.lng}`} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: C.tealDark, textDecoration: "underline" }}>
@@ -178,12 +199,14 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
       {pinErr && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{pinErr}</p>}
 
       {mapOpen && pin && (
-        <div style={{ marginBottom: 10 }}>
+        // isolation:isolate contains Leaflet's internal z-indexes inside this box, so the
+        // map can never visually float above page chrome like a fixed checkout footer.
+        <div style={{ marginBottom: 10, position: "relative", isolation: "isolate" }}>
           <p style={{ fontSize: 11.5, color: C.muted, margin: "0 0 6px" }}>
             Drag the pin (or tap anywhere on the map) to move it — e.g. set it to your home even if you&apos;re ordering from somewhere else.
           </p>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <input type="text" placeholder="Search for a place or address" value={searchQuery}
+            <input type="text" placeholder="Search for a place (e.g. Dekwaneh, Sin el Fil)" value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === "Enter" && (e.preventDefault(), searchAddress())}
               style={{ flex: 1, fontSize: 12.5, padding: "8px 10px" }} />
@@ -193,6 +216,25 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
             </button>
           </div>
           {searchErr && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{searchErr}</p>}
+          {searchResults.length > 0 && (
+            <div style={{ marginBottom: 8, border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
+              {searchResults.map((r, i) => (
+                <button
+                  key={`${r.lat}-${r.lon}`}
+                  type="button"
+                  onClick={() => pickSearchResult(r)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", padding: "9px 11px",
+                    fontSize: 12, fontWeight: 400, border: "none", borderRadius: 0,
+                    borderBottom: i < searchResults.length - 1 ? `1px solid ${C.border}` : "none",
+                    background: C.white, color: C.muted,
+                  }}
+                >
+                  {r.display_name}
+                </button>
+              ))}
+            </div>
+          )}
           <LocationPickerMap
             lat={pin.lat}
             lng={pin.lng}
