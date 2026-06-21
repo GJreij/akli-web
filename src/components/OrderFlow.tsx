@@ -221,9 +221,12 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   const isSelected  = selectedInRange.has(iso);
                   const dayNum      = parseInt(iso.split("-")[2], 10);
 
+                  // Too-soon = within the 48h notice window (not yet orderable, but not "past" either)
+                  const isTooSoon  = !isPast && !isWeekend && !isAvail && !isOrdered;
+
                   // Visual state
                   let bg = "transparent";
-                  let color = isWeekend || isPast ? "#d0cbc5" : "#1a1a1a";
+                  let color = isWeekend || isPast || isTooSoon ? "#d0cbc5" : "#1a1a1a";
                   let fontWeight: number = 400;
                   let border = "none";
                   let opacity = 1;
@@ -248,7 +251,11 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                       key={iso}
                       onClick={() => !disabled && onPick(iso)}
                       disabled={disabled}
-                      title={isOrdered ? "You already have an order on this day — it's skipped automatically" : undefined}
+                      title={
+                        isOrdered ? "You already have an order on this day — it's skipped automatically"
+                        : isTooSoon ? "Orders need 48h notice — too soon to add this day"
+                        : undefined
+                      }
                       style={{
                         position: "relative",
                         height: 34, borderRadius: 7, border, background: bg, color,

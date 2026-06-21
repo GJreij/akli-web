@@ -18,12 +18,25 @@ export type OrderableWeek = {
   recipes: RecipeRow[];
 };
 
+// Orders must be placed 48h ahead of the day needed (delivery happens the
+// evening before). Computed against Beirut local time, not server UTC —
+// using toISOString() here would shift the cutoff by a day overnight for
+// a UTC+3 server/client mismatch.
+function beirutISODate(daysFromNow: number): string {
+  const beirutNow = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Beirut" })
+  );
+  beirutNow.setDate(beirutNow.getDate() + daysFromNow);
+  return `${beirutNow.getFullYear()}-${String(beirutNow.getMonth() + 1).padStart(2, "0")}-${String(beirutNow.getDate()).padStart(2, "0")}`;
+}
+
 export default async function OrderNewPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = beirutISODate(0);
+  const minOrderable = beirutISODate(2); // 48h lead time — earliest day a new order can cover
 
   const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
@@ -62,7 +75,7 @@ export default async function OrderNewPage() {
     for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const dow = d.getDay();
       const iso = d.toISOString().split("T")[0];
-      if (dow !== 0 && dow !== 6 && iso >= today) weekdays.push(iso);
+      if (dow !== 0 && dow !== 6 && iso >= minOrderable) weekdays.push(iso);
     }
 
     const recipes: RecipeRow[] = [];
