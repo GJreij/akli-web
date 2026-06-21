@@ -659,7 +659,9 @@ function ConfirmingScreen() {
 
 // ─── Meal row ─────────────────────────────────────────────────────────────────
 
-function MealRow({ meal, onRemove, onReplace }: { meal: Meal; onRemove: () => void; onReplace: () => void }) {
+function MealRow({ meal, showDetail, onRemove, onReplace }: {
+  meal: Meal; showDetail: boolean; onRemove: () => void; onReplace: () => void;
+}) {
   const [imgErr, setImgErr] = useState(false);
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
@@ -674,9 +676,15 @@ function MealRow({ meal, onRemove, onReplace }: { meal: Meal; onRemove: () => vo
         <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {meal.recipe_name}
         </p>
-        <span style={mealBadgeStyle(meal.meal_type)}>
-          {meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+          <span style={mealBadgeStyle(meal.meal_type)}>
+            {meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1)}
+          </span>
+          <span style={{ fontSize: 10.5, color: C.light }}>
+            {Math.round(meal.macros.kcal)} kcal · {Math.round(meal.macros.protein)}g protein
+            {showDetail && ` · ${Math.round(meal.macros.carbs)}g carbs · ${Math.round(meal.macros.fat)}g fat`}
+          </span>
+        </div>
       </div>
       <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
         <button onClick={onReplace} title="Replace" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
@@ -743,34 +751,28 @@ function MacroGauge({ label, pct, actual, target, fmt }: {
   );
 }
 
-export type DayMacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
-
-function DailyAveragesCard({ plan, dailyTargets, onInfoClick }: {
+function DailyAveragesCard({ plan, excludedDates, onInfoClick }: {
   plan: GenerateMealPlanResponse;
-  dailyTargets: Record<string, DayMacroTarget>;
+  excludedDates: Set<string>;
   onInfoClick: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const days = plan.days.length || 1;
 
-  const totalTarget = plan.days.reduce((acc, d) => {
-    const t = dailyTargets[d.date] ?? plan.daily_macro_target;
-    return {
-      protein: acc.protein + t.protein_g,
-      carbs:   acc.carbs   + t.carbs_g,
-      fat:     acc.fat     + t.fat_g,
-      kcal:    acc.kcal    + t.kcal,
-    };
-  }, { protein: 0, carbs: 0, fat: 0, kcal: 0 });
+  // Days with a meal removed for "eating out" are structurally lower than
+  // every other day on purpose — including them would drag the average down
+  // for a reason that has nothing to do with the solver's accuracy.
+  const countedDays = plan.days.filter(d => !excludedDates.has(d.date));
+  const days = countedDays.length || 1;
+  const target = plan.daily_macro_target;
 
-  const totalActual = plan.days.reduce((acc, d) => ({
+  const totalActual = countedDays.reduce((acc, d) => ({
     protein: acc.protein + d.totals.protein,
     carbs:   acc.carbs   + d.totals.carbs,
     fat:     acc.fat     + d.totals.fat,
     kcal:    acc.kcal    + d.totals.kcal,
   }), { protein: 0, carbs: 0, fat: 0, kcal: 0 });
 
-  const avgTarget = { protein: totalTarget.protein / days, carbs: totalTarget.carbs / days, fat: totalTarget.fat / days, kcal: totalTarget.kcal / days };
+  const avgTarget = { protein: target.protein_g, carbs: target.carbs_g, fat: target.fat_g, kcal: target.kcal };
   const avgActual = { protein: totalActual.protein / days, carbs: totalActual.carbs / days, fat: totalActual.fat / days, kcal: totalActual.kcal / days };
 
   const primaryRows: { label: string; actual: number; target: number; fmt: (v: number) => string }[] = [
@@ -827,6 +829,12 @@ function DailyAveragesCard({ plan, dailyTargets, onInfoClick }: {
         {expanded ? "Hide carbs & fat" : "See carbs & fat"}
         <IconChevronDown size={12} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
       </button>
+
+      {excludedDates.size > 0 && (
+        <p style={{ margin: "0 0 10px", fontSize: 10.5, color: C.light, lineHeight: 1.4 }}>
+          {excludedDates.size} day{excludedDates.size > 1 ? "s" : ""} excluded from this average — you removed a meal to eat out, so that day isn&apos;t representative.
+        </p>
+      )}
     </div>
   );
 }
@@ -860,20 +868,15 @@ function BalanceInfoSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-function DayCard({ day, dailyTarget, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
+function DayCard({ day, isEatenOutDay, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
   day: PlanDay;
-  dailyTarget: { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
+  isEatenOutDay: boolean;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
   isOnlyDay: boolean;
 }) {
-  const macros = [
-    { label: "Protein", value: day.totals.protein, target: dailyTarget.protein_g, fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Carbs",   value: day.totals.carbs,   target: dailyTarget.carbs_g,   fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Fat",     value: day.totals.fat,      target: dailyTarget.fat_g,      fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Kcal",    value: day.totals.kcal,     target: dailyTarget.kcal,       fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
-  ];
+  const [showDetail, setShowDetail] = useState(false);
 
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
@@ -897,30 +900,45 @@ function DayCard({ day, dailyTarget, onRemoveDay, onRemoveMeal, onReplaceMeal, i
           This is your only day — go back to the days step if you want to remove it.
         </p>
       )}
+      {isEatenOutDay && (
+        <p style={{ margin: 0, padding: "8px 14px", fontSize: 11.5, color: C.tealDark, background: "#f0f7f7" }}>
+          A meal was removed for eating out — this day&apos;s totals are lower, and it&apos;s left out of your average.
+        </p>
+      )}
       <div style={{ padding: "0 14px" }}>
         {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
-          <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
+          <MealRow key={meal.meal_key} meal={meal} showDetail={showDetail} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
         ))}
       </div>
-      <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderTop: `1px solid ${C.border}` }}>
-        {macros.map(({ label, value, target, fmt }) => {
-          const pct = target > 0 ? Math.round((value / target) * 100) : 100;
-          const diff = pct - 100;
-          const isClose = Math.abs(diff) <= 8;
-          return (
-            <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
-              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
-              <p style={{ fontSize: 12, fontWeight: 600, margin: "0 0 2px" }}>{fmt(value)}</p>
-              <p style={{
-                fontSize: 9, fontWeight: 600, margin: 0,
-                color: isClose ? C.tealDark : C.light,
-              }}>
-                {isClose ? "on target" : `${diff > 0 ? "+" : ""}${diff}% today`}
-              </p>
+      <div style={{ display: "flex", gap: 6, padding: "10px 14px 6px" }}>
+        <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+          <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Kcal</p>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.kcal).toLocaleString("en-US")}</p>
+        </div>
+        <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+          <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Protein</p>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.protein)}g</p>
+        </div>
+        {showDetail && (
+          <>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Carbs</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.carbs)}g</p>
             </div>
-          );
-        })}
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Fat</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.fat)}g</p>
+            </div>
+          </>
+        )}
       </div>
+      <button
+        onClick={() => setShowDetail(s => !s)}
+        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: "0 14px 10px", fontSize: 11, color: C.light, cursor: "pointer" }}
+      >
+        {showDetail ? "Hide carbs & fat" : "See carbs & fat"}
+        <IconChevronDown size={12} style={{ transform: showDetail ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
     </div>
   );
 }
@@ -1367,24 +1385,10 @@ export default function OrderFlow({
   const [removeTarget,  setRemoveTarget]  = useState<RemoveTarget  | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<ReplaceTarget | null>(null);
   const [showBalanceInfo, setShowBalanceInfo] = useState(false);
-  // Meal types eaten out per date — reduces that day's effective target so
-  // "average per day" and the per-day chip don't penalize a day for a meal
-  // the client deliberately removed (vs. one the solver simply landed off-target on).
+  // Meal types eaten out per date — these days are excluded from the
+  // "average per day" card entirely, since their lower totals are by the
+  // client's choice, not the solver landing off-target.
   const [eatenOutByDate, setEatenOutByDate] = useState<Record<string, MealType[]>>({});
-
-  function dailyTargetFor(date: string): DayMacroTarget {
-    const base = plan?.daily_macro_target;
-    if (!base) return { protein_g: 0, carbs_g: 0, fat_g: 0, kcal: 0 };
-    const eatenOut = eatenOutByDate[date] ?? [];
-    if (eatenOut.length === 0) return base;
-    const keepFraction = Math.max(0, 1 - eatenOut.reduce((sum, m) => sum + MEAL_KCAL_PCT[m], 0));
-    return {
-      protein_g: base.protein_g * keepFraction,
-      carbs_g:   base.carbs_g   * keepFraction,
-      fat_g:     base.fat_g      * keepFraction,
-      kcal:      base.kcal       * keepFraction,
-    };
-  }
 
   // ── Checkout state ────────────────────────────────────────────────────────────
 
@@ -1929,7 +1933,7 @@ export default function OrderFlow({
           {/* Daily averages summary — sticky, shown once at the top */}
           <DailyAveragesCard
             plan={plan}
-            dailyTargets={Object.fromEntries(plan.days.map(d => [d.date, dailyTargetFor(d.date)]))}
+            excludedDates={new Set(Object.keys(eatenOutByDate).filter(d => eatenOutByDate[d].length > 0))}
             onInfoClick={() => setShowBalanceInfo(true)}
           />
 
@@ -1938,7 +1942,7 @@ export default function OrderFlow({
           )}
           {plan.days.map(day => (
             <DayCard key={day.date} day={day}
-              dailyTarget={dailyTargetFor(day.date)}
+              isEatenOutDay={(eatenOutByDate[day.date]?.length ?? 0) > 0}
               isOnlyDay={plan.days.length <= 1}
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
