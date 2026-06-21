@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client";
 import { track, linkAnonToUser } from "@/lib/analytics";
 import { simplePriceSimulator } from "@/lib/flask";
 import { COUNTRY_CODES } from "@/lib/theme";
+import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+import type { DietType } from "@/lib/macros";
 import type { Database } from "@/lib/supabase/types";
 import {
   IconTrendingDown, IconScale, IconTrendingUp, IconHeart,
@@ -18,73 +20,15 @@ type Screen    = "landing" | "signin" | "forgot" | "onboarding" | "home" | "deli
 type Step      = "goal" | "basics" | "activity" | "manual" | "result" | "save";
 type Goal      = "lose" | "maintain" | "build" | "health";
 type Sex       = "female" | "male";
-type DietType  = "high-protein" | "balanced" | "low-carb" | "low-fat";
-
 type UserRow  = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
 
 const FULL_PATH: Step[] = ["goal", "basics", "activity", "result", "save"];
 const SKIP_PATH: Step[] = ["goal", "manual", "result", "save"];
-const KCAL_FLOOR = 1200, KCAL_CEIL = 4000, KCAL_STEP = 50;
 const TENANT_ID = 1;
 const DEFAULT_DIET: Record<Goal, DietType> = {
   lose: "high-protein", build: "high-protein", maintain: "balanced", health: "balanced",
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function ageFromDob(dob: string): number {
-  const today = new Date();
-  const birth = new Date(dob);
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return Math.max(0, age);
-}
-
-function byWeight(kcal: number, weight: number, diet: DietType) {
-  const pk = diet === "high-protein" ? 2.0 : diet === "low-fat" ? 1.8 : diet === "low-carb" ? 1.9 : 1.6;
-  const fk = diet === "high-protein" ? 0.8 : diet === "low-fat" ? 0.5 : diet === "low-carb" ? 1.2 : 1.0;
-  const p = weight * pk, f = weight * fk;
-  return { protein: p, fat: f, carbs: Math.max(0, (kcal - p * 4 - f * 9) / 4) };
-}
-
-function byPercent(kcal: number, diet: DietType) {
-  const pct =
-    diet === "high-protein" ? { p: .35, f: .25, c: .40 } :
-    diet === "low-carb"     ? { p: .30, f: .45, c: .25 } :
-    diet === "low-fat"      ? { p: .30, f: .15, c: .55 } :
-                              { p: .25, f: .30, c: .45 };
-  return { protein: (kcal * pct.p) / 4, fat: (kcal * pct.f) / 9, carbs: (kcal * pct.c) / 4 };
-}
-
-function formatPrice(dayPrice: number | null, p: number, c: number, f: number) {
-  if (dayPrice !== null) return `$${dayPrice.toFixed(2)}`;
-  // Client-side fallback using same logic as Flask (midpoint per-gram rates)
-  const estimate = p * 0.018 + c * 0.006 + f * 0.022 + 1.8; // macro cost + avg packaging
-  return `~$${estimate.toFixed(2)}`;
-}
-
-const DIET_OPTIONS: {
-  id: DietType; label: string; emoji: string;
-  split: { p: number; c: number; f: number }; // percentages
-  forWho: string;
-}[] = [
-  { id: "high-protein", label: "High Protein", emoji: "💪", split: { p: 35, c: 40, f: 25 }, forWho: "Active people or anyone who gets hungry fast." },
-  { id: "balanced",     label: "Balanced",     emoji: "⚖️", split: { p: 25, c: 45, f: 30 }, forWho: "Everyday health and maintenance." },
-  { id: "low-carb",     label: "Low Carb",     emoji: "🔥", split: { p: 30, c: 25, f: 45 }, forWho: "Fewer energy spikes, steady focus." },
-  { id: "low-fat",      label: "Low Fat",      emoji: "🥗", split: { p: 30, c: 55, f: 15 }, forWho: "Light meals, calorie-conscious eating." },
-];
-
-function macrosFromDiet(kcal: number, diet: DietType) {
-  const d = DIET_OPTIONS.find(o => o.id === diet)!;
-  return {
-    protein: Math.round((kcal * d.split.p / 100) / 4),
-    carbs:   Math.round((kcal * d.split.c / 100) / 4),
-    fat:     Math.round((kcal * d.split.f / 100) / 9),
-    split:   d.split,
-  };
-}
 
 // ─── Logo (hides gracefully if public/logo.png not found) ────────────────────
 
