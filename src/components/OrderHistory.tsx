@@ -561,7 +561,9 @@ function OrderCard({ plan }: { plan: MealPlan }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function OrderHistory({ plans, userId: _userId }: { plans: MealPlan[]; userId: string }) {
+export default function OrderHistory({ plans, userId: _userId, hasOlderOrders = false }: {
+  plans: MealPlan[]; userId: string; hasOlderOrders?: boolean;
+}) {
   const router = useRouter();
 
   const active    = plans.filter(p => planStatus(p) === "active");
@@ -617,13 +619,19 @@ export default function OrderHistory({ plans, userId: _userId }: { plans: MealPl
         {plans.length === 0 ? (
           <div style={{ textAlign: "center", paddingTop: 60 }}>
             <p style={{ fontSize: 40, margin: "0 0 12px" }}>🥗</p>
-            <p style={{ fontSize: 17, fontWeight: 600, color: "#1a1a1a", margin: "0 0 6px" }}>No orders yet</p>
-            <p style={{ fontSize: 13, color: C.light, margin: "0 0 24px" }}>Your meal plan history will appear here</p>
+            <p style={{ fontSize: 17, fontWeight: 600, color: "#1a1a1a", margin: "0 0 6px" }}>
+              {hasOlderOrders ? "Nothing in the last 3 months" : "No orders yet"}
+            </p>
+            <p style={{ fontSize: 13, color: C.light, margin: "0 0 24px" }}>
+              {hasOlderOrders
+                ? "You have older orders, but this view only shows the last 3 months. Message us on WhatsApp if you need anything from further back."
+                : "Your meal plan history will appear here"}
+            </p>
             <button
               onClick={() => router.push("/order/new")}
               style={{ padding: "12px 24px", borderRadius: 12, background: C.primary, color: C.white, border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
             >
-              Order your first plan
+              {hasOlderOrders ? "Place a new order" : "Order your first plan"}
             </button>
           </div>
         ) : (

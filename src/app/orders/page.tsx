@@ -33,7 +33,16 @@ export default async function OrdersPage() {
   const rawPlans = (plansRes.data ?? []) as RawPlan[];
 
   if (rawPlans.length === 0) {
-    return <OrderHistory plans={[]} userId={user.id} />;
+    // Distinguish "you've never ordered" from "your orders are all older than
+    // 3 months" — without this, both cases show the identical "No orders yet"
+    // empty state, which reads as a bug to anyone who knows they've ordered before.
+    const { count: olderCount } = await supabase
+      .from("meal_plan")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .lt("created_at", threeMonthsAgo.toISOString());
+
+    return <OrderHistory plans={[]} userId={user.id} hasOlderOrders={(olderCount ?? 0) > 0} />;
   }
 
   const planIds = rawPlans.map(p => p.id);
