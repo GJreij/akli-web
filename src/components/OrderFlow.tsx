@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
@@ -769,8 +769,10 @@ function DailyGoalCard({ target }: { target: { protein_g: number; carbs_g: numbe
   );
 }
 
-function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
   day: PlanDay;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
@@ -803,7 +805,7 @@ function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
           <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
         ))}
       </div>
-      <div style={{ display: "flex", gap: 6, padding: "10px 14px" }}>
+      <div style={{ display: "flex", gap: 6, padding: "10px 14px 6px" }}>
         <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
           <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Kcal</p>
           <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.kcal).toLocaleString("en-US")}</p>
@@ -812,7 +814,26 @@ function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
           <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Protein</p>
           <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.protein)}g</p>
         </div>
+        {expanded && (
+          <>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Carbs</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.carbs)}g</p>
+            </div>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Fat</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.fat)}g</p>
+            </div>
+          </>
+        )}
       </div>
+      <button
+        onClick={onToggleExpand}
+        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: "0 14px 10px", fontSize: 11, color: C.light, cursor: "pointer" }}
+      >
+        {expanded ? "Hide carbs & fat" : "See carbs & fat"}
+        <IconChevronDown size={12} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
     </div>
   );
 }
@@ -956,7 +977,12 @@ function DailyBreakdown({ breakdown, planDays }: {
 }) {
   const [open, setOpen] = useState(false);
   const [showMacroDetail, setShowMacroDetail] = useState(false);
-  const totalsByDate = new Map(planDays.map(d => [d.date, d.totals]));
+  // Only built when actually needed — no point doing this work on every
+  // render of the checkout screen while the section is collapsed.
+  const totalsByDate = useMemo(
+    () => (open ? new Map(planDays.map(d => [d.date, d.totals])) : null),
+    [open, planDays]
+  );
 
   return (
     <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
@@ -971,7 +997,7 @@ function DailyBreakdown({ breakdown, planDays }: {
         <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
           {breakdown.map(d => {
             const dayDiscount = d.original_total_price - d.total_price;
-            const totals = totalsByDate.get(d.date);
+            const totals = totalsByDate?.get(d.date);
             return (
               <div key={d.date}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
@@ -994,7 +1020,6 @@ function DailyBreakdown({ breakdown, planDays }: {
                 </div>
                 {totals && (
                   <div style={{ display: "flex", gap: 10, marginTop: 3, fontSize: 11, color: C.light }}>
-                    <span>{Math.round(totals.kcal).toLocaleString("en-US")} kcal</span>
                     <span>{Math.round(totals.protein)}g protein</span>
                     {showMacroDetail && (
                       <>
@@ -1007,7 +1032,7 @@ function DailyBreakdown({ breakdown, planDays }: {
               </div>
             );
           })}
-          {totalsByDate.size > 0 && (
+          {!!totalsByDate?.size && (
             <button
               onClick={() => setShowMacroDetail(s => !s)}
               style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontSize: 10.5, color: C.light, cursor: "pointer", textDecoration: "underline" }}
@@ -1238,6 +1263,9 @@ export default function OrderFlow({
   const [planHistory, setPlanHistory]   = useState<GenerateMealPlanResponse[]>([]);
   const [generateError, setGenErr]  = useState<string | null>(null);
   const [updatingPlan, setUpdating] = useState(false);
+  // Per-day "see carbs & fat" expansion, plus a global toggle to open/close them all at once.
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const allDaysExpanded = !!plan && plan.days.length > 0 && plan.days.every(d => expandedDays.has(d.date));
 
   function pushHistory() {
     if (plan) setPlanHistory(h => [...h, plan]);
@@ -1791,11 +1819,31 @@ export default function OrderFlow({
           {/* Daily goal — sticky, shown once at the top */}
           <DailyGoalCard target={plan.daily_macro_target} />
 
+          {plan.days.length > 0 && (
+            <button
+              onClick={() => setExpandedDays(allDaysExpanded ? new Set() : new Set(plan.days.map(d => d.date)))}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, margin: "0 0 12px", background: "none",
+                border: `1px solid ${C.border}`, borderRadius: 20, padding: "6px 12px",
+                fontSize: 11.5, color: C.tealDark, cursor: "pointer",
+              }}
+            >
+              <IconChevronDown size={13} style={{ transform: allDaysExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+              {allDaysExpanded ? "Hide carbs & fat for all days" : "See carbs & fat for all days"}
+            </button>
+          )}
+
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
           {plan.days.map(day => (
             <DayCard key={day.date} day={day}
+              expanded={expandedDays.has(day.date)}
+              onToggleExpand={() => setExpandedDays(prev => {
+                const next = new Set(prev);
+                if (next.has(day.date)) next.delete(day.date); else next.add(day.date);
+                return next;
+              })}
               isOnlyDay={plan.days.length <= 1}
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
