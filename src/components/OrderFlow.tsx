@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
@@ -971,18 +971,10 @@ function PreferencesSection({
 
 // ─── Daily breakdown (collapsible, in checkout) ───────────────────────────────
 
-function DailyBreakdown({ breakdown, planDays }: {
+function DailyBreakdown({ breakdown }: {
   breakdown: CheckoutSummaryResponse["price_breakdown"]["daily_breakdown"];
-  planDays: PlanDay[];
 }) {
   const [open, setOpen] = useState(false);
-  const [showMacroDetail, setShowMacroDetail] = useState(false);
-  // Only built when actually needed — no point doing this work on every
-  // render of the checkout screen while the section is collapsed.
-  const totalsByDate = useMemo(
-    () => (open ? new Map(planDays.map(d => [d.date, d.totals])) : null),
-    [open, planDays]
-  );
 
   return (
     <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
@@ -994,52 +986,30 @@ function DailyBreakdown({ breakdown, planDays }: {
         <IconChevronDown size={15} color={C.light} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
       </button>
       {open && (
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
           {breakdown.map(d => {
             const dayDiscount = d.original_total_price - d.total_price;
-            const totals = totalsByDate?.get(d.date);
             return (
-              <div key={d.date}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
-                  <span style={{ color: C.muted }}>
-                    {new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                  </span>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    {dayDiscount > 0.005 && (
-                      <span style={{ fontSize: 11, color: C.tealDark }}>
-                        -${dayDiscount.toFixed(2)} promo
-                      </span>
-                    )}
-                    {d.delivery_applied && (
-                      <span style={{ fontSize: 11, color: d.delivery_fee === 0 ? C.tealDark : C.light }}>
-                        {d.delivery_fee === 0 ? "free delivery" : `+$${d.delivery_fee.toFixed(2)} delivery`}
-                      </span>
-                    )}
-                    <span style={{ fontWeight: 600 }}>${d.total_price_with_delivery.toFixed(2)}</span>
-                  </div>
+              <div key={d.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
+                <span style={{ color: C.muted }}>
+                  {new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                </span>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {dayDiscount > 0.005 && (
+                    <span style={{ fontSize: 11, color: C.tealDark }}>
+                      -${dayDiscount.toFixed(2)} promo
+                    </span>
+                  )}
+                  {d.delivery_applied && (
+                    <span style={{ fontSize: 11, color: d.delivery_fee === 0 ? C.tealDark : C.light }}>
+                      {d.delivery_fee === 0 ? "free delivery" : `+$${d.delivery_fee.toFixed(2)} delivery`}
+                    </span>
+                  )}
+                  <span style={{ fontWeight: 600 }}>${d.total_price_with_delivery.toFixed(2)}</span>
                 </div>
-                {totals && (
-                  <div style={{ display: "flex", gap: 10, marginTop: 3, fontSize: 11, color: C.light }}>
-                    <span>{Math.round(totals.protein)}g protein</span>
-                    {showMacroDetail && (
-                      <>
-                        <span>{Math.round(totals.carbs)}g carbs</span>
-                        <span>{Math.round(totals.fat)}g fat</span>
-                      </>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })}
-          {!!totalsByDate?.size && (
-            <button
-              onClick={() => setShowMacroDetail(s => !s)}
-              style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontSize: 10.5, color: C.light, cursor: "pointer", textDecoration: "underline" }}
-            >
-              {showMacroDetail ? "Hide carbs & fat" : "See carbs & fat per day"}
-            </button>
-          )}
         </div>
       )}
     </div>
@@ -1960,7 +1930,7 @@ export default function OrderFlow({
             </div>
 
             {bd?.daily_breakdown && bd.daily_breakdown.length > 0 && (
-              <DailyBreakdown breakdown={bd.daily_breakdown} planDays={plan?.days ?? []} />
+              <DailyBreakdown breakdown={bd.daily_breakdown} />
             )}
           </div>
 
