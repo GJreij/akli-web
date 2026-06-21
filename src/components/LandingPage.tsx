@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { calculateBMR, calculateTDEE, calculateKcalTarget, calculateMacrosByWeight, type ActivityLevel, type Goal } from "@/lib/macros";
+import { byWeight, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+
+type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
+type Goal = "lose_weight" | "maintain" | "build_muscle" | "general_health";
+
+const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
+  sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, very_active: 1.9,
+};
+const GOAL_ADJUSTMENTS: Record<Goal, number> = {
+  lose_weight: -500, maintain: 0, build_muscle: 300, general_health: 0,
+};
 
 export default function LandingPage() {
   const [kcal, setKcal] = useState(2000);
@@ -17,18 +27,17 @@ export default function LandingPage() {
   });
 
   function runCalc() {
-    const bmr = calculateBMR(
-      calcInputs.sex,
-      calcInputs.weight,
-      calcInputs.height,
-      calcInputs.age
-    );
-    const tdee = calculateTDEE(bmr, calcInputs.activity);
-    const target = calculateKcalTarget(tdee, calcInputs.goal);
+    const bmr = calcInputs.sex === "male"
+      ? 10 * calcInputs.weight + 6.25 * calcInputs.height - 5 * calcInputs.age + 5
+      : 10 * calcInputs.weight + 6.25 * calcInputs.height - 5 * calcInputs.age - 161;
+    const tdee = bmr * ACTIVITY_MULTIPLIERS[calcInputs.activity];
+    const raw = tdee + GOAL_ADJUSTMENTS[calcInputs.goal];
+    const target = Math.max(KCAL_FLOOR, Math.min(KCAL_CEIL, Math.round(raw / KCAL_STEP) * KCAL_STEP));
     setKcal(target);
   }
 
-  const macros = calculateMacrosByWeight(kcal, calcInputs.weight, "balanced");
+  const m = byWeight(kcal, calcInputs.weight, "balanced");
+  const macros = { protein_g: Math.round(m.protein), carbs_g: Math.round(m.carbs), fat_g: Math.round(m.fat) };
   const estimatedPrice = ((macros.protein_g * 0.05 + macros.carbs_g * 0.015 + macros.fat_g * 0.04 + 3.5)).toFixed(2);
 
   return (

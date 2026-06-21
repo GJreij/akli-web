@@ -1,138 +1,86 @@
-export type Goal = "lose_weight" | "maintain" | "build_muscle" | "general_health";
-export type Sex = "male" | "female";
-export type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
-export type DietType = "high_protein" | "balanced" | "low_fat";
+// Single source of truth for macro math, shared by onboarding (AkliApp) and
+// the change-diet flow (DietWizard). Two input paths feed the same targets:
+//  - byWeight: kcal target (from Mifflin-St Jeor) + bodyweight -> g/kg protein/fat, carbs = remainder
+//  - byPercent: a user-chosen kcal target -> fixed % split
+// The % tables below are tuned to land close to what byWeight produces for a
+// ~70kg adult at a ~2000 kcal target, so the two paths agree instead of diverging.
 
-const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
-  sedentary: 1.2,
-  light: 1.375,
-  moderate: 1.55,
-  active: 1.725,
-  very_active: 1.9,
+export type DietType = "high-protein" | "balanced" | "low-carb" | "low-fat";
+
+export const KCAL_FLOOR = 900, KCAL_CEIL = 4000, KCAL_STEP = 50;
+
+// Minimum carbs the body actually needs, regardless of diet type — prevents
+// byWeight from ever zeroing out carbs when protein+fat already consume the
+// whole kcal budget (was previously Math.max(0, ...)).
+const CARB_FLOOR_G_PER_KG = 0.75;
+
+export const DIET_OPTIONS: {
+  id: DietType; label: string; emoji: string;
+  split: { p: number; c: number; f: number }; // percentages, must sum to 100
+  forWho: string;
+}[] = [
+  { id: "high-protein", label: "High Protein", emoji: "💪", split: { p: 28, c: 47, f: 25 }, forWho: "Active people or anyone who gets hungry fast." },
+  { id: "balanced",     label: "Balanced",     emoji: "⚖️", split: { p: 22, c: 46, f: 32 }, forWho: "Everyday health and maintenance." },
+  { id: "low-carb",     label: "Low Carb",     emoji: "🔥", split: { p: 27, c: 36, f: 37 }, forWho: "Fewer energy spikes, steady focus." },
+  { id: "low-fat",      label: "Low Fat",      emoji: "🥗", split: { p: 25, c: 59, f: 16 }, forWho: "Light meals, calorie-conscious eating." },
+];
+
+const PER_KG: Record<DietType, { pk: number; fk: number }> = {
+  "high-protein": { pk: 2.0, fk: 0.8 },
+  "low-fat":      { pk: 1.8, fk: 0.5 },
+  "low-carb":     { pk: 1.9, fk: 1.2 },
+  "balanced":     { pk: 1.6, fk: 1.0 },
 };
 
-const GOAL_ADJUSTMENTS: Record<Goal, number> = {
-  lose_weight: -500,
-  maintain: 0,
-  build_muscle: 300,
-  general_health: 0,
-};
+export function ageFromDob(dob: string): number {
+  const today = new Date();
+  const birth = new Date(dob);
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return Math.max(0, age);
+}
 
-export function calculateBMR(
-  sex: Sex,
-  weightKg: number,
-  heightCm: number,
-  ageYears: number
-): number {
-  if (sex === "male") {
-    return 10 * weightKg + 6.25 * heightCm - 5 * ageYears + 5;
+export function byWeight(kcal: number, weight: number, diet: DietType) {
+  const { pk, fk } = PER_KG[diet];
+  let p = weight * pk;
+  let f = weight * fk;
+  const carbFloorG = weight * CARB_FLOOR_G_PER_KG;
+  const maxPFKcal = kcal - carbFloorG * 4;
+  const pfKcal = p * 4 + f * 9;
+  if (maxPFKcal <= 0) {
+    // kcal target is below what the carb floor alone needs — degenerate case
+    p = 0; f = 0;
+  } else if (pfKcal > maxPFKcal) {
+    const scale = maxPFKcal / pfKcal;
+    p *= scale; f *= scale;
   }
-  return 10 * weightKg + 6.25 * heightCm - 5 * ageYears - 161;
+  const carbs = Math.max(carbFloorG, (kcal - p * 4 - f * 9) / 4);
+  return { protein: p, fat: f, carbs };
 }
 
-export function calculateTDEE(bmr: number, activity: ActivityLevel): number {
-  return Math.round(bmr * ACTIVITY_MULTIPLIERS[activity]);
+export function byPercent(kcal: number, diet: DietType) {
+  const d = DIET_OPTIONS.find(o => o.id === diet)!.split;
+  return {
+    protein: (kcal * d.p / 100) / 4,
+    fat:     (kcal * d.f / 100) / 9,
+    carbs:   (kcal * d.c / 100) / 4,
+  };
 }
 
-export function calculateKcalTarget(tdee: number, goal: Goal): number {
-  const raw = tdee + GOAL_ADJUSTMENTS[goal];
-  return Math.max(1200, Math.min(4000, Math.round(raw / 50) * 50));
+export function macrosFromDiet(kcal: number, diet: DietType) {
+  const d = DIET_OPTIONS.find(o => o.id === diet)!;
+  return {
+    protein: Math.round((kcal * d.split.p / 100) / 4),
+    carbs:   Math.round((kcal * d.split.c / 100) / 4),
+    fat:     Math.round((kcal * d.split.f / 100) / 9),
+    split:   d.split,
+  };
 }
 
-export interface MacroTargets {
-  protein_g: number;
-  carbs_g: number;
-  fat_g: number;
-  kcal: number;
-}
-
-export function calculateMacrosByWeight(
-  kcal: number,
-  weightKg: number,
-  dietType: DietType
-): MacroTargets {
-  let proteinPerKg: number;
-  let fatPerKg: number;
-
-  switch (dietType) {
-    case "high_protein":
-      proteinPerKg = 2.2;
-      fatPerKg = 0.9;
-      break;
-    case "low_fat":
-      proteinPerKg = 1.8;
-      fatPerKg = 0.6;
-      break;
-    default: // balanced
-      proteinPerKg = 2.0;
-      fatPerKg = 0.8;
-  }
-
-  const protein_g = Math.round(proteinPerKg * weightKg);
-  const fat_g = Math.round(fatPerKg * weightKg);
-  const proteinKcal = protein_g * 4;
-  const fatKcal = fat_g * 9;
-  const carbsKcal = Math.max(0, kcal - proteinKcal - fatKcal);
-  const carbs_g = Math.round(carbsKcal / 4);
-
-  return { protein_g, carbs_g, fat_g, kcal };
-}
-
-export function calculateMacrosByPercent(
-  kcal: number,
-  dietType: DietType
-): MacroTargets {
-  let proteinPct: number;
-  let fatPct: number;
-
-  switch (dietType) {
-    case "high_protein":
-      proteinPct = 0.35;
-      fatPct = 0.25;
-      break;
-    case "low_fat":
-      proteinPct = 0.30;
-      fatPct = 0.20;
-      break;
-    default:
-      proteinPct = 0.30;
-      fatPct = 0.30;
-  }
-
-  const carbsPct = 1 - proteinPct - fatPct;
-  const protein_g = Math.round((kcal * proteinPct) / 4);
-  const fat_g = Math.round((kcal * fatPct) / 9);
-  const carbs_g = Math.round((kcal * carbsPct) / 4);
-
-  return { protein_g, carbs_g, fat_g, kcal };
-}
-
-export function estimatePriceFromMacros(
-  macros: MacroTargets,
-  priceTable: {
-    proteing_g_price: number;
-    carbs_g_price: number;
-    fat_g_price: number;
-    day_packaging_price: number;
-    delivery_price: number;
-  }
-): number {
-  const macrosCost =
-    macros.protein_g * priceTable.proteing_g_price +
-    macros.carbs_g * priceTable.carbs_g_price +
-    macros.fat_g * priceTable.fat_g_price;
-  return parseFloat(
-    (macrosCost + priceTable.day_packaging_price + priceTable.delivery_price).toFixed(2)
-  );
-}
-
-export function validateMacroCalories(
-  protein_g: number,
-  carbs_g: number,
-  fat_g: number,
-  declared_kcal: number
-): { valid: boolean; computed_kcal: number; delta: number } {
-  const computed_kcal = protein_g * 4 + carbs_g * 4 + fat_g * 9;
-  const delta = Math.abs(computed_kcal - declared_kcal);
-  return { valid: delta <= 50, computed_kcal: Math.round(computed_kcal), delta: Math.round(delta) };
+export function formatPrice(dayPrice: number | null, p: number, c: number, f: number) {
+  if (dayPrice !== null) return `$${dayPrice.toFixed(2)}`;
+  // Client-side fallback using same logic as Flask (midpoint per-gram rates)
+  const estimate = p * 0.018 + c * 0.006 + f * 0.022 + 1.8; // macro cost + avg packaging
+  return `~$${estimate.toFixed(2)}`;
 }
