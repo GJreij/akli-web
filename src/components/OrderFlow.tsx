@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
   IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
-  IconMapPin, IconPlus, IconTrash,
+  IconMapPin, IconPlus, IconTrash, IconBulb, IconScaleOutline,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
@@ -696,18 +696,150 @@ type MacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: nu
 
 const MEAL_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
 
-function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
+// ─── Weekly balance card (replaces the old static "Daily goal" box) ──────────
+//
+// Philosophy: we no longer pretend each day lands exactly on target — real
+// food doesn't work that way, and the LP solver now balances across the
+// whole week rather than forcing every single day to the same number.
+// This card shows the WEEK's progress toward the WEEK's target, with each
+// macro as a calm horizontal gauge rather than a cold static figure.
+
+function MacroGauge({ label, pct, actual, target, fmt }: {
+  label: string; pct: number; actual: number; target: number;
+  fmt: (v: number) => string;
+}) {
+  const clamped = Math.max(0, Math.min(pct, 140));
+  const closeToGoal = pct >= 92 && pct <= 108;
+  const fillColor = closeToGoal ? C.teal : C.tealDark;
+
+  return (
+    <div style={{ marginBottom: 11 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: C.primary }}>{label}</span>
+        <span style={{ fontSize: 11, color: C.light }}>
+          <span style={{ fontWeight: 700, color: closeToGoal ? C.tealDark : C.muted }}>{fmt(actual)}</span>
+          {" "}/ {fmt(target)} for the week
+        </span>
+      </div>
+      <div style={{ position: "relative", height: 7, borderRadius: 4, background: C.offWhite, overflow: "hidden" }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0,
+          width: `${Math.min(clamped, 100)}%`,
+          background: fillColor, borderRadius: 4,
+          transition: "width 0.5s ease",
+        }} />
+        {clamped > 100 && (
+          <div style={{
+            position: "absolute", left: "100%", top: 0, bottom: 0, transform: "translateX(-2px)",
+            width: `${Math.min(clamped - 100, 40)}%`,
+            background: "repeating-linear-gradient(45deg, rgba(67,123,123,0.55) 0 3px, transparent 3px 6px)",
+            borderRadius: "0 4px 4px 0",
+          }} />
+        )}
+        <div style={{ position: "absolute", left: "100%", top: -2, bottom: -2, width: 2, background: C.primary, opacity: 0.25 }} />
+      </div>
+    </div>
+  );
+}
+
+function WeeklyBalanceCard({ plan, onInfoClick }: { plan: GenerateMealPlanResponse; onInfoClick: () => void }) {
+  const days = plan.days.length || 1;
+  const t = plan.daily_macro_target;
+
+  const weeklyTarget = {
+    protein: t.protein_g * days,
+    carbs:   t.carbs_g   * days,
+    fat:     t.fat_g      * days,
+    kcal:    t.kcal       * days,
+  };
+  const weeklyActual = plan.days.reduce((acc, d) => ({
+    protein: acc.protein + d.totals.protein,
+    carbs:   acc.carbs   + d.totals.carbs,
+    fat:     acc.fat     + d.totals.fat,
+    kcal:    acc.kcal    + d.totals.kcal,
+  }), { protein: 0, carbs: 0, fat: 0, kcal: 0 });
+
+  const rows: { label: string; actual: number; target: number; fmt: (v: number) => string }[] = [
+    { label: "Protein", actual: weeklyActual.protein, target: weeklyTarget.protein, fmt: (v) => `${Math.round(v)}g` },
+    { label: "Carbs",   actual: weeklyActual.carbs,   target: weeklyTarget.carbs,   fmt: (v) => `${Math.round(v)}g` },
+    { label: "Fat",     actual: weeklyActual.fat,      target: weeklyTarget.fat,      fmt: (v) => `${Math.round(v)}g` },
+    { label: "Kcal",    actual: weeklyActual.kcal,     target: weeklyTarget.kcal,     fmt: (v) => Math.round(v).toLocaleString("en-US") },
+  ];
+
+  return (
+    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px 8px", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <div style={{
+            width: 26, height: 26, borderRadius: 8, background: "#f0f7f7",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <IconScaleOutline size={15} color={C.tealDark} />
+          </div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.primary }}>This week&apos;s balance</p>
+        </div>
+        <button
+          onClick={onInfoClick}
+          style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer", display: "flex" }}
+          aria-label="Why does this vary day to day?"
+        >
+          <IconBulb size={17} />
+        </button>
+      </div>
+
+      {rows.map(r => (
+        <MacroGauge key={r.label} label={r.label} pct={r.target > 0 ? (r.actual / r.target) * 100 : 100} actual={r.actual} target={r.target} fmt={r.fmt} />
+      ))}
+
+      <p style={{ margin: "2px 0 8px", fontSize: 10.5, color: C.light, lineHeight: 1.4 }}>
+        Some days run a little higher or lower — we balance it out across the week so your totals land on target.
+      </p>
+    </div>
+  );
+}
+
+// ─── "Why does this vary?" explainer sheet ───────────────────────────────────
+
+function BalanceInfoSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 40px", animation: "slideUp 0.22s ease" }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10, background: "#f0f7f7",
+          display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12,
+        }}>
+          <IconBulb size={20} color={C.tealDark} />
+        </div>
+        <h3 style={{ margin: "0 0 6px", fontSize: 17, color: C.primary }}>Why does each day look a little different?</h3>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, margin: "0 0 12px" }}>
+          Real food doesn&apos;t come in perfectly round numbers — even the same banana varies a bit gram to gram.
+          So instead of force-fitting every single day to your exact target, we balance your macros across the
+          whole week: a lighter day on carbs is made up the next day, and so on.
+        </p>
+        <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, margin: "0 0 16px" }}>
+          You&apos;re still billed for exactly what you get — gram for gram, no flat-rate guessing — just over the
+          week as a whole rather than day by day. That&apos;s what keeps your bill stable even while your plate
+          flexes a little from one day to the next.
+        </p>
+        <button onClick={onClose} className="btn-primary" style={{ width: "100%" }}>Got it</button>
+      </div>
+    </div>
+  );
+}
+
+function DayCard({ day, dailyTarget, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
   day: PlanDay;
+  dailyTarget: { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
   isOnlyDay: boolean;
 }) {
   const macros = [
-    { label: "Protein", value: day.totals.protein, fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Carbs",   value: day.totals.carbs,   fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Fat",     value: day.totals.fat,      fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Kcal",    value: day.totals.kcal,     fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
+    { label: "Protein", value: day.totals.protein, target: dailyTarget.protein_g, fmt: (v: number) => `${Math.round(v)}g` },
+    { label: "Carbs",   value: day.totals.carbs,   target: dailyTarget.carbs_g,   fmt: (v: number) => `${Math.round(v)}g` },
+    { label: "Fat",     value: day.totals.fat,      target: dailyTarget.fat_g,      fmt: (v: number) => `${Math.round(v)}g` },
+    { label: "Kcal",    value: day.totals.kcal,     target: dailyTarget.kcal,       fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
   ];
 
   return (
@@ -738,12 +870,23 @@ function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
         ))}
       </div>
       <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderTop: `1px solid ${C.border}` }}>
-        {macros.map(({ label, value, fmt }) => (
-          <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px" }}>
-            <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
-            <p style={{ fontSize: 12, fontWeight: 600, margin: 0 }}>{fmt(value)}</p>
-          </div>
-        ))}
+        {macros.map(({ label, value, target, fmt }) => {
+          const pct = target > 0 ? Math.round((value / target) * 100) : 100;
+          const diff = pct - 100;
+          const isClose = Math.abs(diff) <= 8;
+          return (
+            <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
+              <p style={{ fontSize: 12, fontWeight: 600, margin: "0 0 2px" }}>{fmt(value)}</p>
+              <p style={{
+                fontSize: 9, fontWeight: 600, margin: 0,
+                color: isClose ? C.tealDark : C.light,
+              }}>
+                {isClose ? "on target" : `${diff > 0 ? "+" : ""}${diff}% today`}
+              </p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1160,6 +1303,7 @@ export default function OrderFlow({
   type ReplaceTarget = { date: string; meal: Meal };
   const [removeTarget,  setRemoveTarget]  = useState<RemoveTarget  | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<ReplaceTarget | null>(null);
+  const [showBalanceInfo, setShowBalanceInfo] = useState(false);
 
   // ── Checkout state ────────────────────────────────────────────────────────────
 
@@ -1691,29 +1835,15 @@ export default function OrderFlow({
           onBack={() => setStep("days")}
         />
         <div style={{ flex: 1, padding: "18px 20px 110px" }}>
-          {/* Daily goal summary — shown once at the top */}
-          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
-            <p style={{ fontSize: 11, color: C.light, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Daily goal</p>
-            <div style={{ display: "flex", gap: 6 }}>
-              {([
-                { label: "Protein", value: plan.daily_macro_target.protein_g, fmt: (v: number) => `${Math.round(v)}g` },
-                { label: "Carbs",   value: plan.daily_macro_target.carbs_g,   fmt: (v: number) => `${Math.round(v)}g` },
-                { label: "Fat",     value: plan.daily_macro_target.fat_g,      fmt: (v: number) => `${Math.round(v)}g` },
-                { label: "Kcal",    value: plan.daily_macro_target.kcal,       fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
-              ] as { label: string; value: number; fmt: (v: number) => string }[]).map(({ label, value, fmt }) => (
-                <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px" }}>
-                  <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
-                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{fmt(value)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Weekly balance summary — shown once at the top */}
+          <WeeklyBalanceCard plan={plan} onInfoClick={() => setShowBalanceInfo(true)} />
 
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
           {plan.days.map(day => (
             <DayCard key={day.date} day={day}
+              dailyTarget={plan.daily_macro_target}
               isOnlyDay={plan.days.length <= 1}
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
@@ -1772,6 +1902,9 @@ export default function OrderFlow({
             onClose={() => setReplaceTarget(null)}
             onSelect={handleReplaceMeal}
           />
+        )}
+        {showBalanceInfo && (
+          <BalanceInfoSheet onClose={() => setShowBalanceInfo(false)} />
         )}
         <style>{`@keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
       </div>
