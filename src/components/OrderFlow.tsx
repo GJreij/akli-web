@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
@@ -14,7 +14,6 @@ import {
   generateMealPlan, getCheckoutSummary, confirmOrder, updateMealPlan, simplePriceSimulator,
   type GenerateMealPlanResponse, type CheckoutSummaryResponse, type PlanDay, type Meal, type ChangeLog,
 } from "@/lib/flask";
-import RecipeRater from "@/components/RecipeRater";
 import { type PrefRating } from "@/lib/preferences";
 import AddressForm from "@/components/AddressForm";
 
@@ -822,17 +821,14 @@ function ReplaceMealSheet({ meal, recipes, onClose, onSelect }: {
 // ─── Recipe preferences section (step 1) ─────────────────────────────────────
 
 function PreferencesSection({
-  userId, weeks, initialPrefs, selectedDates, excludedMeals,
+  weeks, initialPrefs, selectedDates, excludedMeals,
 }: {
-  userId: string;
   weeks: OrderableWeek[];
   initialPrefs: Record<number, PrefRating>;
   selectedDates: Set<string>;
   excludedMeals: Set<MealType>;
 }) {
-  const [open, setOpen] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<MealType | null>(null);
-  const [excludedNote, setExcludedNote] = useState<MealType | null>(null);
+  const router = useRouter();
 
   const ALL: MealType[] = ["breakfast", "lunch", "snack", "dinner"];
   const includedMealTypes = ALL.filter(m => !excludedMeals.has(m));
@@ -847,125 +843,39 @@ function PreferencesSection({
     includedMealTypes.some(m => r[`could_be_${m}` as keyof RecipeRow])
   );
 
-  // When a filter is active, further narrow by that meal type
-  const visibleRecipes = activeFilter
-    ? baseRecipes.filter(r => r[`could_be_${activeFilter}` as keyof RecipeRow])
-    : baseRecipes;
-
-  const ratedCount = baseRecipes.filter(r => initialPrefs[r.id] != null).length;
+  const ratedCount   = baseRecipes.filter(r => initialPrefs[r.id] != null).length;
+  const dislikeCount = baseRecipes.filter(r => initialPrefs[r.id] === "dislike" || initialPrefs[r.id] === "skip").length;
 
   const subtitle = selectedDates.size === 0
-    ? "Pick dates first to see your menu"
+    ? "Pick dates above to see which dishes are on your menu"
     : baseRecipes.length === 0
       ? "No recipes found for these dates"
-      : ratedCount > 0
-        ? `${ratedCount} rated · ${baseRecipes.length} recipes in your selection`
-        : `${baseRecipes.length} recipes · optional to rate`;
-
-  function handleFilterPill(meal: MealType) {
-    if (excludedMeals.has(meal)) {
-      setExcludedNote(n => n === meal ? null : meal);
-      return;
-    }
-    setExcludedNote(null);
-    setActiveFilter(f => f === meal ? null : meal);
-  }
+      : ratedCount === 0
+        ? `${baseRecipes.length} dishes in this menu · none rated yet`
+        : dislikeCount > 0
+          ? `${ratedCount} of ${baseRecipes.length} rated · ${dislikeCount} disliked dish${dislikeCount === 1 ? "" : "es"} in this menu`
+          : `${ratedCount} of ${baseRecipes.length} rated`;
 
   return (
-    <div style={{ marginTop: 8 }}>
+    <div
+      style={{
+        marginTop: 8, background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+        padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600 }}>My Tastes</p>
+        <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{subtitle}</p>
+      </div>
       <button
-        onClick={() => setOpen(o => !o)}
+        onClick={() => router.push("/tastes")}
         style={{
-          width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-          background: C.white, border: `1px solid ${C.border}`,
-          borderRadius: open ? "12px 12px 0 0" : 12,
-          padding: "14px 16px", cursor: "pointer", transition: "border-radius 0.2s",
+          flexShrink: 0, padding: "8px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600,
+          border: `1px solid ${C.teal}`, background: C.white, color: C.teal, cursor: "pointer",
         }}
       >
-        <div style={{ textAlign: "left" }}>
-          <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600 }}>Recipe preferences</p>
-          <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{subtitle}</p>
-        </div>
-        <IconChevronDown
-          size={16} color={C.light}
-          style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }}
-        />
+        {ratedCount > 0 ? "Edit in My Tastes" : "Rate in My Tastes"}
       </button>
-
-      {open && (
-        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 12px 12px" }}>
-
-          {/* Filter pills */}
-          <div style={{ display: "flex", gap: 6, padding: "12px 14px 10px", borderBottom: `1px solid ${C.border}`, flexWrap: "wrap" }}>
-            {ALL.map(meal => {
-              const isExcluded = excludedMeals.has(meal);
-              const isActive   = activeFilter === meal && !isExcluded;
-              return (
-                <button
-                  key={meal}
-                  onClick={() => handleFilterPill(meal)}
-                  style={{
-                    padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer", border: "none",
-                    background: isActive ? C.teal : isExcluded ? "#f0f0f0" : C.offWhite,
-                    color: isActive ? C.white : isExcluded ? "#c0bab5" : C.muted,
-                    textDecoration: isExcluded ? "line-through" : "none",
-                    transition: "background 0.15s, color 0.15s",
-                  }}
-                >
-                  {MEAL_LABELS[meal]}
-                </button>
-              );
-            })}
-            {activeFilter && (
-              <button
-                onClick={() => { setActiveFilter(null); setExcludedNote(null); }}
-                style={{ padding: "5px 10px", borderRadius: 20, fontSize: 12, cursor: "pointer", border: `1px solid ${C.border}`, background: C.white, color: C.light }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-
-          {/* Excluded meal note */}
-          {excludedNote && (
-            <p style={{ fontSize: 12, color: C.muted, margin: 0, padding: "8px 14px", background: "#faf9f7", borderBottom: `1px solid ${C.border}` }}>
-              {MEAL_LABELS[excludedNote]} is excluded from your plan — those recipes won&apos;t appear in your order.
-            </p>
-          )}
-
-          <div style={{ padding: "4px 14px 6px" }}>
-            {selectedDates.size === 0 ? (
-              <p style={{ fontSize: 13, color: C.light, padding: "16px 0", textAlign: "center" }}>Select your dates above to see which recipes are on the menu.</p>
-            ) : visibleRecipes.length === 0 ? (
-              <p style={{ fontSize: 13, color: C.light, padding: "16px 0", textAlign: "center" }}>
-                {activeFilter ? `No ${MEAL_LABELS[activeFilter].toLowerCase()} recipes in your selection.` : "No recipes available for these dates and meal types."}
-              </p>
-            ) : (
-              visibleRecipes.map((recipe, i) => (
-                <div key={recipe.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "11px 0", borderBottom: i < visibleRecipes.length - 1 ? `1px solid ${C.border}` : "none" }}>
-                  <div style={{ width: 42, height: 42, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {recipe.photo
-                      // eslint-disable-next-line @next/next/no-img-element
-                      ? <img src={recipe.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : <IconLeaf size={14} color={C.light} />
-                    }
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {recipe.name}
-                    </p>
-                    <RecipeRater userId={userId} recipeId={recipe.id} initialRating={initialPrefs[recipe.id] ?? null} />
-                  </div>
-                </div>
-              ))
-            )}
-            <p style={{ fontSize: 11, color: C.light, textAlign: "center", padding: "10px 0 6px" }}>
-              Manage all preferences in{" "}
-              <a href="/tastes" style={{ color: "#437b7b", textDecoration: "underline" }}>My Tastes</a>
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1120,6 +1030,39 @@ function AddressPicker({ userId, addresses, selectedId, onSelect, onAdded, onRem
   );
 }
 
+// ─── Draft persistence ─────────────────────────────────────────────────────────
+// Step-1 selections (dates, excluded meals) survive a trip to /tastes and back —
+// without this, navigating away to rate dishes silently wiped the in-progress order.
+
+const DRAFT_KEY = "akli-order-draft-v1";
+
+type OrderDraft = {
+  rangeStart: string | null;
+  rangeEnd: string | null;
+  removed: string[];
+  excludedMeals: MealType[];
+  mealEatingOut: Record<MealType, boolean>;
+  kcalAdjustment: number;
+};
+
+function readDraft(): OrderDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    return raw ? JSON.parse(raw) as OrderDraft : null;
+  } catch { return null; }
+}
+
+function writeDraft(draft: OrderDraft) {
+  if (typeof window === "undefined") return;
+  try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* storage unavailable */ }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function OrderFlow({
@@ -1141,9 +1084,9 @@ export default function OrderFlow({
 
   const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
   const orderedDaysSet = new Set(orderedDays);
-  const [rangeStart, setRangeStart] = useState<string | null>(null);
-  const [rangeEnd,   setRangeEnd]   = useState<string | null>(null);
-  const [removed,    setRemoved]    = useState<Set<string>>(new Set());
+  const [rangeStart, setRangeStart] = useState<string | null>(() => readDraft()?.rangeStart ?? null);
+  const [rangeEnd,   setRangeEnd]   = useState<string | null>(() => readDraft()?.rangeEnd ?? null);
+  const [removed,    setRemoved]    = useState<Set<string>>(() => new Set(readDraft()?.removed ?? []));
 
   // Derive selected: all available days in [rangeStart, rangeEnd] minus removed minus already-ordered
   const selected = new Set<string>();
@@ -1158,15 +1101,25 @@ export default function OrderFlow({
   }
 
   const ALL_MEALS: MealType[] = ["breakfast", "lunch", "snack", "dinner"];
-  const [excludedMeals, setExcludedMeals] = useState<Set<MealType>>(new Set());
-  const [mealEatingOut, setMealEatingOut] = useState<Record<MealType, boolean>>({
+  const [excludedMeals, setExcludedMeals] = useState<Set<MealType>>(() => new Set(readDraft()?.excludedMeals ?? []));
+  const [mealEatingOut, setMealEatingOut] = useState<Record<MealType, boolean>>(() => ({
     breakfast: false, lunch: false, dinner: false, snack: false,
-  });
+    ...readDraft()?.mealEatingOut,
+  }));
   const [mealTypesOpen, setMealTypesOpen] = useState(false);
-  const [kcalAdjustment, setKcalAdjustment] = useState(0);
+  const [kcalAdjustment, setKcalAdjustment] = useState(() => readDraft()?.kcalAdjustment ?? 0);
 
   // Reset manual kcal adjustment whenever eating-out selections change
-  useEffect(() => { setKcalAdjustment(0); }, [mealEatingOut]);
+  const skipNextKcalReset = useRef(true);
+  useEffect(() => {
+    if (skipNextKcalReset.current) { skipNextKcalReset.current = false; return; }
+    setKcalAdjustment(0);
+  }, [mealEatingOut]);
+
+  // Persist step-1 selections so a trip to /tastes (or an accidental refresh) doesn't lose them
+  useEffect(() => {
+    writeDraft({ rangeStart, rangeEnd, removed: Array.from(removed), excludedMeals: Array.from(excludedMeals), mealEatingOut, kcalAdjustment });
+  }, [rangeStart, rangeEnd, removed, excludedMeals, mealEatingOut, kcalAdjustment]);
 
   // ── Derived kcal target ───────────────────────────────────────────────────────
 
@@ -1418,12 +1371,14 @@ export default function OrderFlow({
         setConfirmErr(res.error); setStep("checkout");
       } else {
         track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, order_id: res.order_id ?? null }, "order");
+        clearDraft();
         setStep("confirmed");
       }
     } catch (e) {
       if (await orderWasActuallyPlaced(sortedDates)) {
         // Backend committed the order despite the request erroring out — treat as success.
         track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, recovered_from_error: true }, "order");
+        clearDraft();
         setStep("confirmed");
       } else {
         track("order_confirm_failed", { error: e instanceof Error ? e.message : String(e) }, "order");
@@ -1674,9 +1629,8 @@ export default function OrderFlow({
             );
           })()}
 
-          {/* ── Recipe preferences (collapsible) ── */}
+          {/* ── My Tastes summary ── */}
           <PreferencesSection
-            userId={userId}
             weeks={orderableWeeks}
             initialPrefs={initialPrefs}
             selectedDates={selected}
