@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
   IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
-  IconMapPin, IconPlus, IconTrash,
+  IconMapPin, IconPlus, IconTrash, IconScaleOutline,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
@@ -221,9 +221,12 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   const isSelected  = selectedInRange.has(iso);
                   const dayNum      = parseInt(iso.split("-")[2], 10);
 
+                  // Too-soon = within the 48h notice window (not yet orderable, but not "past" either)
+                  const isTooSoon  = !isPast && !isWeekend && !isAvail && !isOrdered;
+
                   // Visual state
                   let bg = "transparent";
-                  let color = isWeekend || isPast ? "#d0cbc5" : "#1a1a1a";
+                  let color = isWeekend || isPast || isTooSoon ? "#d0cbc5" : "#1a1a1a";
                   let fontWeight: number = 400;
                   let border = "none";
                   let opacity = 1;
@@ -248,7 +251,11 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                       key={iso}
                       onClick={() => !disabled && onPick(iso)}
                       disabled={disabled}
-                      title={isOrdered ? "You already have an order on this day — it's skipped automatically" : undefined}
+                      title={
+                        isOrdered ? "You already have an order on this day — it's skipped automatically"
+                        : isTooSoon ? "Orders need 48h notice — too soon to add this day"
+                        : undefined
+                      }
                       style={{
                         position: "relative",
                         height: 34, borderRadius: 7, border, background: bg, color,
@@ -659,7 +666,9 @@ function ConfirmingScreen() {
 
 // ─── Meal row ─────────────────────────────────────────────────────────────────
 
-function MealRow({ meal, onRemove, onReplace }: { meal: Meal; onRemove: () => void; onReplace: () => void }) {
+function MealRow({ meal, onRemove, onReplace }: {
+  meal: Meal; onRemove: () => void; onReplace: () => void;
+}) {
   const [imgErr, setImgErr] = useState(false);
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
@@ -674,9 +683,14 @@ function MealRow({ meal, onRemove, onReplace }: { meal: Meal; onRemove: () => vo
         <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {meal.recipe_name}
         </p>
-        <span style={mealBadgeStyle(meal.meal_type)}>
-          {meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1)}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+          <span style={mealBadgeStyle(meal.meal_type)}>
+            {meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1)}
+          </span>
+          <span style={{ fontSize: 10.5, color: C.light }}>
+            {Math.round(meal.macros.kcal)} kcal · {Math.round(meal.macros.protein)}g protein
+          </span>
+        </div>
       </div>
       <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
         <button onClick={onReplace} title="Replace" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
@@ -696,20 +710,74 @@ type MacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: nu
 
 const MEAL_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
 
-function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
+// ─── Daily goal card (sticky) ─────────────────────────────────────────────────
+//
+// Just the flat target — no actual-vs-target comparison, no averaging, no
+// commentary on day-to-day variance. Keeps the focus on the goal itself.
+
+function DailyGoalCard({ target }: { target: { protein_g: number; carbs_g: number; fat_g: number; kcal: number } }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={{
+      position: "sticky", top: 0, zIndex: 20,
+      background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
+      padding: "14px 16px 10px", marginBottom: 14,
+      boxShadow: "0 4px 14px rgba(6,51,48,0.08)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+        <div style={{
+          width: 26, height: 26, borderRadius: 8, background: "#f0f7f7",
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <IconScaleOutline size={15} color={C.tealDark} />
+        </div>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.primary }}>Daily goal</p>
+      </div>
+
+      <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "6px 2px" }}>
+          <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Kcal</p>
+          <p style={{ fontSize: 14, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(target.kcal).toLocaleString("en-US")}</p>
+        </div>
+        <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "6px 2px" }}>
+          <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Protein</p>
+          <p style={{ fontSize: 14, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(target.protein_g)}g</p>
+        </div>
+        {expanded && (
+          <>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "6px 2px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Carbs</p>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(target.carbs_g)}g</p>
+            </div>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "6px 2px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Fat</p>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(target.fat_g)}g</p>
+            </div>
+          </>
+        )}
+      </div>
+
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: "8px 0 0", fontSize: 11, color: C.light, cursor: "pointer" }}
+      >
+        {expanded ? "Hide carbs & fat" : "See carbs & fat"}
+        <IconChevronDown size={12} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
+    </div>
+  );
+}
+
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
   day: PlanDay;
+  expanded: boolean;
+  onToggleExpand: () => void;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
   isOnlyDay: boolean;
 }) {
-  const macros = [
-    { label: "Protein", value: day.totals.protein, fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Carbs",   value: day.totals.carbs,   fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Fat",     value: day.totals.fat,      fmt: (v: number) => `${Math.round(v)}g` },
-    { label: "Kcal",    value: day.totals.kcal,     fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
-  ];
-
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px 11px", background: "#faf9f7", borderBottom: `1px solid ${C.border}` }}>
@@ -737,14 +805,35 @@ function DayCard({ day, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
           <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
         ))}
       </div>
-      <div style={{ display: "flex", gap: 6, padding: "10px 14px", borderTop: `1px solid ${C.border}` }}>
-        {macros.map(({ label, value, fmt }) => (
-          <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px" }}>
-            <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
-            <p style={{ fontSize: 12, fontWeight: 600, margin: 0 }}>{fmt(value)}</p>
-          </div>
-        ))}
+      <div style={{ display: "flex", gap: 6, padding: "10px 14px 6px" }}>
+        <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+          <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Kcal</p>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.kcal).toLocaleString("en-US")}</p>
+        </div>
+        <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+          <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Protein</p>
+          <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.protein)}g</p>
+        </div>
+        {expanded && (
+          <>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Carbs</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.carbs)}g</p>
+            </div>
+            <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+              <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Fat</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{Math.round(day.totals.fat)}g</p>
+            </div>
+          </>
+        )}
       </div>
+      <button
+        onClick={onToggleExpand}
+        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: "0 14px 10px", fontSize: 11, color: C.light, cursor: "pointer" }}
+      >
+        {expanded ? "Hide carbs & fat" : "See carbs & fat"}
+        <IconChevronDown size={12} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
     </div>
   );
 }
@@ -882,8 +971,11 @@ function PreferencesSection({
 
 // ─── Daily breakdown (collapsible, in checkout) ───────────────────────────────
 
-function DailyBreakdown({ breakdown }: { breakdown: CheckoutSummaryResponse["price_breakdown"]["daily_breakdown"] }) {
+function DailyBreakdown({ breakdown }: {
+  breakdown: CheckoutSummaryResponse["price_breakdown"]["daily_breakdown"];
+}) {
   const [open, setOpen] = useState(false);
+
   return (
     <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
       <button
@@ -1141,6 +1233,9 @@ export default function OrderFlow({
   const [planHistory, setPlanHistory]   = useState<GenerateMealPlanResponse[]>([]);
   const [generateError, setGenErr]  = useState<string | null>(null);
   const [updatingPlan, setUpdating] = useState(false);
+  // Per-day "see carbs & fat" expansion, plus a global toggle to open/close them all at once.
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const allDaysExpanded = !!plan && plan.days.length > 0 && plan.days.every(d => expandedDays.has(d.date));
 
   function pushHistory() {
     if (plan) setPlanHistory(h => [...h, plan]);
@@ -1691,29 +1786,34 @@ export default function OrderFlow({
           onBack={() => setStep("days")}
         />
         <div style={{ flex: 1, padding: "18px 20px 110px" }}>
-          {/* Daily goal summary — shown once at the top */}
-          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
-            <p style={{ fontSize: 11, color: C.light, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Daily goal</p>
-            <div style={{ display: "flex", gap: 6 }}>
-              {([
-                { label: "Protein", value: plan.daily_macro_target.protein_g, fmt: (v: number) => `${Math.round(v)}g` },
-                { label: "Carbs",   value: plan.daily_macro_target.carbs_g,   fmt: (v: number) => `${Math.round(v)}g` },
-                { label: "Fat",     value: plan.daily_macro_target.fat_g,      fmt: (v: number) => `${Math.round(v)}g` },
-                { label: "Kcal",    value: plan.daily_macro_target.kcal,       fmt: (v: number) => Math.round(v).toLocaleString("en-US") },
-              ] as { label: string; value: number; fmt: (v: number) => string }[]).map(({ label, value, fmt }) => (
-                <div key={label} style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px" }}>
-                  <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
-                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: C.primary }}>{fmt(value)}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          {/* Daily goal — sticky, shown once at the top */}
+          <DailyGoalCard target={plan.daily_macro_target} />
+
+          {plan.days.length > 0 && (
+            <button
+              onClick={() => setExpandedDays(allDaysExpanded ? new Set() : new Set(plan.days.map(d => d.date)))}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, margin: "0 0 12px", background: "none",
+                border: `1px solid ${C.border}`, borderRadius: 20, padding: "6px 12px",
+                fontSize: 11.5, color: C.tealDark, cursor: "pointer",
+              }}
+            >
+              <IconChevronDown size={13} style={{ transform: allDaysExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+              {allDaysExpanded ? "Hide carbs & fat for all days" : "See carbs & fat for all days"}
+            </button>
+          )}
 
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
           {plan.days.map(day => (
             <DayCard key={day.date} day={day}
+              expanded={expandedDays.has(day.date)}
+              onToggleExpand={() => setExpandedDays(prev => {
+                const next = new Set(prev);
+                if (next.has(day.date)) next.delete(day.date); else next.add(day.date);
+                return next;
+              })}
               isOnlyDay={plan.days.length <= 1}
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
