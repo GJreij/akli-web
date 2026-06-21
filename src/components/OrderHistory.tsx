@@ -52,6 +52,13 @@ type Delivery = {
   delivery_slot_id: number | null;
 };
 
+type DayMacros = {
+  kcal_ordered: number | null;
+  protein_ordered: number | null;
+  carbs_ordered: number | null;
+  fat_ordered: number | null;
+} | null;
+
 type PlanDay = {
   id: number;
   date: string | null;
@@ -60,6 +67,7 @@ type PlanDay = {
   payment: Payment[] | Payment | null;
   deliveries: Delivery[] | Delivery | null;
   meal_plan_day_recipe: DayRecipe[];
+  macros: DayMacros;
 };
 
 type MealPlan = {
@@ -141,13 +149,44 @@ const DELIVERY_STATUS_ICON: Record<string, React.ReactNode> = {
   cancelled: <IconX     size={13} />,
 };
 
+// ─── Day macro boxes — same style as step 2 of ordering: kcal + protein up
+// front, carbs/fat behind a toggle. No target comparison, just what was
+// actually delivered that day. ──────────────────────────────────────────────
+
+function MacroBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
+      <p style={{ fontSize: 9.5, color: C.light, margin: "0 0 2px", textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</p>
+      <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: C.primary }}>{value}</p>
+    </div>
+  );
+}
+
+function DayMacroBoxes({ macros, expanded }: { macros: DayMacros; expanded: boolean }) {
+  if (!macros || macros.kcal_ordered == null) return null;
+  return (
+    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+      <MacroBox label="Kcal" value={Math.round(macros.kcal_ordered).toLocaleString("en-US")} />
+      <MacroBox label="Protein" value={`${Math.round(macros.protein_ordered ?? 0)}g`} />
+      {expanded && (
+        <>
+          <MacroBox label="Carbs" value={`${Math.round(macros.carbs_ordered ?? 0)}g`} />
+          <MacroBox label="Fat" value={`${Math.round(macros.fat_ordered ?? 0)}g`} />
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Receipt modal ────────────────────────────────────────────────────────────
 
 function ReceiptModal({ plan, onClose }: { plan: MealPlan; onClose: () => void }) {
+  const [showMacroDetail, setShowMacroDetail] = useState(false);
   const total    = planTotal(plan);
   const provider = planProvider(plan);
   const pInfo    = providerLabel(provider);
   const days     = [...plan.meal_plan_day].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
+  const hasMacros = days.some(d => d.macros?.kcal_ordered != null);
 
   return (
     <div
@@ -255,12 +294,24 @@ function ReceiptModal({ plan, onClose }: { plan: MealPlan; onClose: () => void }
                   <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>Delivery details not available yet for this day.</p>
                 )}
 
+                <DayMacroBoxes macros={day.macros} expanded={showMacroDetail} />
+
                 {i < days.length - 1 && (
                   <div style={{ borderBottom: `1px dashed ${C.border}`, marginTop: 14 }} />
                 )}
               </div>
             );
           })}
+
+          {hasMacros && (
+            <button
+              onClick={() => setShowMacroDetail(s => !s)}
+              style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 4, background: "none", border: "none", padding: 0, fontSize: 11, color: C.light, cursor: "pointer" }}
+            >
+              {showMacroDetail ? "Hide carbs & fat" : "See carbs & fat"}
+              <IconChevronDown size={12} style={{ transform: showMacroDetail ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+            </button>
+          )}
 
           {/* Total */}
           <div style={{ borderTop: `2px solid ${C.primary}`, marginTop: 20, paddingTop: 14 }}>
@@ -309,6 +360,7 @@ function ReceiptModal({ plan, onClose }: { plan: MealPlan; onClose: () => void }
 function OrderCard({ plan }: { plan: MealPlan }) {
   const [open, setOpen]         = useState(false);
   const [receipt, setReceipt]   = useState(false);
+  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
   const status   = planStatus(plan);
   const total    = planTotal(plan);
@@ -317,6 +369,8 @@ function OrderCard({ plan }: { plan: MealPlan }) {
   const sCfg     = STATUS_CONFIG[status];
   const days     = [...plan.meal_plan_day].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
   const dayCount = days.length;
+  const hasMacros     = days.some(d => d.macros?.kcal_ordered != null);
+  const allDaysExpanded = days.length > 0 && days.every(d => expandedDays.has(d.id));
 
   // Unique meal count
   const totalMeals = days.reduce((s, d) => s + (d.meal_plan_day_recipe?.length ?? 0), 0);
@@ -398,6 +452,19 @@ function OrderCard({ plan }: { plan: MealPlan }) {
         {/* Expanded meals view */}
         {open && (
           <div style={{ borderTop: `1px solid ${C.border}`, padding: "0 12px 14px" }}>
+            {hasMacros && (
+              <button
+                onClick={() => setExpandedDays(allDaysExpanded ? new Set() : new Set(days.map(d => d.id)))}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5, margin: "12px 0 0", background: "none",
+                  border: `1px solid ${C.border}`, borderRadius: 20, padding: "5px 11px",
+                  fontSize: 11, color: C.tealDark, cursor: "pointer",
+                }}
+              >
+                <IconChevronDown size={12} style={{ transform: allDaysExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                {allDaysExpanded ? "Hide carbs & fat for all days" : "See carbs & fat for all days"}
+              </button>
+            )}
             {days.map((day, di) => {
               const delivery = getDelivery(day);
               const payment  = getPayment(day);
@@ -461,6 +528,23 @@ function OrderCard({ plan }: { plan: MealPlan }) {
                       </div>
                     ))}
                   </div>
+
+                  {day.macros?.kcal_ordered != null && (
+                    <>
+                      <DayMacroBoxes macros={day.macros} expanded={expandedDays.has(day.id)} />
+                      <button
+                        onClick={() => setExpandedDays(prev => {
+                          const next = new Set(prev);
+                          if (next.has(day.id)) next.delete(day.id); else next.add(day.id);
+                          return next;
+                        })}
+                        style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 6, background: "none", border: "none", padding: 0, fontSize: 10.5, color: C.light, cursor: "pointer" }}
+                      >
+                        {expandedDays.has(day.id) ? "Hide carbs & fat" : "See carbs & fat"}
+                        <IconChevronDown size={11} style={{ transform: expandedDays.has(day.id) ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                      </button>
+                    </>
+                  )}
 
                   {di < days.length - 1 && (
                     <div style={{ borderBottom: `1px dashed ${C.border}`, marginTop: 12 }} />
