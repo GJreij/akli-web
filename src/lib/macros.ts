@@ -78,9 +78,26 @@ export function macrosFromDiet(kcal: number, diet: DietType) {
   };
 }
 
+function roundedDayPrice(dayPrice: number | null, p: number, c: number, f: number) {
+  const price = dayPrice ?? p * 0.018 + c * 0.006 + f * 0.022 + 1.8; // macro cost + avg packaging
+  // Round to nearest $0.50 — a clean number reads as a real price, not a spreadsheet output
+  return Math.round(price * 2) / 2;
+}
+
 export function formatPrice(dayPrice: number | null, p: number, c: number, f: number) {
-  if (dayPrice !== null) return `$${dayPrice.toFixed(2)}`;
-  // Client-side fallback using same logic as Flask (midpoint per-gram rates)
-  const estimate = p * 0.018 + c * 0.006 + f * 0.022 + 1.8; // macro cost + avg packaging
-  return `~$${estimate.toFixed(2)}`;
+  return `$${roundedDayPrice(dayPrice, p, c, f).toFixed(2)}`;
+}
+
+const MEALS_PER_DAY = 3;
+
+export function formatPricePerMeal(dayPrice: number | null, p: number, c: number, f: number) {
+  return `$${(roundedDayPrice(dayPrice, p, c, f) / MEALS_PER_DAY).toFixed(2)}`;
+}
+
+// A relatable anchor so the day price reads as a deal, not a bill.
+export function priceComparison(dayPrice: number | null, p: number, c: number, f: number) {
+  const day = roundedDayPrice(dayPrice, p, c, f);
+  if (day <= 18) return "About the cost of one takeout meal — for a full day, chef-prepped.";
+  if (day <= 28) return "Less than a casual restaurant lunch — for three meals, delivered.";
+  return "Still less than eating out three times a day — fully prepped and delivered.";
 }

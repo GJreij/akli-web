@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { track, linkAnonToUser } from "@/lib/analytics";
 import { simplePriceSimulator } from "@/lib/flask";
 import { COUNTRY_CODES } from "@/lib/theme";
-import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 import type { DietType } from "@/lib/macros";
 import type { Database } from "@/lib/supabase/types";
 import {
@@ -167,6 +167,7 @@ export default function AkliApp({
   const [finetuneNote, setFinetuneNote] = useState("");
   const [resultSubtitle, setResultSubtitle] = useState("Not a verdict. Adjust anytime.");
   const [dayPrice, setDayPrice]         = useState<number | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Save form ──
@@ -216,6 +217,7 @@ export default function AkliApp({
 
   function fetchPrice(p: number, c: number, f: number) {
     if (priceTimer.current) clearTimeout(priceTimer.current);
+    setPriceLoading(true);
     // Debounce 400ms so we don't spam Flask on every nudge
     priceTimer.current = setTimeout(async () => {
       try {
@@ -231,6 +233,8 @@ export default function AkliApp({
       } catch {
         // Flask unreachable — fall back to client estimate silently
         setDayPrice(null);
+      } finally {
+        setPriceLoading(false);
       }
     }, 400);
   }
@@ -248,6 +252,7 @@ export default function AkliApp({
       setNote(next);
       const m = getMacros(next, dietType);
       setLastMacros({ p: m.protein, c: m.carbs, f: m.fat });
+      fetchPrice(m.protein, m.carbs, m.fat);
       flash();
       return next;
     });
@@ -1093,10 +1098,20 @@ export default function AkliApp({
                 </div>
 
                 {/* Price */}
-                <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "center", marginBottom: 16 }}>
-                  <span style={{ fontSize: 13, color: C.muted }}>Around</span>
-                  <span style={{ fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>{formatPrice(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}</span>
-                  <span style={{ fontSize: 13, color: C.muted }}>a day</span>
+                <div style={{ textAlign: "center", marginBottom: 16, opacity: priceLoading ? 0.55 : 1, transition: "opacity 0.15s" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "center" }}>
+                    <span style={{ fontSize: 13, color: C.muted }}>Around</span>
+                    <span style={priceLoading ? { fontSize: 13, color: C.muted } : { fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>
+                      {priceLoading ? "updating…" : formatPrice(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}
+                    </span>
+                    <span style={{ fontSize: 13, color: C.muted }}>a day</span>
+                    <span style={{ fontSize: 12, color: C.light }}>
+                      ({formatPricePerMeal(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)} / meal)
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11.5, color: C.teal, margin: "4px 0 0" }}>
+                    {priceComparison(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}
+                  </p>
                 </div>
 
                 {/* WhatsApp note */}

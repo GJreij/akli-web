@@ -9,7 +9,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { simplePriceSimulator } from "@/lib/flask";
 import type { Database } from "@/lib/supabase/types";
-import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 import type { DietType } from "@/lib/macros";
 
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
@@ -90,6 +90,7 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
   const [finetuneNote, setFinetuneNote] = useState("");
   const [resultSubtitle, setResultSubtitle] = useState("Not a verdict. Adjust anytime.");
   const [dayPrice, setDayPrice] = useState<number | null>(null);
+  const [priceLoading, setPriceLoading] = useState(false);
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -107,6 +108,7 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
 
   function fetchPrice(p: number, c: number, f: number) {
     if (priceTimer.current) clearTimeout(priceTimer.current);
+    setPriceLoading(true);
     priceTimer.current = setTimeout(async () => {
       try {
         const res = await simplePriceSimulator({
@@ -115,6 +117,7 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
         });
         setDayPrice(res.avg_day_price);
       } catch { setDayPrice(null); }
+      finally { setPriceLoading(false); }
     }, 400);
   }
 
@@ -130,6 +133,7 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
       setNote(next);
       const m = getMacros(next, dietType);
       setLastMacros({ p: m.protein, c: m.carbs, f: m.fat });
+      fetchPrice(m.protein, m.carbs, m.fat);
       return next;
     });
   }
@@ -516,10 +520,20 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
               ))}
             </div>
 
-            <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "center", marginBottom: 16 }}>
-              <span style={{ fontSize: 13, color: C.muted }}>Around</span>
-              <span style={{ fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>{formatPrice(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}</span>
-              <span style={{ fontSize: 13, color: C.muted }}>a day</span>
+            <div style={{ textAlign: "center", marginBottom: 16, opacity: priceLoading ? 0.55 : 1, transition: "opacity 0.15s" }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 5, justifyContent: "center" }}>
+                <span style={{ fontSize: 13, color: C.muted }}>Around</span>
+                <span style={priceLoading ? { fontSize: 13, color: C.muted } : { fontSize: 17, fontWeight: 500, fontFamily: "'Playfair Display', serif" }}>
+                  {priceLoading ? "updating…" : formatPrice(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}
+                </span>
+                <span style={{ fontSize: 13, color: C.muted }}>a day</span>
+                <span style={{ fontSize: 12, color: C.light }}>
+                  ({formatPricePerMeal(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)} / meal)
+                </span>
+              </div>
+              <p style={{ fontSize: 11.5, color: C.teal, margin: "4px 0 0" }}>
+                {priceComparison(dayPrice, lastMacros.p, lastMacros.c, lastMacros.f)}
+              </p>
             </div>
 
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 9, padding: "12px 14px", display: "flex", gap: 10, alignItems: "flex-start", background: C.white, marginBottom: 12 }}>
