@@ -696,13 +696,14 @@ type MacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: nu
 
 const MEAL_ORDER: Record<string, number> = { breakfast: 0, lunch: 1, snack: 2, dinner: 3 };
 
-// ─── Weekly balance card (replaces the old static "Daily goal" box) ──────────
+// ─── Daily averages card (sticky, replaces the old static "Daily goal" box) ──
 //
-// Philosophy: we no longer pretend each day lands exactly on target — real
-// food doesn't work that way, and the LP solver now balances across the
-// whole week rather than forcing every single day to the same number.
-// This card shows the WEEK's progress toward the WEEK's target, with each
-// macro as a calm horizontal gauge rather than a cold static figure.
+// Philosophy: showing all 4 macros as bars against a fixed daily target made
+// the solver's day-to-day variance look like a flaw. Instead we lead with the
+// two numbers people actually track — average kcal/day and average protein/day
+// — and tuck carbs/fat behind an optional toggle for anyone who wants the detail.
+// The card is sticky so it stays visible (and live-updates) while scrolling
+// through day cards or removing meals.
 
 function MacroGauge({ label, pct, actual, target, fmt }: {
   label: string; pct: number; actual: number; target: number;
@@ -718,7 +719,7 @@ function MacroGauge({ label, pct, actual, target, fmt }: {
         <span style={{ fontSize: 11.5, fontWeight: 600, color: C.primary }}>{label}</span>
         <span style={{ fontSize: 11, color: C.light }}>
           <span style={{ fontWeight: 700, color: closeToGoal ? C.tealDark : C.muted }}>{fmt(actual)}</span>
-          {" "}/ {fmt(target)} for the week
+          {" "}/ {fmt(target)} avg/day
         </span>
       </div>
       <div style={{ position: "relative", height: 7, borderRadius: 4, background: C.offWhite, overflow: "hidden" }}>
@@ -726,7 +727,7 @@ function MacroGauge({ label, pct, actual, target, fmt }: {
           position: "absolute", left: 0, top: 0, bottom: 0,
           width: `${Math.min(clamped, 100)}%`,
           background: fillColor, borderRadius: 4,
-          transition: "width 0.5s ease",
+          transition: "width 0.4s ease",
         }} />
         {clamped > 100 && (
           <div style={{
@@ -742,32 +743,52 @@ function MacroGauge({ label, pct, actual, target, fmt }: {
   );
 }
 
-function WeeklyBalanceCard({ plan, onInfoClick }: { plan: GenerateMealPlanResponse; onInfoClick: () => void }) {
-  const days = plan.days.length || 1;
-  const t = plan.daily_macro_target;
+export type DayMacroTarget = { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
 
-  const weeklyTarget = {
-    protein: t.protein_g * days,
-    carbs:   t.carbs_g   * days,
-    fat:     t.fat_g      * days,
-    kcal:    t.kcal       * days,
-  };
-  const weeklyActual = plan.days.reduce((acc, d) => ({
+function DailyAveragesCard({ plan, dailyTargets, onInfoClick }: {
+  plan: GenerateMealPlanResponse;
+  dailyTargets: Record<string, DayMacroTarget>;
+  onInfoClick: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const days = plan.days.length || 1;
+
+  const totalTarget = plan.days.reduce((acc, d) => {
+    const t = dailyTargets[d.date] ?? plan.daily_macro_target;
+    return {
+      protein: acc.protein + t.protein_g,
+      carbs:   acc.carbs   + t.carbs_g,
+      fat:     acc.fat     + t.fat_g,
+      kcal:    acc.kcal    + t.kcal,
+    };
+  }, { protein: 0, carbs: 0, fat: 0, kcal: 0 });
+
+  const totalActual = plan.days.reduce((acc, d) => ({
     protein: acc.protein + d.totals.protein,
     carbs:   acc.carbs   + d.totals.carbs,
     fat:     acc.fat     + d.totals.fat,
     kcal:    acc.kcal    + d.totals.kcal,
   }), { protein: 0, carbs: 0, fat: 0, kcal: 0 });
 
-  const rows: { label: string; actual: number; target: number; fmt: (v: number) => string }[] = [
-    { label: "Protein", actual: weeklyActual.protein, target: weeklyTarget.protein, fmt: (v) => `${Math.round(v)}g` },
-    { label: "Carbs",   actual: weeklyActual.carbs,   target: weeklyTarget.carbs,   fmt: (v) => `${Math.round(v)}g` },
-    { label: "Fat",     actual: weeklyActual.fat,      target: weeklyTarget.fat,      fmt: (v) => `${Math.round(v)}g` },
-    { label: "Kcal",    actual: weeklyActual.kcal,     target: weeklyTarget.kcal,     fmt: (v) => Math.round(v).toLocaleString("en-US") },
+  const avgTarget = { protein: totalTarget.protein / days, carbs: totalTarget.carbs / days, fat: totalTarget.fat / days, kcal: totalTarget.kcal / days };
+  const avgActual = { protein: totalActual.protein / days, carbs: totalActual.carbs / days, fat: totalActual.fat / days, kcal: totalActual.kcal / days };
+
+  const primaryRows: { label: string; actual: number; target: number; fmt: (v: number) => string }[] = [
+    { label: "Kcal",    actual: avgActual.kcal,    target: avgTarget.kcal,    fmt: (v) => Math.round(v).toLocaleString("en-US") },
+    { label: "Protein", actual: avgActual.protein, target: avgTarget.protein, fmt: (v) => `${Math.round(v)}g` },
+  ];
+  const secondaryRows: { label: string; actual: number; target: number; fmt: (v: number) => string }[] = [
+    { label: "Carbs", actual: avgActual.carbs, target: avgTarget.carbs, fmt: (v) => `${Math.round(v)}g` },
+    { label: "Fat",   actual: avgActual.fat,   target: avgTarget.fat,   fmt: (v) => `${Math.round(v)}g` },
   ];
 
   return (
-    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px 8px", marginBottom: 14 }}>
+    <div style={{
+      position: "sticky", top: 0, zIndex: 20,
+      background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
+      padding: "14px 16px 8px", marginBottom: 14,
+      boxShadow: "0 4px 14px rgba(6,51,48,0.08)",
+    }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <div style={{
@@ -776,7 +797,7 @@ function WeeklyBalanceCard({ plan, onInfoClick }: { plan: GenerateMealPlanRespon
           }}>
             <IconScaleOutline size={15} color={C.tealDark} />
           </div>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.primary }}>This week&apos;s balance</p>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: C.primary }}>Average per day</p>
         </div>
         <button
           onClick={onInfoClick}
@@ -787,13 +808,25 @@ function WeeklyBalanceCard({ plan, onInfoClick }: { plan: GenerateMealPlanRespon
         </button>
       </div>
 
-      {rows.map(r => (
+      {primaryRows.map(r => (
         <MacroGauge key={r.label} label={r.label} pct={r.target > 0 ? (r.actual / r.target) * 100 : 100} actual={r.actual} target={r.target} fmt={r.fmt} />
       ))}
 
-      <p style={{ margin: "2px 0 8px", fontSize: 10.5, color: C.light, lineHeight: 1.4 }}>
-        Some days run a little higher or lower — we balance it out across the week so your totals land on target.
-      </p>
+      {expanded && (
+        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 9, marginTop: 2 }}>
+          {secondaryRows.map(r => (
+            <MacroGauge key={r.label} label={r.label} pct={r.target > 0 ? (r.actual / r.target) * 100 : 100} actual={r.actual} target={r.target} fmt={r.fmt} />
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={() => setExpanded(e => !e)}
+        style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", padding: "2px 0 8px", fontSize: 11, color: C.light, cursor: "pointer" }}
+      >
+        {expanded ? "Hide carbs & fat" : "See carbs & fat"}
+        <IconChevronDown size={12} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
     </div>
   );
 }
@@ -1025,8 +1058,14 @@ function PreferencesSection({
 
 // ─── Daily breakdown (collapsible, in checkout) ───────────────────────────────
 
-function DailyBreakdown({ breakdown }: { breakdown: CheckoutSummaryResponse["price_breakdown"]["daily_breakdown"] }) {
+function DailyBreakdown({ breakdown, planDays }: {
+  breakdown: CheckoutSummaryResponse["price_breakdown"]["daily_breakdown"];
+  planDays: PlanDay[];
+}) {
   const [open, setOpen] = useState(false);
+  const [showMacroDetail, setShowMacroDetail] = useState(false);
+  const totalsByDate = new Map(planDays.map(d => [d.date, d.totals]));
+
   return (
     <div style={{ marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
       <button
@@ -1037,30 +1076,53 @@ function DailyBreakdown({ breakdown }: { breakdown: CheckoutSummaryResponse["pri
         <IconChevronDown size={15} color={C.light} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
       </button>
       {open && (
-        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
           {breakdown.map(d => {
             const dayDiscount = d.original_total_price - d.total_price;
+            const totals = totalsByDate.get(d.date);
             return (
-              <div key={d.date} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
-                <span style={{ color: C.muted }}>
-                  {new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
-                </span>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {dayDiscount > 0.005 && (
-                    <span style={{ fontSize: 11, color: C.tealDark }}>
-                      -${dayDiscount.toFixed(2)} promo
-                    </span>
-                  )}
-                  {d.delivery_applied && (
-                    <span style={{ fontSize: 11, color: d.delivery_fee === 0 ? C.tealDark : C.light }}>
-                      {d.delivery_fee === 0 ? "free delivery" : `+$${d.delivery_fee.toFixed(2)} delivery`}
-                    </span>
-                  )}
-                  <span style={{ fontWeight: 600 }}>${d.total_price_with_delivery.toFixed(2)}</span>
+              <div key={d.date}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5 }}>
+                  <span style={{ color: C.muted }}>
+                    {new Date(d.date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                  </span>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {dayDiscount > 0.005 && (
+                      <span style={{ fontSize: 11, color: C.tealDark }}>
+                        -${dayDiscount.toFixed(2)} promo
+                      </span>
+                    )}
+                    {d.delivery_applied && (
+                      <span style={{ fontSize: 11, color: d.delivery_fee === 0 ? C.tealDark : C.light }}>
+                        {d.delivery_fee === 0 ? "free delivery" : `+$${d.delivery_fee.toFixed(2)} delivery`}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 600 }}>${d.total_price_with_delivery.toFixed(2)}</span>
+                  </div>
                 </div>
+                {totals && (
+                  <div style={{ display: "flex", gap: 10, marginTop: 3, fontSize: 11, color: C.light }}>
+                    <span>{Math.round(totals.kcal).toLocaleString("en-US")} kcal</span>
+                    <span>{Math.round(totals.protein)}g protein</span>
+                    {showMacroDetail && (
+                      <>
+                        <span>{Math.round(totals.carbs)}g carbs</span>
+                        <span>{Math.round(totals.fat)}g fat</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
+          {totalsByDate.size > 0 && (
+            <button
+              onClick={() => setShowMacroDetail(s => !s)}
+              style={{ alignSelf: "flex-start", background: "none", border: "none", padding: 0, fontSize: 10.5, color: C.light, cursor: "pointer", textDecoration: "underline" }}
+            >
+              {showMacroDetail ? "Hide carbs & fat" : "See carbs & fat per day"}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1297,6 +1359,7 @@ export default function OrderFlow({
     if (!originalPlan) return;
     setPlan(originalPlan);
     setPlanHistory([]);
+    setEatenOutByDate({});
   }
 
   type RemoveTarget  = { date: string; meal: Meal };
@@ -1304,6 +1367,24 @@ export default function OrderFlow({
   const [removeTarget,  setRemoveTarget]  = useState<RemoveTarget  | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<ReplaceTarget | null>(null);
   const [showBalanceInfo, setShowBalanceInfo] = useState(false);
+  // Meal types eaten out per date — reduces that day's effective target so
+  // "average per day" and the per-day chip don't penalize a day for a meal
+  // the client deliberately removed (vs. one the solver simply landed off-target on).
+  const [eatenOutByDate, setEatenOutByDate] = useState<Record<string, MealType[]>>({});
+
+  function dailyTargetFor(date: string): DayMacroTarget {
+    const base = plan?.daily_macro_target;
+    if (!base) return { protein_g: 0, carbs_g: 0, fat_g: 0, kcal: 0 };
+    const eatenOut = eatenOutByDate[date] ?? [];
+    if (eatenOut.length === 0) return base;
+    const keepFraction = Math.max(0, 1 - eatenOut.reduce((sum, m) => sum + MEAL_KCAL_PCT[m], 0));
+    return {
+      protein_g: base.protein_g * keepFraction,
+      carbs_g:   base.carbs_g   * keepFraction,
+      fat_g:     base.fat_g      * keepFraction,
+      kcal:      base.kcal       * keepFraction,
+    };
+  }
 
   // ── Checkout state ────────────────────────────────────────────────────────────
 
@@ -1433,6 +1514,16 @@ export default function OrderFlow({
       Delete: true, old_recipe_id: removeTarget.meal.recipe_id,
       include_macros_in_rest: spread, created_at: new Date().toISOString(),
     };
+    // "Eating out" (spread = false) removes this meal's calories from the day for
+    // real — so the day's effective target should drop too, not just its actuals.
+    if (!spread) {
+      const date = removeTarget.date;
+      const mealType = removeTarget.meal.meal_type;
+      setEatenOutByDate(prev => ({
+        ...prev,
+        [date]: [...(prev[date] ?? []), mealType],
+      }));
+    }
     setRemoveTarget(null);
     applyChange([log]);
   }
@@ -1835,15 +1926,19 @@ export default function OrderFlow({
           onBack={() => setStep("days")}
         />
         <div style={{ flex: 1, padding: "18px 20px 110px" }}>
-          {/* Weekly balance summary — shown once at the top */}
-          <WeeklyBalanceCard plan={plan} onInfoClick={() => setShowBalanceInfo(true)} />
+          {/* Daily averages summary — sticky, shown once at the top */}
+          <DailyAveragesCard
+            plan={plan}
+            dailyTargets={Object.fromEntries(plan.days.map(d => [d.date, dailyTargetFor(d.date)]))}
+            onInfoClick={() => setShowBalanceInfo(true)}
+          />
 
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
           {plan.days.map(day => (
             <DayCard key={day.date} day={day}
-              dailyTarget={plan.daily_macro_target}
+              dailyTarget={dailyTargetFor(day.date)}
               isOnlyDay={plan.days.length <= 1}
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
@@ -1963,7 +2058,7 @@ export default function OrderFlow({
             </div>
 
             {bd?.daily_breakdown && bd.daily_breakdown.length > 0 && (
-              <DailyBreakdown breakdown={bd.daily_breakdown} />
+              <DailyBreakdown breakdown={bd.daily_breakdown} planDays={plan?.days ?? []} />
             )}
           </div>
 
