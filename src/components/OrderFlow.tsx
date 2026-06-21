@@ -832,7 +832,7 @@ function DailyAveragesCard({ plan, excludedDates, onInfoClick }: {
 
       {excludedDates.size > 0 && (
         <p style={{ margin: "0 0 10px", fontSize: 10.5, color: C.light, lineHeight: 1.4 }}>
-          {excludedDates.size} day{excludedDates.size > 1 ? "s" : ""} excluded from this average — you removed a meal to eat out, so that day isn&apos;t representative.
+          {excludedDates.size} day{excludedDates.size > 1 ? "s" : ""} excluded from this average — you removed a meal to eat out.
         </p>
       )}
     </div>
@@ -1362,22 +1362,32 @@ export default function OrderFlow({
   const [plan, setPlan]             = useState<GenerateMealPlanResponse | null>(null);
   const [originalPlan, setOriginalPlan] = useState<GenerateMealPlanResponse | null>(null);
   const [planHistory, setPlanHistory]   = useState<GenerateMealPlanResponse[]>([]);
+  // Mirrors planHistory so "Undo" also rolls back which days were marked
+  // eaten-out — otherwise undoing a removal still left the day excluded
+  // from the average with a stale explanatory note.
+  const [eatenOutHistory, setEatenOutHistory] = useState<Record<string, MealType[]>[]>([]);
   const [generateError, setGenErr]  = useState<string | null>(null);
   const [updatingPlan, setUpdating] = useState(false);
 
   function pushHistory() {
     if (plan) setPlanHistory(h => [...h, plan]);
+    setEatenOutHistory(h => [...h, eatenOutByDate]);
   }
   function undoChange() {
     if (planHistory.length === 0) return;
     setPlan(planHistory[planHistory.length - 1]);
     setPlanHistory(h => h.slice(0, -1));
+    if (eatenOutHistory.length > 0) {
+      setEatenOutByDate(eatenOutHistory[eatenOutHistory.length - 1]);
+      setEatenOutHistory(h => h.slice(0, -1));
+    }
   }
   function revertToOriginal() {
     if (!originalPlan) return;
     setPlan(originalPlan);
     setPlanHistory([]);
     setEatenOutByDate({});
+    setEatenOutHistory([]);
   }
 
   type RemoveTarget  = { date: string; meal: Meal };
