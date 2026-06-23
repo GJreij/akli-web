@@ -10,8 +10,9 @@ import type { DietType } from "@/lib/macros";
 import type { Database } from "@/lib/supabase/types";
 import {
   IconTrendingDown, IconScale, IconTrendingUp, IconHeart,
-  IconBolt, IconMinus, IconPlus, IconBrandWhatsapp, IconChevronDown,
+  IconMinus, IconPlus, IconBrandWhatsapp, IconChevronDown,
   IconTruck, IconChartBar, IconCalendarEvent, IconAdjustments,
+  IconCalculator, IconChevronRight,
 } from "@tabler/icons-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -280,6 +281,7 @@ export default function AkliApp({
     track("onboarding_skip_to_manual", {}, "onboarding");
     setPath(SKIP_PATH); setIdx(1);
   }
+
 
   function handleBack() {
     if (idx > 0) {
@@ -716,10 +718,24 @@ export default function AkliApp({
                     </button>
                   ))}
                 </div>
-                <button onClick={handleSkip}
-                  style={{ width: "100%", borderStyle: "dashed", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13, color: C.muted }}>
-                  <IconBolt size={15} />
-                  Skip — I already know my numbers
+                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 14px" }}>
+                  <div style={{ flex: 1, height: 1, background: C.border }} />
+                  <span style={{ fontSize: 11.5, color: C.light }}>or</span>
+                  <div style={{ flex: 1, height: 1, background: C.border }} />
+                </div>
+                <button onClick={handleSkip} style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 14, textAlign: "left",
+                  padding: "16px", borderRadius: 14, border: `1px solid ${C.border}`, background: C.white,
+                  cursor: "pointer",
+                }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 11, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <IconCalculator size={20} color={C.tealDark} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: "0 0 2px", fontSize: 14, fontWeight: 600 }}>I already know my numbers</p>
+                    <p style={{ margin: 0, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>Punch in your calories and pick a macro style directly.</p>
+                  </div>
+                  <IconChevronRight size={16} color={C.light} style={{ flexShrink: 0 }} />
                 </button>
                 <p style={{ fontSize: 12, textAlign: "center", marginTop: 16, color: C.light }}>
                   Have an account?{" "}
