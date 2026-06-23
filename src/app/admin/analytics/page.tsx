@@ -56,14 +56,18 @@ export default async function AnalyticsPage() {
   const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const since7  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
 
-  const [eventsRes, recentRes] = await Promise.all([
-    supabase.from("analytics_event").select("*").gte("created_at", since30).order("created_at", { ascending: false }).limit(10000),
-    supabase.from("analytics_event").select("*").order("created_at", { ascending: false }).limit(100),
+  const [eventsRes, recentRes, landingRes] = await Promise.all([
+    supabase.from("analytics_event").select("*").gte("created_at", since30).neq("event_category", "landing").order("created_at", { ascending: false }).limit(10000),
+    supabase.from("analytics_event").select("*").neq("event_category", "landing").order("created_at", { ascending: false }).limit(100),
+    supabase.from("analytics_event").select("*").gte("created_at", since30).eq("event_category", "landing").order("created_at", { ascending: false }).limit(10000),
   ]);
 
+  // App events only — landing-page traffic is tracked separately below so it
+  // never inflates "Visitors"/"Top pages"/funnel numbers for the actual product.
   const events = (eventsRes.data ?? []) as EventRow[];
   const recent = (recentRes.data ?? []) as EventRow[];
   const events7 = events.filter(e => e.created_at >= since7);
+  const landing = (landingRes.data ?? []) as EventRow[];
 
   function stats(rows: EventRow[]) {
     const anonIds = new Set(rows.map(r => r.anon_id).filter(Boolean));
@@ -121,6 +125,37 @@ export default async function AnalyticsPage() {
   }
   const topEvents = [...eventCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
   const topEventsMax = topEvents[0]?.[1] ?? 0;
+
+  // ── Landing page (Instagram traffic, app.akli-lb.org is NOT this) ──────────
+  const landingVisitors = new Set(landing.map(e => e.anon_id).filter(Boolean)).size;
+  const landingPageViews = landing.filter(e => e.event_name === "page_view").length;
+
+  const ctaCounts = new Map<string, number>();
+  for (const e of landing) {
+    if (e.event_name !== "cta_click") continue;
+    const loc = (e.metadata as { location?: string } | null)?.location ?? "unknown";
+    ctaCounts.set(loc, (ctaCounts.get(loc) ?? 0) + 1);
+  }
+  const topCtas = [...ctaCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const topCtasMax = topCtas[0]?.[1] ?? 0;
+
+  const sectionCounts = new Map<string, number>();
+  for (const e of landing) {
+    if (e.event_name !== "section_view") continue;
+    const sec = (e.metadata as { section?: string } | null)?.section ?? "unknown";
+    sectionCounts.set(sec, (sectionCounts.get(sec) ?? 0) + 1);
+  }
+  // Keep page order rather than count order — this doubles as a drop-off funnel.
+  const sectionOrder = ["hero", "how", "calculator", "menu", "results", "pricing", "faq"];
+  const sectionFunnel = sectionOrder.map(id => ({ id, count: sectionCounts.get(id) ?? 0 }));
+  const sectionFunnelMax = sectionFunnel[0]?.count ?? 0;
+
+  const timeEvents = landing.filter(e => e.event_name === "time_on_page");
+  const avgTimeOnPage = timeEvents.length
+    ? Math.round(timeEvents.reduce((sum, e) => sum + ((e.metadata as { seconds?: number } | null)?.seconds ?? 0), 0) / timeEvents.length)
+    : 0;
+  const faqOpens = landing.filter(e => e.event_name === "faq_opened").length;
+  const calcInteractions = landing.filter(e => e.event_name === "calculator_interacted").length;
 
   return (
     <div style={{ minHeight: "100vh", background: C.offWhite, padding: "24px 20px 60px" }}>
@@ -182,6 +217,28 @@ export default async function AnalyticsPage() {
             </Section>
           </div>
         </div>
+
+        <Section title="Landing page (Instagram traffic, last 30 days)">
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+            <Card label="Visitors" value={String(landingVisitors)} />
+            <Card label="Page views" value={String(landingPageViews)} />
+            <Card label="Avg time on page" value={avgTimeOnPage ? `${avgTimeOnPage}s` : "—"} />
+            <Card label="FAQ opens" value={String(faqOpens)} />
+            <Card label="Calculator used" value={String(calcInteractions)} />
+          </div>
+
+          <p style={{ margin: "0 0 6px", fontSize: 12.5, fontWeight: 600, color: C.primary }}>Scroll depth (section reached)</p>
+          {sectionFunnelMax === 0
+            ? <p style={{ fontSize: 13, color: C.light, margin: "0 0 14px" }}>No section views yet.</p>
+            : <div style={{ marginBottom: 14 }}>
+                {sectionFunnel.map(s => <Bar key={s.id} label={s.id} count={s.count} max={sectionFunnelMax} />)}
+              </div>}
+
+          <p style={{ margin: "0 0 6px", fontSize: 12.5, fontWeight: 600, color: C.primary }}>CTA clicks by location</p>
+          {topCtas.length === 0
+            ? <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No clicks yet.</p>
+            : topCtas.map(([loc, count]) => <Bar key={loc} label={loc} count={count} max={topCtasMax} />)}
+        </Section>
 
         <Section title="Recent activity (raw log)">
           <div style={{ maxHeight: 420, overflowY: "auto" }}>
