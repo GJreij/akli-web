@@ -480,7 +480,7 @@ export default function AkliApp({
 
         {/* ────────── LANDING ────────── */}
         {screen === "landing" && (
-          <div style={{ display: "flex", flexDirection: "column", minHeight: "calc(100vh - 64px)" }}>
+          <div style={{ display: "flex", flexDirection: "column" }}>
 
             {/* ── Hero band ── */}
             <div style={{
@@ -512,7 +512,7 @@ export default function AkliApp({
             </div>
 
             {/* ── Feature list ── */}
-            <div style={{ flex: 1, paddingTop: 28, display: "flex", flexDirection: "column", gap: 22 }}>
+            <div style={{ paddingTop: 28, display: "flex", flexDirection: "column", gap: 22 }}>
 
               {/* Flexibility */}
               <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
@@ -565,23 +565,6 @@ export default function AkliApp({
                   </p>
                 </div>
               </div>
-            </div>
-
-            {/* ── CTA ── */}
-            <div style={{ paddingTop: 24, paddingBottom: 4 }}>
-              <button className="btn-primary" style={{ marginBottom: 12 }} onClick={startOnboarding}>
-                Build my plan
-              </button>
-              <p style={{ fontSize: 12.5, textAlign: "center", margin: 0 }}>
-                Already have an account?{" "}
-                <a
-                  href="#"
-                  onClick={e => { e.preventDefault(); transition("signin"); }}
-                  style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}
-                >
-                  Sign in
-                </a>
-              </p>
             </div>
 
           </div>
@@ -836,8 +819,17 @@ export default function AkliApp({
 
                 {/* Height */}
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
-                    <span>Height</span><span style={{ fontWeight: 500, color: "#1a1a1a" }}>{height} cm</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
+                    <span>Height</span>
+                    <span>
+                      <input
+                        type="number" inputMode="numeric" className="numeric-inline"
+                        value={height}
+                        onChange={e => { const v = e.target.value; if (v !== "") setHeight(Number(v)); }}
+                        onBlur={e => setHeight(Math.min(210, Math.max(140, Number(e.target.value) || 170)))}
+                        style={{ fontWeight: 500, color: "#1a1a1a", fontSize: 12.5 }}
+                      /> cm
+                    </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <button type="button" onClick={() => setHeight(h => Math.max(140, h - 1))}
@@ -857,8 +849,17 @@ export default function AkliApp({
 
                 {/* Weight */}
                 <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
-                    <span>Weight</span><span style={{ fontWeight: 500, color: "#1a1a1a" }}>{weight} kg</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
+                    <span>Weight</span>
+                    <span>
+                      <input
+                        type="number" inputMode="numeric" className="numeric-inline"
+                        value={weight}
+                        onChange={e => { const v = e.target.value; if (v !== "") setWeight(Number(v)); }}
+                        onBlur={e => setWeight(Math.min(150, Math.max(40, Number(e.target.value) || 70)))}
+                        style={{ fontWeight: 500, color: "#1a1a1a", fontSize: 12.5 }}
+                      /> kg
+                    </span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <button type="button" onClick={() => setWeight(w => Math.max(40, w - 1))}
@@ -1275,6 +1276,25 @@ export default function AkliApp({
         )}
 
       </div>
+
+      {/* ────────── LANDING FOOTER ────────── */}
+      {screen === "landing" && (
+        <div style={{ padding: "14px 20px 20px", background: C.offWhite, flexShrink: 0 }}>
+          <button className="btn-primary" style={{ marginBottom: 12 }} onClick={startOnboarding}>
+            Build my plan
+          </button>
+          <p style={{ fontSize: 12.5, textAlign: "center", margin: 0 }}>
+            Already have an account?{" "}
+            <a
+              href="#"
+              onClick={e => { e.preventDefault(); transition("signin"); }}
+              style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}
+            >
+              Sign in
+            </a>
+          </p>
+        </div>
+      )}
 
       {/* ────────── ONBOARDING FOOTER ────────── */}
       {screen === "onboarding" && (
