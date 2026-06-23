@@ -511,21 +511,12 @@ export default function AkliApp({
               </p>
             </div>
 
-            {/* ── Feature cards ── */}
-            <div style={{ flex: 1, paddingTop: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* ── Feature list ── */}
+            <div style={{ flex: 1, paddingTop: 28, display: "flex", flexDirection: "column", gap: 22 }}>
 
-              {/* Flexibility card */}
-              <div style={{
-                background: C.white, border: `1px solid ${C.border}`,
-                borderRadius: 14, padding: "16px 18px",
-                display: "flex", gap: 14, alignItems: "flex-start",
-              }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 11, background: "#f0f7f7",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <IconCalendarEvent size={19} color={C.tealDark} />
-                </div>
+              {/* Flexibility */}
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <IconCalendarEvent size={19} color={C.tealDark} style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
                   <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
                     Total flexibility
@@ -536,18 +527,9 @@ export default function AkliApp({
                 </div>
               </div>
 
-              {/* Customise card */}
-              <div style={{
-                background: C.white, border: `1px solid ${C.border}`,
-                borderRadius: 14, padding: "16px 18px",
-                display: "flex", gap: 14, alignItems: "flex-start",
-              }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 11, background: "#f0f7f7",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <IconAdjustments size={19} color={C.tealDark} />
-                </div>
+              {/* Customise */}
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <IconAdjustments size={19} color={C.tealDark} style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
                   <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
                     Fully customisable
@@ -558,18 +540,9 @@ export default function AkliApp({
                 </div>
               </div>
 
-              {/* Macros card */}
-              <div style={{
-                background: C.white, border: `1px solid ${C.border}`,
-                borderRadius: 14, padding: "16px 18px",
-                display: "flex", gap: 14, alignItems: "flex-start",
-              }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 11, background: "#f0f7f7",
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <IconChartBar size={19} color={C.tealDark} />
-                </div>
+              {/* Macros */}
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <IconChartBar size={19} color={C.tealDark} style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
                   <p style={{ fontSize: 13.5, fontWeight: 700, color: C.primary, margin: "0 0 4px" }}>
                     Built around your goals
