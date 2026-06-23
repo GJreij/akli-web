@@ -14,15 +14,9 @@ export async function upsertRecipePref(
 ): Promise<void> {
   const supabase = createClient();
 
-  if (rating === null) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase.from("user_recipe_preferences") as any)
-      .delete()
-      .eq("user_id", userId)
-      .eq("recipe_id", recipeId);
-    return;
-  }
-
+  // Note: this only ever touches like/dislike/dont_include — never deletes
+  // the row outright, so a comment saved on the same recipe (see
+  // upsertRecipeComment) survives clearing the rating.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase.from("user_recipe_preferences") as any)
     .upsert(
@@ -33,6 +27,27 @@ export async function upsertRecipePref(
         dislike:      rating === "dislike",
         dont_include: rating === "skip",
         updated_at:   new Date().toISOString(),
+      },
+      { onConflict: "user_id,recipe_id" }
+    );
+}
+
+// Standing per-recipe note for the kitchen (e.g. "no onions please").
+// Kept separate from the rating so clearing one never wipes the other.
+export async function upsertRecipeComment(
+  userId: string,
+  recipeId: number,
+  comment: string
+): Promise<void> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from("user_recipe_preferences") as any)
+    .upsert(
+      {
+        user_id:    userId,
+        recipe_id:  recipeId,
+        comment:    comment.trim() || null,
+        updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id,recipe_id" }
     );
