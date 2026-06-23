@@ -666,8 +666,8 @@ function ConfirmingScreen() {
 
 // ─── Meal row ─────────────────────────────────────────────────────────────────
 
-function MealRow({ meal, onRemove, onReplace }: {
-  meal: Meal; onRemove: () => void; onReplace: () => void;
+function MealRow({ meal, onRemove, onReplace, expanded }: {
+  meal: Meal; onRemove: () => void; onReplace: () => void; expanded?: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
   return (
@@ -689,6 +689,7 @@ function MealRow({ meal, onRemove, onReplace }: {
           </span>
           <span style={{ fontSize: 10.5, color: C.light }}>
             {Math.round(meal.macros.kcal)} kcal · {Math.round(meal.macros.protein)}g protein
+            {expanded && ` · ${Math.round(meal.macros.carbs)}g carbs · ${Math.round(meal.macros.fat)}g fat`}
           </span>
         </div>
       </div>
@@ -805,7 +806,7 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
       )}
       <div style={{ padding: "0 14px" }}>
         {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
-          <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
+          <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} expanded={expanded} />
         ))}
         {missingTypes.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "8px 0 10px" }}>
