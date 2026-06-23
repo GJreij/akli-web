@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconArrowLeft, IconLeaf, IconChevronDown } from "@tabler/icons-react";
+import { IconArrowLeft, IconLeaf, IconChevronDown, IconInfoCircle } from "@tabler/icons-react";
 import RecipeRater from "@/components/RecipeRater";
+import RecipeComment from "@/components/RecipeComment";
 import { type PrefRating } from "@/lib/preferences";
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -59,18 +60,19 @@ function mealLabel(r: RecipeRow) {
 }
 
 function RecipeItem({
-  recipe, userId, initialRating, isLast,
+  recipe, userId, initialRating, initialComment, isLast,
 }: {
   recipe: RecipeRow;
   userId: string;
   initialRating: PrefRating;
+  initialComment: string;
   isLast: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
 
   return (
     <div style={{
-      display: "flex", gap: 12, alignItems: "center",
+      display: "flex", gap: 12, alignItems: "flex-start",
       padding: "13px 0",
       borderBottom: isLast ? "none" : `1px solid ${C.border}`,
     }}>
@@ -87,17 +89,19 @@ function RecipeItem({
         </p>
         <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 7px" }}>{mealLabel(recipe)}</p>
         <RecipeRater userId={userId} recipeId={recipe.id} initialRating={initialRating} />
+        <RecipeComment userId={userId} recipeId={recipe.id} initialComment={initialComment} />
       </div>
     </div>
   );
 }
 
 function WeekSection({
-  week, userId, prefs, activeFilter, defaultOpen,
+  week, userId, prefs, comments, activeFilter, defaultOpen,
 }: {
   week: WeekGroup;
   userId: string;
   prefs: Record<number, PrefRating>;
+  comments: Record<number, string>;
   activeFilter: MealType | null;
   defaultOpen: boolean;
 }) {
@@ -150,6 +154,7 @@ function WeekSection({
               recipe={recipe}
               userId={userId}
               initialRating={prefs[recipe.id] ?? null}
+              initialComment={comments[recipe.id] ?? ""}
               isLast={i === filteredRecipes.length - 1}
             />
           ))}
@@ -163,10 +168,12 @@ export default function TastesManager({
   userId,
   weeks,
   initialPrefs,
+  initialComments,
 }: {
   userId: string;
   weeks: WeekGroup[];
   initialPrefs: Record<number, PrefRating>;
+  initialComments: Record<number, string>;
 }) {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<MealType | null>(null);
@@ -217,6 +224,12 @@ export default function TastesManager({
                 <span style={{ fontSize: 11, color: C.muted }}>{label}</span>
               </div>
             ))}
+          </div>
+          <div style={{ display: "flex", gap: 7, alignItems: "flex-start", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+            <IconInfoCircle size={14} color={C.light} style={{ flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: 11, color: C.muted, margin: 0, lineHeight: 1.5 }}>
+              Notes go straight to the kitchen — keep them to small swaps (e.g. &quot;no onions&quot;), so that meal macros aren&apos;t affected much and your goals stay on track.
+            </p>
           </div>
         </div>
 
@@ -277,6 +290,7 @@ export default function TastesManager({
                 week={week}
                 userId={userId}
                 prefs={initialPrefs}
+                comments={initialComments}
                 activeFilter={activeFilter}
                 defaultOpen={i === 0}
               />
