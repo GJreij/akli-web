@@ -423,8 +423,8 @@ export type Database = {
           soybeans: boolean | null
           sugar: number | null
           sulphites: boolean | null
-          "sulphur dioxide": boolean | null
           tenant_id: number | null
+          tree_nuts: boolean | null
           unit: string | null
           updated_at: string | null
         }
@@ -453,8 +453,8 @@ export type Database = {
           soybeans?: boolean | null
           sugar?: number | null
           sulphites?: boolean | null
-          "sulphur dioxide"?: boolean | null
           tenant_id?: number | null
+          tree_nuts?: boolean | null
           unit?: string | null
           updated_at?: string | null
         }
@@ -483,8 +483,8 @@ export type Database = {
           soybeans?: boolean | null
           sugar?: number | null
           sulphites?: boolean | null
-          "sulphur dioxide"?: boolean | null
           tenant_id?: number | null
+          tree_nuts?: boolean | null
           unit?: string | null
           updated_at?: string | null
         }
