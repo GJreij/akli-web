@@ -462,7 +462,7 @@ export default function AkliApp({
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
+    <div className="app-shell" style={{ background: C.offWhite }}>
       <Header
         showProgress={screen === "onboarding"}
         progress={progress}
