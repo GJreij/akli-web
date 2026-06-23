@@ -1890,7 +1890,7 @@ export default function OrderFlow({
       <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
         <StepHeader step={3} total={3} title="Review & confirm" onBack={() => setStep("review")} />
 
-        <div style={{ flex: 1, padding: "20px 20px 110px" }}>
+        <div style={{ flex: 1, padding: "20px 20px 230px" }}>
 
           {/* Price summary */}
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px", marginBottom: 12 }}>
