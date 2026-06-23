@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconUser, IconChevronDown,
-  IconPencil, IconCheck,
+  IconPencil, IconCheck, IconBrandWhatsapp,
 } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/client";
 import ProfileAddresses from "@/components/ProfileAddresses";
 import DietWizard from "@/components/DietWizard";
+import { COUNTRY_CODES } from "@/lib/theme";
 import type { Database } from "@/lib/supabase/types";
 
 type UserRow    = Database["public"]["Tables"]["user"]["Row"];
@@ -40,6 +41,16 @@ function fmtDate(iso: string | null) {
   return new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// Split a stored "+961XXXXXXXX" phone number into country code + national
+// number, same convention used at onboarding (see AkliApp.tsx).
+function splitPhone(raw: string | null): { cc: string; national: string } {
+  if (!raw) return { cc: "+961", national: "" };
+  const byLongestCode = [...COUNTRY_CODES].sort((a, b) => b.code.length - a.code.length);
+  const match = byLongestCode.find(c => raw.startsWith(c.code));
+  if (match) return { cc: match.code, national: raw.slice(match.code.length) };
+  return { cc: "+961", national: raw.replace(/\D/g, "") };
+}
+
 // ─── Collapsible section shell ─────────────────────────────────────────────────
 
 function Section({ title, subtitle, children, defaultOpen = false }: {
@@ -69,10 +80,17 @@ function AccountInfo({ profile }: { profile: UserRow | null }) {
   const [editing, setEditing] = useState(false);
   const [name, setName]       = useState(profile?.name ?? "");
   const [lastName, setLastName] = useState(profile?.last_name ?? "");
-  const [phone, setPhone]     = useState(profile?.phone_number ?? "");
+  const initialPhone = splitPhone(profile?.phone_number ?? null);
+  const [countryCode, setCountryCode] = useState(initialPhone.cc);
+  const [phone, setPhone]     = useState(initialPhone.national);
   const [dob, setDob]         = useState(profile?.DoB ?? "");
   const [saving, setSaving]   = useState(false);
   const [err, setErr]         = useState<string | null>(null);
+
+  // Local state above is also what drives the read-only view below, so the
+  // display updates immediately after a successful save — no need to
+  // refetch/refresh the page to see the new values.
+  const displayPhone = phone.trim() ? `${countryCode}${phone.trim()}` : null;
 
   async function save() {
     if (!profile) return;
@@ -83,7 +101,7 @@ function AccountInfo({ profile }: { profile: UserRow | null }) {
         .update({
           name: name.trim() || null,
           last_name: lastName.trim() || null,
-          phone_number: phone.trim() || null,
+          phone_number: displayPhone,
           DoB: dob || null,
         }).eq("id", profile.id);
       if (error) throw new Error(error.message);
@@ -98,10 +116,10 @@ function AccountInfo({ profile }: { profile: UserRow | null }) {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div style={{ fontSize: 13.5, lineHeight: 1.9 }}>
-            <p style={{ margin: 0 }}><span style={{ color: C.light }}>Name:</span> {profile?.name} {profile?.last_name}</p>
+            <p style={{ margin: 0 }}><span style={{ color: C.light }}>Name:</span> {name} {lastName}</p>
             <p style={{ margin: 0 }}><span style={{ color: C.light }}>Email:</span> {profile?.email}</p>
-            <p style={{ margin: 0 }}><span style={{ color: C.light }}>Phone:</span> {profile?.phone_number || "—"}</p>
-            <p style={{ margin: 0 }}><span style={{ color: C.light }}>Date of birth:</span> {profile?.DoB ? fmtDate(profile.DoB) : "—"}</p>
+            <p style={{ margin: 0 }}><span style={{ color: C.light }}>Phone:</span> {displayPhone || "—"}</p>
+            <p style={{ margin: 0 }}><span style={{ color: C.light }}>Date of birth:</span> {dob ? fmtDate(dob) : "—"}</p>
           </div>
           <button onClick={() => setEditing(true)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", padding: 0, color: C.tealDark, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
             <IconPencil size={13} /> Edit
@@ -117,7 +135,36 @@ function AccountInfo({ profile }: { profile: UserRow | null }) {
         <input type="text" placeholder="First name" value={name} onChange={e => setName(e.target.value)} />
         <input type="text" placeholder="Last name" value={lastName} onChange={e => setLastName(e.target.value)} />
       </div>
-      <input type="tel" placeholder="Phone number" value={phone} onChange={e => setPhone(e.target.value)} style={{ marginBottom: 8 }} />
+
+      {/* Phone with country code — same pattern as onboarding */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <select
+            value={countryCode}
+            onChange={e => setCountryCode(e.target.value)}
+            style={{ paddingRight: 28, paddingLeft: 10, width: "auto", minWidth: 90, cursor: "pointer" }}
+          >
+            {COUNTRY_CODES.map(c => (
+              <option key={c.code} value={c.code}>
+                {c.flag} {c.code}
+              </option>
+            ))}
+          </select>
+          <IconChevronDown size={13} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: C.light }} />
+        </div>
+        <div style={{ position: "relative", flex: 1 }}>
+          <input
+            type="tel"
+            inputMode="numeric"
+            placeholder="Phone number"
+            value={phone}
+            onChange={e => setPhone(e.target.value.replace(/\D/g, ""))}
+            style={{ paddingLeft: 36 }}
+          />
+          <IconBrandWhatsapp size={15} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.light }} />
+        </div>
+      </div>
+
       <input type="date" value={dob ?? ""} onChange={e => setDob(e.target.value)} style={{ marginBottom: 10 }} />
       <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 10px" }}>
         Email can&apos;t be changed here — message Akli on WhatsApp if you need to update it.
