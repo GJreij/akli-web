@@ -553,16 +553,16 @@ export default function AkliApp({
                 </div>
               </div>
 
-              {/* Delivery strip */}
-              <div style={{
-                background: "#e8f0f0", borderRadius: 12,
-                padding: "13px 16px", display: "flex",
-                alignItems: "center", gap: 12,
-              }}>
-                <IconTruck size={18} color={C.tealDark} style={{ flexShrink: 0 }} />
+              {/* Delivery highlight — same layout as the items above, teal text instead of a card */}
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                <IconTruck size={19} color={C.tealDark} style={{ flexShrink: 0, marginTop: 1 }} />
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: C.primary, margin: "0 0 2px" }}>Free delivery over $25</p>
-                  <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Order 48h ahead — delivered the evening before.</p>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: C.tealDark, margin: "0 0 4px" }}>
+                    Free delivery over $25
+                  </p>
+                  <p style={{ fontSize: 12.5, color: C.muted, margin: 0, lineHeight: 1.6 }}>
+                    Order 48h ahead — delivered the evening before.
+                  </p>
                 </div>
               </div>
             </div>
