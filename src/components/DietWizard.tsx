@@ -359,15 +359,33 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
-                <span>Height</span><span style={{ fontWeight: 500, color: "#1a1a1a" }}>{height} cm</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
+                <span>Height</span>
+                <span>
+                  <input
+                    type="number" inputMode="numeric" className="numeric-inline"
+                    value={height}
+                    onChange={e => { const v = e.target.value; if (v !== "") setHeight(Number(v)); }}
+                    onBlur={e => setHeight(Math.min(210, Math.max(140, Number(e.target.value) || 170)))}
+                    style={{ fontWeight: 500, color: "#1a1a1a", fontSize: 12.5 }}
+                  /> cm
+                </span>
               </div>
               <input type="range" min={140} max={210} value={height} step={1} onChange={e => setHeight(Number(e.target.value))} />
             </div>
 
             <div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
-                <span>Weight</span><span style={{ fontWeight: 500, color: "#1a1a1a" }}>{weight} kg</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 12.5, color: C.muted, marginBottom: 5 }}>
+                <span>Weight</span>
+                <span>
+                  <input
+                    type="number" inputMode="numeric" className="numeric-inline"
+                    value={weight}
+                    onChange={e => { const v = e.target.value; if (v !== "") setWeight(Number(v)); }}
+                    onBlur={e => setWeight(Math.min(150, Math.max(40, Number(e.target.value) || 70)))}
+                    style={{ fontWeight: 500, color: "#1a1a1a", fontSize: 12.5 }}
+                  /> kg
+                </span>
               </div>
               <input type="range" min={40} max={150} value={weight} step={1} onChange={e => setWeight(Number(e.target.value))} />
             </div>

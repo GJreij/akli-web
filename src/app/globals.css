@@ -71,6 +71,31 @@
     cursor: pointer;
   }
 
+  /* Inline numeric value next to a slider (height/weight) — tappable to type
+     an exact number instead of relying on the slider/+- buttons.
+     Selector uses input.numeric-inline (not just .numeric-inline) to match
+     the specificity of the global input[type="number"] rule above and win
+     on cascade order. */
+  input.numeric-inline {
+    width: 48px;
+    border: 1px solid #e0dbd5;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 3px 6px;
+    text-align: right;
+    -moz-appearance: textfield;
+    display: inline;
+  }
+  input.numeric-inline::-webkit-outer-spin-button,
+  input.numeric-inline::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input.numeric-inline:focus {
+    border-color: #67b1b0;
+    box-shadow: 0 0 0 3px rgba(103, 177, 176, 0.15);
+  }
+
   input[type="date"]::-webkit-calendar-picker-indicator {
     opacity: 0.5;
     cursor: pointer;
