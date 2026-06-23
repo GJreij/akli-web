@@ -194,6 +194,7 @@ export interface ChangeLog {
   old_recipe_id?: number;
   new_recipe_id?: number;
   include_macros_in_rest?: boolean; // true = spread to other meals, false = eating out (reduce day kcal)
+  meal_type?: "breakfast" | "lunch" | "dinner" | "snack"; // required when adding a brand-new meal (no old_recipe_id)
 }
 
 export async function updateMealPlan(

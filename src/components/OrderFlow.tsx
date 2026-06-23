@@ -769,15 +769,18 @@ function DailyGoalCard({ target }: { target: { protein_g: number; carbs_g: numbe
   );
 }
 
-function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, isOnlyDay }: {
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onAddMeal, isOnlyDay }: {
   day: PlanDay;
   expanded: boolean;
   onToggleExpand: () => void;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
+  onAddMeal: (mealType: MealType) => void;
   isOnlyDay: boolean;
 }) {
+  const presentTypes = new Set(day.meals.map(m => m.meal_type));
+  const missingTypes = (["breakfast", "lunch", "snack", "dinner"] as MealType[]).filter(t => !presentTypes.has(t));
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 12, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px 11px", background: "#faf9f7", borderBottom: `1px solid ${C.border}` }}>
@@ -804,6 +807,18 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
         {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
           <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} />
         ))}
+        {missingTypes.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "8px 0 10px" }}>
+            {missingTypes.map(t => (
+              <button key={t} onClick={() => onAddMeal(t)} style={{
+                display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 20,
+                border: `1px dashed ${C.border}`, background: "none", fontSize: 12, color: C.tealDark, cursor: "pointer",
+              }}>
+                + Add {MEAL_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", gap: 6, padding: "10px 14px 6px" }}>
         <div style={{ flex: 1, textAlign: "center", background: C.offWhite, borderRadius: 7, padding: "5px 2px 6px" }}>
@@ -863,11 +878,12 @@ function RemoveMealSheet({ meal, onClose, onSpread, onEatingOut }: {
 
 // ─── Replace meal sheet ───────────────────────────────────────────────────────
 
-function ReplaceMealSheet({ meal, recipes, onClose, onSelect }: {
-  meal: Meal; recipes: RecipeRow[]; onClose: () => void; onSelect: (id: number) => void;
+function ReplaceMealSheet({ meal, recipes, onClose, onSelect, mode = "replace" }: {
+  meal: { meal_type: MealType; recipe_id?: number }; recipes: RecipeRow[]; onClose: () => void; onSelect: (id: number) => void;
+  mode?: "replace" | "add";
 }) {
   const compatible = recipes.filter(r => {
-    if (r.id === meal.recipe_id) return false;
+    if (meal.recipe_id != null && r.id === meal.recipe_id) return false;
     const t = meal.meal_type;
     return (t === "breakfast" && r.could_be_breakfast)
         || (t === "lunch"     && r.could_be_lunch)
@@ -878,8 +894,8 @@ function ReplaceMealSheet({ meal, recipes, onClose, onSelect }: {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.white, borderRadius: "18px 18px 0 0", maxHeight: "72vh", display: "flex", flexDirection: "column", animation: "slideUp 0.22s ease" }}>
         <div style={{ padding: "20px 20px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-          <h3 style={{ margin: "0 0 3px", fontSize: 18 }}>Replace {meal.meal_type}</h3>
-          <p style={{ margin: 0, fontSize: 12.5, color: C.muted }}>Pick something else from this week&apos;s menu</p>
+          <h3 style={{ margin: "0 0 3px", fontSize: 18 }}>{mode === "add" ? `Add ${meal.meal_type}` : `Replace ${meal.meal_type}`}</h3>
+          <p style={{ margin: 0, fontSize: 12.5, color: C.muted }}>Pick something from this week&apos;s menu</p>
         </div>
         <div style={{ overflowY: "auto", padding: "6px 20px 36px" }}>
           {compatible.length === 0
@@ -1253,8 +1269,10 @@ export default function OrderFlow({
 
   type RemoveTarget  = { date: string; meal: Meal };
   type ReplaceTarget = { date: string; meal: Meal };
+  type AddTarget     = { date: string; mealType: MealType };
   const [removeTarget,  setRemoveTarget]  = useState<RemoveTarget  | null>(null);
   const [replaceTarget, setReplaceTarget] = useState<ReplaceTarget | null>(null);
+  const [addTarget,     setAddTarget]     = useState<AddTarget     | null>(null);
 
   // ── Checkout state ────────────────────────────────────────────────────────────
 
@@ -1385,6 +1403,17 @@ export default function OrderFlow({
       include_macros_in_rest: spread, created_at: new Date().toISOString(),
     };
     setRemoveTarget(null);
+    applyChange([log]);
+  }
+
+  function handleAddMeal(newId: number) {
+    if (!addTarget) return;
+    const log: ChangeLog = {
+      date: addTarget.date, meal_key: `${addTarget.mealType}-add-${Date.now()}`,
+      meal_type: addTarget.mealType, new_recipe_id: newId,
+      created_at: new Date().toISOString(),
+    };
+    setAddTarget(null);
     applyChange([log]);
   }
 
@@ -1818,6 +1847,7 @@ export default function OrderFlow({
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
               onReplaceMeal={meal => setReplaceTarget({ date: day.date, meal })}
+              onAddMeal={mealType => setAddTarget({ date: day.date, mealType })}
             />
           ))}
         </div>
@@ -1871,6 +1901,20 @@ export default function OrderFlow({
             }
             onClose={() => setReplaceTarget(null)}
             onSelect={handleReplaceMeal}
+          />
+        )}
+        {addTarget && (
+          <ReplaceMealSheet
+            mode="add"
+            meal={{ meal_type: addTarget.mealType }}
+            recipes={
+              orderableWeeks.find(w =>
+                addTarget.date >= w.week_start_date &&
+                addTarget.date <= w.week_end_date
+              )?.recipes ?? allRecipes
+            }
+            onClose={() => setAddTarget(null)}
+            onSelect={handleAddMeal}
           />
         )}
         <style>{`@keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }`}</style>
