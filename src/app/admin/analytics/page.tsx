@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
@@ -46,12 +45,6 @@ function Bar({ label, count, max }: { label: string; count: number; max: number 
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/sign-in");
-
-  const profileRes = await supabase.from("user").select("*").eq("id", user.id).single();
-  const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
-  if (profile?.role !== "admin") redirect("/home");
 
   const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const since7  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();

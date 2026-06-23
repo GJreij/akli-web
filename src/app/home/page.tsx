@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/types";
 import HomeDashboard from "@/components/HomeDashboard";
 
 export default async function HomePage() {
@@ -35,6 +36,9 @@ export default async function HomePage() {
       .limit(1)
       .single(),
   ]);
+
+  const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
+  if (profile?.role === "admin") redirect("/admin");
 
   // Flatten recipes from the join, deduplicate, then shuffle so home shows a random 5
   type RecipeRow = {

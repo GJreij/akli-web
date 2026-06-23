@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/types";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -26,7 +27,14 @@ export default function SignInPage() {
       return;
     }
 
-    router.push("/home");
+    const { data: { user } } = await supabase.auth.getUser();
+    let isAdmin = false;
+    if (user) {
+      const { data: profile } = await supabase.from("user").select("*").eq("id", user.id).single();
+      isAdmin = (profile as Database["public"]["Tables"]["user"]["Row"] | null)?.role === "admin";
+    }
+
+    router.push(isAdmin ? "/admin" : "/home");
     router.refresh();
   }
 
