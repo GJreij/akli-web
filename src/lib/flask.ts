@@ -209,3 +209,142 @@ export async function updateMealPlan(
   if (!res.ok) throw new Error(`update_meal_plan error ${res.status}`);
   return res.json();
 }
+
+// ─── /ingredients-to-buy ─────────────────────────────────────────────────────
+
+export interface IngredientToBuy {
+  ingredient_id: number;
+  name: string;
+  unit: string | null;
+  total_quantity: number;
+}
+
+export async function getIngredientsToBuy(
+  start_date: string,
+  end_date: string,
+  opts?: { recipe?: string; client?: string; delivery_slot?: string }
+): Promise<IngredientToBuy[]> {
+  const params = new URLSearchParams({ start_date, end_date });
+  if (opts?.recipe) params.set("recipe", opts.recipe);
+  if (opts?.client) params.set("client", opts.client);
+  if (opts?.delivery_slot) params.set("delivery_slot", opts.delivery_slot);
+
+  const res = await fetch(`${FLASK_URL}/ingredients-to-buy?${params.toString()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`ingredients_to_buy error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ─── /cooking/overview ───────────────────────────────────────────────────────
+
+export interface CookingIngredient {
+  ingredient_id: number;
+  name: string;
+  unit: string | null;
+  total_quantity?: number;
+  quantity?: number;
+}
+
+export interface CookingComment {
+  user_id: string;
+  name: string;
+  comment: string | null;
+  updated_at: string | null;
+  created_at: string | null;
+}
+
+export interface CookingSubrecipe {
+  subrecipe_id: number;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  status: "completed" | "in_progress" | "pending";
+  progress: number;
+  total_servings: number;
+  selected_meal_plan_day_recipe_serving_id: number[];
+  ingredients_needed: CookingIngredient[];
+}
+
+export interface CookingRecipe {
+  recipe_id: number;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  meal_plan_day_recipe_ids: number[];
+  earliest_date: string;
+  cooking_status: string | null;
+  progress: number;
+  ingredients_needed: CookingIngredient[];
+  subrecipes: CookingSubrecipe[];
+  comments: CookingComment[];
+}
+
+export interface CookingOverviewFilters {
+  client_id?: string;
+  delivery_slot_id?: string;
+  recipe_id?: string;
+  subrecipe_id?: string;
+  cooking_status?: string;
+}
+
+export async function getCookingOverview(
+  start_date: string,
+  end_date: string,
+  filters?: CookingOverviewFilters
+): Promise<CookingRecipe[]> {
+  const res = await fetch(`${FLASK_URL}/cooking/overview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_date, end_date, ...filters }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`cooking_overview error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ─── /portioning/summary ─────────────────────────────────────────────────────
+
+export interface PortioningClient {
+  meal_plan_day_recipe_serving_id: number;
+  delivery_date: string | null;
+  delivery_slot: { id: number; start_time: string; end_time: string } | null;
+  client: { id: string; name: string | null; last_name: string | null } | null;
+  servings_for_client: number | null;
+  cooking_status: string | null;
+  portioning_status: string | null;
+  weight_after_cooking: number;
+  has_weight_after_cooking: boolean;
+}
+
+export interface PortioningSummary {
+  subrecipe: { id: number; name: string | null };
+  summary: {
+    total_subrecipe_servings_for_batch: number;
+    ingredients: {
+      ingredient_id: number;
+      name: string;
+      unit: string | null;
+      quantity_per_subrecipe: number;
+      serving_per_unit: number;
+      total_units_for_batch: number;
+      total_servings_equivalent: number;
+      optional: boolean | null;
+    }[];
+  };
+  clients: PortioningClient[];
+}
+
+export async function getPortioningSummary(
+  subrecipe_id: number,
+  meal_plan_day_recipe_ids: number[],
+  cooking_status: string = "completed"
+): Promise<{ data?: PortioningSummary; error?: string }> {
+  const res = await fetch(`${FLASK_URL}/portioning/summary`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ subrecipe_id, meal_plan_day_recipe_ids, cooking_status }),
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) return { error: json.error ?? `portioning_summary error ${res.status}` };
+  return { data: json };
+}
