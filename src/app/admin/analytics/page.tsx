@@ -1,7 +1,11 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
-type EventRow = Database["public"]["Tables"]["analytics_event"]["Row"];
+type EventRow = Pick<
+  Database["public"]["Tables"]["analytics_event"]["Row"],
+  "id" | "anon_id" | "session_id" | "user_id" | "event_name" | "event_category" | "page" | "device_type" | "metadata" | "created_at"
+>;
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -43,16 +47,18 @@ function Bar({ label, count, max }: { label: string; count: number; max: number 
   );
 }
 
-export default async function AnalyticsPage() {
+const EVENT_COLUMNS = "id,anon_id,session_id,user_id,event_name,event_category,page,device_type,metadata,created_at";
+
+async function AnalyticsData() {
   const supabase = await createClient();
 
   const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const since7  = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
 
   const [eventsRes, recentRes, landingRes] = await Promise.all([
-    supabase.from("analytics_event").select("*").gte("created_at", since30).neq("event_category", "landing").order("created_at", { ascending: false }).limit(10000),
-    supabase.from("analytics_event").select("*").neq("event_category", "landing").order("created_at", { ascending: false }).limit(100),
-    supabase.from("analytics_event").select("*").gte("created_at", since30).eq("event_category", "landing").order("created_at", { ascending: false }).limit(10000),
+    supabase.from("analytics_event").select(EVENT_COLUMNS).gte("created_at", since30).neq("event_category", "landing").order("created_at", { ascending: false }).limit(10000),
+    supabase.from("analytics_event").select(EVENT_COLUMNS).neq("event_category", "landing").order("created_at", { ascending: false }).limit(100),
+    supabase.from("analytics_event").select(EVENT_COLUMNS).gte("created_at", since30).eq("event_category", "landing").order("created_at", { ascending: false }).limit(10000),
   ]);
 
   // App events only — landing-page traffic is tracked separately below so it
@@ -151,15 +157,7 @@ export default async function AnalyticsPage() {
   const calcInteractions = landing.filter(e => e.event_name === "calculator_interacted").length;
 
   return (
-    <div style={{ minHeight: "100vh", background: C.offWhite, padding: "24px 20px 60px" }}>
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: C.primary, margin: 0 }}>
-            Analytics
-          </h1>
-          <span style={{ fontSize: 12, color: C.light }}>Last 30 days</span>
-        </div>
-
+    <>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
           <Card label="Visitors (30d)" value={String(s30.visitors)} sub={`${s7.visitors} in last 7d`} />
           <Card label="Sessions (30d)" value={String(s30.sessions)} sub={`${s7.sessions} in last 7d`} />
@@ -261,6 +259,33 @@ export default async function AnalyticsPage() {
             </table>
           </div>
         </Section>
+    </>
+  );
+}
+
+function AnalyticsFallback() {
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", flex: "1 1 140px", height: 64 }} />
+      ))}
+    </div>
+  );
+}
+
+export default function AnalyticsPage() {
+  return (
+    <div style={{ minHeight: "100vh", background: C.offWhite, padding: "24px 20px 60px" }}>
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: C.primary, margin: 0 }}>
+            Analytics
+          </h1>
+          <span style={{ fontSize: 12, color: C.light }}>Last 30 days</span>
+        </div>
+        <Suspense fallback={<AnalyticsFallback />}>
+          <AnalyticsData />
+        </Suspense>
       </div>
     </div>
   );

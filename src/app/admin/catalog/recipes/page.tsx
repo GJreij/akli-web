@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, th, td, C } from "@/components/admin/ui";
 import { createRecipe } from "./actions";
 
-type Recipe = Database["public"]["Tables"]["recipe"]["Row"];
+type Recipe = Pick<Database["public"]["Tables"]["recipe"]["Row"], "id" | "name" | "could_be_breakfast" | "could_be_lunch" | "could_be_dinner" | "could_be_snack" | "prep_time" | "cook_time" | "always_available">;
 
 function mealLabel(r: Recipe): string {
   const labels = [];
@@ -19,7 +19,7 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
   const { q } = await searchParams;
   const supabase = await createClient();
 
-  let query = supabase.from("recipe").select("*").order("name");
+  let query = supabase.from("recipe").select("id,name,could_be_breakfast,could_be_lunch,could_be_dinner,could_be_snack,prep_time,cook_time,always_available").order("name");
   if (q) query = query.ilike("name", `%${q}%`);
   const { data } = await query;
   const recipes = (data ?? []) as Recipe[];

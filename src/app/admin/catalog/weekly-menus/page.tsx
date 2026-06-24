@@ -4,11 +4,11 @@ import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, th, td, C } from "@/components/admin/ui";
 import { createWeeklyMenu } from "./actions";
 
-type WeeklyMenu = Database["public"]["Tables"]["weekly_menu"]["Row"];
+type WeeklyMenu = Pick<Database["public"]["Tables"]["weekly_menu"]["Row"], "id" | "name" | "week_start_date" | "week_end_date">;
 
 export default async function WeeklyMenusPage() {
   const supabase = await createClient();
-  const { data } = await supabase.from("weekly_menu").select("*").order("week_start_date", { ascending: false });
+  const { data } = await supabase.from("weekly_menu").select("id,name,week_start_date,week_end_date").order("week_start_date", { ascending: false });
   const menus = (data ?? []) as WeeklyMenu[];
 
   const today = new Date().toISOString().slice(0, 10);

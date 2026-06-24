@@ -4,13 +4,13 @@ import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, th, td, C } from "@/components/admin/ui";
 import { createSubrecipe } from "./actions";
 
-type Subrecipe = Database["public"]["Tables"]["subrecipe"]["Row"];
+type Subrecipe = Pick<Database["public"]["Tables"]["subrecipe"]["Row"], "id" | "name" | "prep_time" | "kcal" | "freezable" | "max_serving">;
 
 export default async function SubrecipesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   const supabase = await createClient();
 
-  let query = supabase.from("subrecipe").select("*").order("name");
+  let query = supabase.from("subrecipe").select("id,name,prep_time,kcal,freezable,max_serving").order("name");
   if (q) query = query.ilike("name", `%${q}%`);
   const { data } = await query;
   const subrecipes = (data ?? []) as Subrecipe[];
