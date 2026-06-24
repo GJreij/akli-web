@@ -91,7 +91,7 @@ export default function SignInPage() {
 
           <p className="text-center text-sm text-akli-muted mt-6">
             Don&apos;t have an account?{" "}
-            <Link href="/onboarding/goal" className="text-akli-green font-medium underline">
+            <Link href="/" className="text-akli-green font-medium underline">
               Get started
             </Link>
           </p>

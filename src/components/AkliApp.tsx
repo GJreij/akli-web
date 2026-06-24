@@ -157,7 +157,7 @@ export default function AkliApp({
   const [dobYear, setDobYear]   = useState("");
   const [height, setHeight]     = useState(170);
   const [weight, setWeight]     = useState(70);
-  const [activity, setActivity] = useState(1.375);
+  const [activity, setActivity] = useState(1.3);
   const [kcalIn, setKcalIn]     = useState(2000);
   const [dietType, setDietType] = useState<DietType>("balanced");
   const [kcalFixed, setKcalFixed]   = useState(2100);
@@ -902,10 +902,10 @@ export default function AkliApp({
                 <p style={{ fontSize: 13, color: C.muted, margin: "0 0 18px" }}>Outside of meal prep, day to day.</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {[
-                    { val: 1.2,   label: "Sedentary",         sub: "Desk job, little exercise" },
-                    { val: 1.375, label: "Lightly active",    sub: "1 to 3 light sessions a week" },
-                    { val: 1.55,  label: "Moderately active", sub: "3 to 5 sessions a week" },
-                    { val: 1.725, label: "Very active",       sub: "6 to 7 sessions a week" },
+                    { val: 1.2,  label: "Sedentary",         sub: "Desk job, no regular workouts" },
+                    { val: 1.3,  label: "Lightly active",    sub: "Desk job + 1 to 3 workouts a week, or an on-your-feet job (teaching, retail, nursing) with no workouts" },
+                    { val: 1.45, label: "Moderately active",  sub: "On-your-feet job + 1 to 3 workouts a week, or a desk job + 4 to 5 workouts a week" },
+                    { val: 1.6,  label: "Very active",        sub: "Physically demanding job (labor, delivery, serving) + regular training, or daily intense training" },
                   ].map(({ val, label, sub }) => (
                     <button key={val} className={`opt-row${activity === val ? " selected" : ""}`}
                       onClick={() => setActivity(val)}>
