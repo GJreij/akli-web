@@ -139,8 +139,12 @@ function copyTextFallback(text: string): Promise<void> {
   });
 }
 
-function BadgeCodeRow({ code, discountValue, endDate }: { code: string; discountValue: number; endDate: string | null }) {
+function BadgeCodeRow({ code, discountValue, startDate, endDate }: {
+  code: string; discountValue: number; startDate: string | null; endDate: string | null;
+}) {
   const [copied, setCopied] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+  const scheduled = !!startDate && startDate > today;
 
   function handleCopy() {
     copyText(code).then(() => {
@@ -154,7 +158,9 @@ function BadgeCodeRow({ code, discountValue, endDate }: { code: string; discount
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
           <span style={{ fontWeight: 700, letterSpacing: "0.04em" }}>{code}</span> — {discountValue}% off
-          {endDate && <span style={{ color: "rgba(255,255,255,0.6)" }}> · expires {fmtBadgeDate(endDate)}</span>}
+          {scheduled
+            ? <span style={{ color: "rgba(255,255,255,0.6)" }}> · starts {fmtBadgeDate(startDate)}</span>
+            : endDate && <span style={{ color: "rgba(255,255,255,0.6)" }}> · expires {fmtBadgeDate(endDate)}</span>}
         </span>
       </div>
       <button
@@ -172,7 +178,9 @@ function BadgeCodeRow({ code, discountValue, endDate }: { code: string; discount
   );
 }
 
-function AffiliateBadge({ tier, codes }: { tier: string; codes: { code: string; discount_value: number; end_date: string | null }[] }) {
+function AffiliateBadge({ tier, codes }: {
+  tier: string; codes: { code: string; discount_value: number; start_date: string | null; end_date: string | null }[];
+}) {
   const style = TIER_STYLE[tier];
   if (!style) return null;
   const Icon = style.icon;
@@ -198,7 +206,7 @@ function AffiliateBadge({ tier, codes }: { tier: string; codes: { code: string; 
           <p style={{ margin: "2px 0 0", fontSize: 10.5, color: "rgba(255,255,255,0.7)" }}>No active codes right now.</p>
         ) : (
           codes.map(c => (
-            <BadgeCodeRow key={c.code} code={c.code} discountValue={c.discount_value} endDate={c.end_date} />
+            <BadgeCodeRow key={c.code} code={c.code} discountValue={c.discount_value} startDate={c.start_date} endDate={c.end_date} />
           ))
         )}
       </div>
@@ -314,7 +322,7 @@ export default function HomeDashboard({
   profile:      UserRow | null;
   macroTarget:  MacroRow | null;
   menuRecipes?: RecipeRow[];
-  affiliateInfo?: { tier: string; codes: { code: string; discount_value: number; end_date: string | null }[] } | null;
+  affiliateInfo?: { tier: string; codes: { code: string; discount_value: number; start_date: string | null; end_date: string | null }[] } | null;
 }) {
   const router = useRouter();
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);

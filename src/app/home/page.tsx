@@ -49,22 +49,29 @@ export default async function HomePage() {
     .maybeSingle();
   const affiliateRow = affiliateRowRes.data as { id: number; tier: string } | null;
 
-  let affiliateInfo: { tier: string; codes: { code: string; discount_value: number; end_date: string | null }[] } | null = null;
+  let affiliateInfo: {
+    tier: string;
+    codes: { code: string; discount_value: number; start_date: string | null; end_date: string | null }[];
+  } | null = null;
   if (affiliateRow) {
     // All of this affiliate's active codes (audience + personal), not just
     // one — an affiliate can have more than one code over time.
     const codesRes = await supabase
       .from("promo_codes")
-      .select("code,discount_value,end_date")
+      .select("code,discount_value,start_date,end_date")
       .eq("affiliate_id", affiliateRow.id)
       .eq("is_active", true)
       .order("created_at", { ascending: false });
-    const codes = (codesRes.data ?? []) as { code: string | null; discount_value: number | null; end_date: string | null }[];
+    type CodeRow = { code: string | null; discount_value: number | null; start_date: string | null; end_date: string | null };
+    const codes = (codesRes.data ?? []) as CodeRow[];
     affiliateInfo = {
       tier: affiliateRow.tier,
       codes: codes
-        .filter((c): c is { code: string; discount_value: number; end_date: string | null } => !!c.code)
-        .map(c => ({ code: c.code, discount_value: c.discount_value ?? 0, end_date: c.end_date })),
+        // Expired codes are dead weight on the badge — hide them entirely.
+        // Scheduled (future start_date) codes still show, just with a
+        // "starts on" label instead of being presented as usable today.
+        .filter((c): c is CodeRow & { code: string } => !!c.code && (!c.end_date || c.end_date >= today))
+        .map(c => ({ code: c.code, discount_value: c.discount_value ?? 0, start_date: c.start_date, end_date: c.end_date })),
     };
   }
 
