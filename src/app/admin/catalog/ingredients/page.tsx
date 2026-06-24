@@ -4,13 +4,13 @@ import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, th, td, C } from "@/components/admin/ui";
 import { createIngredient } from "./actions";
 
-type Ingredient = Database["public"]["Tables"]["ingredient"]["Row"];
+type Ingredient = Pick<Database["public"]["Tables"]["ingredient"]["Row"], "id" | "name" | "unit" | "kcal" | "protein" | "carbs" | "fat">;
 
 export default async function IngredientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
   const supabase = await createClient();
 
-  let query = supabase.from("ingredient").select("*").order("name");
+  let query = supabase.from("ingredient").select("id,name,unit,kcal,protein,carbs,fat").order("name");
   if (q) query = query.ilike("name", `%${q}%`);
   const { data } = await query;
   const ingredients = (data ?? []) as Ingredient[];

@@ -1,13 +1,14 @@
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
-type Delivery = Database["public"]["Tables"]["deliveries"]["Row"];
-type DeliverySlot = Database["public"]["Tables"]["delivery_slots"]["Row"];
-type UserRow = Database["public"]["Tables"]["user"]["Row"];
-type KitchenClosure = Database["public"]["Tables"]["kitchen_closure"]["Row"];
-type MealPlanDay = Database["public"]["Tables"]["meal_plan_day"]["Row"];
-type MealPlanDayRecipe = Database["public"]["Tables"]["meal_plan_day_recipe"]["Row"];
-type Payment = Database["public"]["Tables"]["payment"]["Row"];
+type Delivery = Pick<Database["public"]["Tables"]["deliveries"]["Row"], "id" | "user_id" | "delivery_slot_id" | "delivery_address" | "status">;
+type DeliverySlot = Pick<Database["public"]["Tables"]["delivery_slots"]["Row"], "id" | "start_time" | "end_time">;
+type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name">;
+type KitchenClosure = Pick<Database["public"]["Tables"]["kitchen_closure"]["Row"], "reason">;
+type MealPlanDay = Pick<Database["public"]["Tables"]["meal_plan_day"]["Row"], "id">;
+type MealPlanDayRecipe = Pick<Database["public"]["Tables"]["meal_plan_day_recipe"]["Row"], "cooking_status" | "packaging_status">;
+type Payment = Pick<Database["public"]["Tables"]["payment"]["Row"], "id" | "amount" | "currency" | "provider" | "status">;
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -50,7 +51,7 @@ function StatusPill({ status }: { status: string | null }) {
   );
 }
 
-export default async function AdminOperationsPage() {
+async function OperationsData() {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -60,10 +61,10 @@ export default async function AdminOperationsPage() {
     closuresRes,
     mealPlanDaysRes,
   ] = await Promise.all([
-    supabase.from("deliveries").select("*").eq("delivery_date", today),
-    supabase.from("delivery_slots").select("*"),
-    supabase.from("kitchen_closure").select("*").eq("closure_date", today),
-    supabase.from("meal_plan_day").select("*").eq("date", today),
+    supabase.from("deliveries").select("id,user_id,delivery_slot_id,delivery_address,status").eq("delivery_date", today),
+    supabase.from("delivery_slots").select("id,start_time,end_time"),
+    supabase.from("kitchen_closure").select("reason").eq("closure_date", today),
+    supabase.from("meal_plan_day").select("id").eq("date", today),
   ]);
 
   const deliveries = (deliveriesRes.data ?? []) as Delivery[];
@@ -76,13 +77,13 @@ export default async function AdminOperationsPage() {
 
   const [usersRes, recipesRes, paymentsRes] = await Promise.all([
     userIds.length
-      ? supabase.from("user").select("*").in("id", userIds)
+      ? supabase.from("user").select("id,name,last_name").in("id", userIds)
       : Promise.resolve({ data: [] as UserRow[] }),
     mpdIds.length
-      ? supabase.from("meal_plan_day_recipe").select("*").in("meal_plan_day_id", mpdIds)
+      ? supabase.from("meal_plan_day_recipe").select("cooking_status,packaging_status").in("meal_plan_day_id", mpdIds)
       : Promise.resolve({ data: [] as MealPlanDayRecipe[] }),
     mpdIds.length
-      ? supabase.from("payment").select("*").in("meal_plan_day_id", mpdIds)
+      ? supabase.from("payment").select("id,amount,currency,provider,status").in("meal_plan_day_id", mpdIds)
       : Promise.resolve({ data: [] as Payment[] }),
   ]);
 
@@ -111,17 +112,7 @@ export default async function AdminOperationsPage() {
   const sortedDeliveries = [...deliveries].sort((a, b) => (a.delivery_slot_id ?? 0) - (b.delivery_slot_id ?? 0));
 
   return (
-    <div style={{ padding: "24px 20px 60px" }}>
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
-          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: C.primary, margin: 0 }}>
-            Operations
-          </h1>
-          <span style={{ fontSize: 12, color: C.light }}>
-            {new Date(today).toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "long" })}
-          </span>
-        </div>
-
+    <>
         {closures.length > 0 && (
           <div style={{
             background: `${C.error}12`, border: `1px solid ${C.error}40`, borderRadius: 12,
@@ -203,6 +194,36 @@ export default async function AdminOperationsPage() {
             </table>
           )}
         </Section>
+    </>
+  );
+}
+
+function OperationsFallback() {
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 16px", flex: "1 1 140px", height: 64 }} />
+      ))}
+    </div>
+  );
+}
+
+export default function AdminOperationsPage() {
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <div style={{ padding: "24px 20px 60px" }}>
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+          <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: C.primary, margin: 0 }}>
+            Operations
+          </h1>
+          <span style={{ fontSize: 12, color: C.light }}>
+            {new Date(today).toLocaleDateString("en-GB", { weekday: "long", day: "2-digit", month: "long" })}
+          </span>
+        </div>
+        <Suspense fallback={<OperationsFallback />}>
+          <OperationsData />
+        </Suspense>
       </div>
     </div>
   );

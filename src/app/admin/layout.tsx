@@ -8,8 +8,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/home");
 
-  const profileRes = await supabase.from("user").select("*").eq("id", user.id).single();
-  const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
+  const profileRes = await supabase.from("user").select("role").eq("id", user.id).single();
+  const profile = profileRes.data as Pick<Database["public"]["Tables"]["user"]["Row"], "role"> | null;
   if (profile?.role !== "admin") redirect("/home");
 
   return (

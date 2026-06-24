@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
-type UserRow = Database["public"]["Tables"]["user"]["Row"];
+type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name" | "email" | "phone_number" | "role" | "created_at">;
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -23,16 +24,69 @@ function RolePill({ role }: { role: string | null }) {
   );
 }
 
-export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+function TableFallback() {
+  return (
+    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, height: 280 }} />
+  );
+}
+
+async function UsersTable({ q }: { q?: string }) {
   const supabase = await createClient();
 
-  let query = supabase.from("user").select("*").order("created_at", { ascending: false }).limit(200);
+  let query = supabase.from("user").select("id,name,last_name,email,phone_number,role,created_at").order("created_at", { ascending: false }).limit(200);
   if (q) {
     query = query.or(`name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,phone_number.ilike.%${q}%`);
   }
   const { data } = await query;
   const users = (data ?? []) as UserRow[];
+
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: C.light }}>{users.length} shown</span>
+      </div>
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
+        <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ textAlign: "left", color: C.light, borderBottom: `1px solid ${C.border}` }}>
+              <th style={{ padding: "10px 14px" }}>Name</th>
+              <th style={{ padding: "10px 14px" }}>Email</th>
+              <th style={{ padding: "10px 14px" }}>Phone</th>
+              <th style={{ padding: "10px 14px" }}>Role</th>
+              <th style={{ padding: "10px 14px" }}>Joined</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: "24px 14px", textAlign: "center", color: C.light }}>
+                  No users found.
+                </td>
+              </tr>
+            ) : users.map(u => (
+              <tr key={u.id} style={{ borderBottom: `1px solid ${C.offWhite}` }}>
+                <td style={{ padding: "10px 14px" }}>
+                  <Link href={`/admin/users/${u.id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
+                    {`${u.name ?? ""} ${u.last_name ?? ""}`.trim() || "—"}
+                  </Link>
+                </td>
+                <td style={{ padding: "10px 14px", color: C.muted }}>{u.email ?? "—"}</td>
+                <td style={{ padding: "10px 14px", color: C.muted }}>{u.phone_number ?? "—"}</td>
+                <td style={{ padding: "10px 14px" }}><RolePill role={u.role} /></td>
+                <td style={{ padding: "10px 14px", color: C.light, whiteSpace: "nowrap" }}>
+                  {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const { q } = await searchParams;
 
   return (
     <div style={{ padding: "24px 20px 60px" }}>
@@ -41,7 +95,6 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: C.primary, margin: 0 }}>
             Users
           </h1>
-          <span style={{ fontSize: 12, color: C.light }}>{users.length} shown</span>
         </div>
 
         <form style={{ marginBottom: 16 }}>
@@ -57,42 +110,9 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
           />
         </form>
 
-        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
-          <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: C.light, borderBottom: `1px solid ${C.border}` }}>
-                <th style={{ padding: "10px 14px" }}>Name</th>
-                <th style={{ padding: "10px 14px" }}>Email</th>
-                <th style={{ padding: "10px 14px" }}>Phone</th>
-                <th style={{ padding: "10px 14px" }}>Role</th>
-                <th style={{ padding: "10px 14px" }}>Joined</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ padding: "24px 14px", textAlign: "center", color: C.light }}>
-                    No users found.
-                  </td>
-                </tr>
-              ) : users.map(u => (
-                <tr key={u.id} style={{ borderBottom: `1px solid ${C.offWhite}` }}>
-                  <td style={{ padding: "10px 14px" }}>
-                    <Link href={`/admin/users/${u.id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
-                      {`${u.name ?? ""} ${u.last_name ?? ""}`.trim() || "—"}
-                    </Link>
-                  </td>
-                  <td style={{ padding: "10px 14px", color: C.muted }}>{u.email ?? "—"}</td>
-                  <td style={{ padding: "10px 14px", color: C.muted }}>{u.phone_number ?? "—"}</td>
-                  <td style={{ padding: "10px 14px" }}><RolePill role={u.role} /></td>
-                  <td style={{ padding: "10px 14px", color: C.light, whiteSpace: "nowrap" }}>
-                    {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Suspense fallback={<TableFallback />} key={q ?? ""}>
+          <UsersTable q={q} />
+        </Suspense>
       </div>
     </div>
   );
