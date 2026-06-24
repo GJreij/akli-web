@@ -1174,8 +1174,57 @@ function clearDraft() {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+type VolumeDiscountRule = {
+  min_order_days: number;
+  discount_type: string;
+  discount_value: number;
+  max_discount_amount: number | null;
+};
+
+// Automatic, no-code volume discounts (separate from promo codes). These two
+// helpers share the same tier resolution so the displayed estimate and the
+// nudge message can never disagree with each other.
+function nextVolumeRule(rules: VolumeDiscountRule[], dayCount: number): VolumeDiscountRule | null {
+  const sorted = [...rules].sort((a, b) => a.min_order_days - b.min_order_days);
+  return sorted.find(r => r.min_order_days > dayCount) ?? null;
+}
+
+function activeVolumeRule(rules: VolumeDiscountRule[], dayCount: number): VolumeDiscountRule | null {
+  const sorted = [...rules].sort((a, b) => a.min_order_days - b.min_order_days);
+  return [...sorted].reverse().find(r => dayCount >= r.min_order_days) ?? null;
+}
+
+function fmtRuleDiscount(r: VolumeDiscountRule) {
+  const base = r.discount_type === "percentage" ? `${r.discount_value}%` : `$${r.discount_value}`;
+  return r.max_discount_amount != null ? `${base} (max $${r.max_discount_amount})` : base;
+}
+
+// What the customer would actually pay at this estimate if active right now —
+// used so the displayed number never silently includes a discount the banner
+// doesn't also state, and vice versa.
+function applyVolumeDiscount(rule: VolumeDiscountRule, amount: number): number {
+  let discount = rule.discount_type === "percentage" ? amount * (rule.discount_value / 100) : rule.discount_value;
+  if (rule.max_discount_amount != null) discount = Math.min(discount, rule.max_discount_amount);
+  return Math.max(amount - Math.min(discount, amount), 0);
+}
+
+function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): string | null {
+  if (rules.length === 0 || dayCount === 0) return null;
+  const next = nextVolumeRule(rules, dayCount);
+  if (next) {
+    const daysToGo = next.min_order_days - dayCount;
+    return `Order ${daysToGo} more day${daysToGo !== 1 ? "s" : ""} for an automatic ${fmtRuleDiscount(next)} off!`;
+  }
+  const active = activeVolumeRule(rules, dayCount);
+  if (active) {
+    return `${fmtRuleDiscount(active)} off applied automatically for ordering ${active.min_order_days}+ days.`;
+  }
+  return null;
+}
+
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
+  volumeDiscountRules = [],
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1185,6 +1234,7 @@ export default function OrderFlow({
   initialPrefs?: Record<number, PrefRating>;
   addresses?: AddressRow[];
   orderedDays?: string[];
+  volumeDiscountRules?: VolumeDiscountRule[];
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
@@ -1782,10 +1832,33 @@ export default function OrderFlow({
                     : `${dayCount} day${dayCount !== 1 ? "s" : ""} · ${includedCount} meal${includedCount !== 1 ? "s" : ""}/day`
               }
             </span>
-            {dayCount > 0 && estDayPrice !== null && (
-              <span style={{ fontSize: 13, color: C.muted }}>~${(estDayPrice * dayCount).toFixed(0)} est.</span>
-            )}
+            {dayCount > 0 && estDayPrice !== null && (() => {
+              const rawEstimate = estDayPrice * dayCount;
+              const active = activeVolumeRule(volumeDiscountRules, dayCount);
+              const discountedEstimate = active ? applyVolumeDiscount(active, rawEstimate) : null;
+              return discountedEstimate !== null ? (
+                <span style={{ fontSize: 13 }}>
+                  <span style={{ color: C.light, textDecoration: "line-through", marginRight: 5 }}>
+                    ${rawEstimate.toFixed(0)}
+                  </span>
+                  <span style={{ color: C.tealDark, fontWeight: 700 }}>~${discountedEstimate.toFixed(0)} est.</span>
+                </span>
+              ) : (
+                <span style={{ fontSize: 13, color: C.muted }}>~${rawEstimate.toFixed(0)} est.</span>
+              );
+            })()}
           </div>
+          {(() => {
+            const deal = volumeDealMessage(volumeDiscountRules, dayCount);
+            return deal ? (
+              <p style={{
+                margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: C.tealDark,
+                background: "#e8f4f4", borderRadius: 8, padding: "7px 10px", textAlign: "center",
+              }}>
+                {deal}
+              </p>
+            ) : null;
+          })()}
           <button
             className="btn-primary"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
@@ -1946,10 +2019,19 @@ export default function OrderFlow({
               <span style={{ fontSize: 13.5 }}>{bd?.total_price_before_discount != null ? `$${bd.total_price_before_discount.toFixed(2)}` : estDayPrice !== null ? `$${(estDayPrice * dayCount).toFixed(2)}` : "—"}</span>
             </div>
 
-            {(bd?.discount_amount ?? 0) > 0 && (
+            {(bd?.volume_discount?.amount ?? 0) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, color: C.tealDark }}>
+                <span style={{ fontSize: 13 }}>
+                  {bd?.volume_discount.rule_name ?? "Longer-order discount"} ({dayCount}+ days)
+                </span>
+                <span style={{ fontSize: 13 }}>-${bd!.volume_discount.amount.toFixed(2)}</span>
+              </div>
+            )}
+
+            {(bd?.promo_discount_amount ?? 0) > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, color: C.tealDark }}>
                 <span style={{ fontSize: 13 }}>Promo discount</span>
-                <span style={{ fontSize: 13 }}>-${bd!.discount_amount.toFixed(2)}</span>
+                <span style={{ fontSize: 13 }}>-${bd!.promo_discount_amount.toFixed(2)}</span>
               </div>
             )}
 
