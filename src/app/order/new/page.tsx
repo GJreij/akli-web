@@ -38,7 +38,7 @@ export default async function OrderNewPage() {
   const today = beirutISODate(0);
   const minOrderable = beirutISODate(2); // 48h lead time — earliest day a new order can cover
 
-  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes] = await Promise.all([
+  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*").eq("user_id", user.id)
       .order("created_at", { ascending: false }).limit(1).single(),
@@ -60,7 +60,21 @@ export default async function OrderNewPage() {
       .select("date, meal_plan!inner(user_id)")
       .eq("meal_plan.user_id", user.id)
       .gte("date", today),
+    supabase.from("automatic_discount_rules")
+      .select("min_order_days,discount_type,discount_value,max_discount_amount,start_date,end_date")
+      .eq("is_active", true)
+      .order("min_order_days", { ascending: true }),
   ]);
+
+  // Filter to rules whose date window covers today — done here rather than in
+  // the query so a missing start/end date (always-on rule) is simple to express.
+  type VolumeRuleRow = {
+    min_order_days: number; discount_type: string; discount_value: number;
+    max_discount_amount: number | null; start_date: string | null; end_date: string | null;
+  };
+  const activeVolumeRules: VolumeRuleRow[] = ((volumeRulesRes.data ?? []) as VolumeRuleRow[]).filter(
+    r => (!r.start_date || today >= r.start_date) && (!r.end_date || today <= r.end_date)
+  );
 
   const orderedDays = ((orderedDaysRes.data ?? []) as unknown as { date: string | null }[])
     .map(d => d.date)
@@ -106,6 +120,7 @@ export default async function OrderNewPage() {
       initialPrefs={initialPrefs}
       addresses={(addressesRes.data ?? []) as Database["public"]["Tables"]["user_delivery_address"]["Row"][]}
       orderedDays={orderedDays}
+      volumeDiscountRules={activeVolumeRules}
     />
   );
 }

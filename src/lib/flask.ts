@@ -133,8 +133,15 @@ export interface CheckoutSummaryResponse {
       delivery_days: number;
       delivery_fee: number;
       is_free_delivery: boolean;
+      waived_by_promo: boolean;
     };
     final_price: number;
+    volume_discount: {
+      amount: number;
+      rule_name: string | null;
+      min_order_days: number | null;
+    };
+    promo_discount_amount: number;
     promo_code_status: "valid" | "invalid" | "not_provided";
     promo_code_used: string | null;
     promo_message: string;

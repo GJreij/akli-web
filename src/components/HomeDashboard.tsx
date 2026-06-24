@@ -4,7 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
-import { IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil } from "@tabler/icons-react";
+import {
+  IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil,
+  IconCrown, IconStar, IconUsers, IconCopy, IconCheck,
+} from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import DietWizard from "@/components/DietWizard";
 
@@ -93,6 +96,111 @@ function MacroRing({ p, c, f, kcal }: { p: number; c: number; f: number; kcal: n
           {kcal.toLocaleString("en-US")}
         </span>
         <span style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", marginTop: 3 }}>kcal</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Affiliate / Ambassador / Athlete badge ──────────────────────────────────
+
+const TIER_STYLE: Record<string, { label: string; icon: typeof IconCrown; gradient: string; glow: string }> = {
+  athlete:    { label: "Athlete",    icon: IconCrown, gradient: "linear-gradient(135deg, #e8c468, #b8860b)", glow: "rgba(232,196,104,0.45)" },
+  ambassador: { label: "Ambassador", icon: IconStar,  gradient: "linear-gradient(135deg, #9bd6d4, #437b7b)", glow: "rgba(103,177,176,0.4)" },
+  affiliate:  { label: "Affiliate",  icon: IconUsers, gradient: "linear-gradient(135deg, #d8c3a5, #bfa280)", glow: "rgba(191,162,128,0.4)" },
+};
+
+function fmtBadgeDate(d: string | null) {
+  if (!d) return null;
+  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// navigator.clipboard requires a secure context (HTTPS or localhost) — on a
+// plain-HTTP LAN address it's undefined or silently rejects, so fall back to
+// the legacy textarea+execCommand approach, which works everywhere.
+function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).catch(() => copyTextFallback(text));
+  }
+  return copyTextFallback(text);
+}
+
+function copyTextFallback(text: string): Promise<void> {
+  return new Promise(resolve => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try { document.execCommand("copy"); } catch { /* ignore */ }
+    document.body.removeChild(textarea);
+    resolve();
+  });
+}
+
+function BadgeCodeRow({ code, discountValue, endDate }: { code: string; discountValue: number; endDate: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    copyText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
+          <span style={{ fontWeight: 700, letterSpacing: "0.04em" }}>{code}</span> — {discountValue}% off
+          {endDate && <span style={{ color: "rgba(255,255,255,0.6)" }}> · expires {fmtBadgeDate(endDate)}</span>}
+        </span>
+      </div>
+      <button
+        onClick={handleCopy}
+        style={{
+          background: "rgba(255,255,255,0.25)", border: "none", borderRadius: 8,
+          padding: "4px 8px", display: "flex", alignItems: "center", gap: 4,
+          color: "#fff", fontSize: 10.5, fontWeight: 600, cursor: "pointer", flexShrink: 0,
+        }}
+      >
+        {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+function AffiliateBadge({ tier, codes }: { tier: string; codes: { code: string; discount_value: number; end_date: string | null }[] }) {
+  const style = TIER_STYLE[tier];
+  if (!style) return null;
+  const Icon = style.icon;
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 10,
+      background: style.gradient, borderRadius: 14, padding: "10px 14px",
+      marginBottom: 16, position: "relative",
+      boxShadow: `0 4px 16px ${style.glow}`,
+    }}>
+      <div style={{
+        width: 30, height: 30, borderRadius: "50%", background: "rgba(255,255,255,0.25)",
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1,
+      }}>
+        <Icon size={17} color="#fff" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: "#fff", letterSpacing: "0.02em" }}>
+          Akli {style.label}
+        </p>
+        {codes.length === 0 ? (
+          <p style={{ margin: "2px 0 0", fontSize: 10.5, color: "rgba(255,255,255,0.7)" }}>No active codes right now.</p>
+        ) : (
+          codes.map(c => (
+            <BadgeCodeRow key={c.code} code={c.code} discountValue={c.discount_value} endDate={c.end_date} />
+          ))
+        )}
       </div>
     </div>
   );
@@ -201,10 +309,12 @@ export default function HomeDashboard({
   profile,
   macroTarget,
   menuRecipes = [],
+  affiliateInfo = null,
 }: {
   profile:      UserRow | null;
   macroTarget:  MacroRow | null;
   menuRecipes?: RecipeRow[];
+  affiliateInfo?: { tier: string; codes: { code: string; discount_value: number; end_date: string | null }[] } | null;
 }) {
   const router = useRouter();
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
@@ -294,6 +404,8 @@ export default function HomeDashboard({
         }}>
           {name ? `${greeting}, ${name}.` : greeting + "."}
         </h2>
+
+        {affiliateInfo && <AffiliateBadge tier={affiliateInfo.tier} codes={affiliateInfo.codes} />}
 
         {/* Macro card inside hero — edit icon opens the diet wizard */}
         {hasPlan ? (

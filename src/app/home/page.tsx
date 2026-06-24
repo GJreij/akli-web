@@ -40,6 +40,34 @@ export default async function HomePage() {
   const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
   if (profile?.role === "admin") redirect("/admin");
 
+  // Affiliate/ambassador/athlete badge, if this user is an active member of the program.
+  const affiliateRowRes = await supabase
+    .from("affiliates")
+    .select("id,tier")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+  const affiliateRow = affiliateRowRes.data as { id: number; tier: string } | null;
+
+  let affiliateInfo: { tier: string; codes: { code: string; discount_value: number; end_date: string | null }[] } | null = null;
+  if (affiliateRow) {
+    // All of this affiliate's active codes (audience + personal), not just
+    // one — an affiliate can have more than one code over time.
+    const codesRes = await supabase
+      .from("promo_codes")
+      .select("code,discount_value,end_date")
+      .eq("affiliate_id", affiliateRow.id)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+    const codes = (codesRes.data ?? []) as { code: string | null; discount_value: number | null; end_date: string | null }[];
+    affiliateInfo = {
+      tier: affiliateRow.tier,
+      codes: codes
+        .filter((c): c is { code: string; discount_value: number; end_date: string | null } => !!c.code)
+        .map(c => ({ code: c.code, discount_value: c.discount_value ?? 0, end_date: c.end_date })),
+    };
+  }
+
   // Flatten recipes from the join, deduplicate, then shuffle so home shows a random 5
   type RecipeRow = {
     id: number;
@@ -75,6 +103,7 @@ export default async function HomePage() {
       profile={profileRes.data}
       macroTarget={macroRes.data}
       menuRecipes={menuRecipes}
+      affiliateInfo={affiliateInfo}
     />
   );
 }

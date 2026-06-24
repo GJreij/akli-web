@@ -14,6 +14,97 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliate_payouts: {
+        Row: {
+          affiliate_id: number
+          amount: number
+          created_at: string
+          id: number
+          note: string | null
+          paid_at: string
+          period_end: string | null
+          period_start: string | null
+        }
+        Insert: {
+          affiliate_id: number
+          amount: number
+          created_at?: string
+          id?: number
+          note?: string | null
+          paid_at?: string
+          period_end?: string | null
+          period_start?: string | null
+        }
+        Update: {
+          affiliate_id?: number
+          amount?: number
+          created_at?: string
+          id?: number
+          note?: string | null
+          paid_at?: string
+          period_end?: string | null
+          period_start?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_payouts_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliates: {
+        Row: {
+          commission_rate: number
+          content_compliant: boolean
+          created_at: string
+          id: number
+          joined_date: string
+          notes: string | null
+          personal_discount_rate: number | null
+          status: string
+          tier: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          commission_rate?: number
+          content_compliant?: boolean
+          created_at?: string
+          id?: number
+          joined_date?: string
+          notes?: string | null
+          personal_discount_rate?: number | null
+          status?: string
+          tier: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          commission_rate?: number
+          content_compliant?: boolean
+          created_at?: string
+          id?: number
+          joined_date?: string
+          notes?: string | null
+          personal_discount_rate?: number | null
+          status?: string
+          tier?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analytics_event: {
         Row: {
           anon_id: string | null
@@ -78,6 +169,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      automatic_discount_rules: {
+        Row: {
+          created_at: string
+          description: string | null
+          discount_type: string
+          discount_value: number
+          end_date: string | null
+          id: number
+          is_active: boolean
+          max_discount_amount: number | null
+          min_order_days: number
+          name: string
+          stackable_with_promo: boolean
+          start_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value: number
+          end_date?: string | null
+          id?: number
+          is_active?: boolean
+          max_discount_amount?: number | null
+          min_order_days: number
+          name: string
+          stackable_with_promo?: boolean
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          end_date?: string | null
+          id?: number
+          is_active?: boolean
+          max_discount_amount?: number | null
+          min_order_days?: number
+          name?: string
+          stackable_with_promo?: boolean
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       daily_macro_order: {
         Row: {
@@ -784,98 +923,12 @@ export type Database = {
           },
         ]
       }
-      partner_client_link: {
-        Row: {
-          client_id: string | null
-          created_at: string
-          end_date: string | null
-          id: number
-          notes: string | null
-          partner_id: string | null
-          start_date: string | null
-          status: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          client_id?: string | null
-          created_at?: string
-          end_date?: string | null
-          id?: number
-          notes?: string | null
-          partner_id?: string | null
-          start_date?: string | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          client_id?: string | null
-          created_at?: string
-          end_date?: string | null
-          id?: number
-          notes?: string | null
-          partner_id?: string | null
-          start_date?: string | null
-          status?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "partner_client_link_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "partner_client_link_partner_id_fkey"
-            columns: ["partner_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      partner_commission: {
-        Row: {
-          commission_rate: number | null
-          created_at: string
-          end_date: string | null
-          id: number
-          partner_id: string | null
-          start_date: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          commission_rate?: number | null
-          created_at?: string
-          end_date?: string | null
-          id?: number
-          partner_id?: string | null
-          start_date?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          commission_rate?: number | null
-          created_at?: string
-          end_date?: string | null
-          id?: number
-          partner_id?: string | null
-          start_date?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "partner_commission_log_partner_id_fkey"
-            columns: ["partner_id"]
-            isOneToOne: false
-            referencedRelation: "user"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       payment: {
         Row: {
+          affiliate_id: number | null
           amount: number | null
+          commission_amount: number | null
+          commission_rate: number | null
           created_at: string
           currency: string | null
           id: number
@@ -889,7 +942,10 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          affiliate_id?: number | null
           amount?: number | null
+          commission_amount?: number | null
+          commission_rate?: number | null
           created_at?: string
           currency?: string | null
           id?: number
@@ -903,7 +959,10 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          affiliate_id?: number | null
           amount?: number | null
+          commission_amount?: number | null
+          commission_rate?: number | null
           created_at?: string
           currency?: string | null
           id?: number
@@ -917,6 +976,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payment_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payment_meal_plan_day_id_fkey"
             columns: ["meal_plan_day_id"]
@@ -988,7 +1054,10 @@ export type Database = {
       }
       promo_codes: {
         Row: {
+          affiliate_id: number | null
+          auto_paused: boolean
           code: string | null
+          commission_rate_override: number | null
           created_at: string
           description: string | null
           discount_type: string | null
@@ -996,17 +1065,22 @@ export type Database = {
           end_date: string | null
           id: number
           is_active: boolean | null
+          max_discount_amount: number | null
           max_global_uses: number | null
           max_uses_per_user: number | null
+          min_order_days: number | null
           min_order_value: number | null
-          partner_id: string | null
           scope: string
           start_date: string | null
           updated_at: string | null
           user_id: string | null
+          waives_delivery: boolean
         }
         Insert: {
+          affiliate_id?: number | null
+          auto_paused?: boolean
           code?: string | null
+          commission_rate_override?: number | null
           created_at?: string
           description?: string | null
           discount_type?: string | null
@@ -1014,17 +1088,22 @@ export type Database = {
           end_date?: string | null
           id?: number
           is_active?: boolean | null
+          max_discount_amount?: number | null
           max_global_uses?: number | null
           max_uses_per_user?: number | null
+          min_order_days?: number | null
           min_order_value?: number | null
-          partner_id?: string | null
           scope?: string
           start_date?: string | null
           updated_at?: string | null
           user_id?: string | null
+          waives_delivery?: boolean
         }
         Update: {
+          affiliate_id?: number | null
+          auto_paused?: boolean
           code?: string | null
+          commission_rate_override?: number | null
           created_at?: string
           description?: string | null
           discount_type?: string | null
@@ -1032,16 +1111,26 @@ export type Database = {
           end_date?: string | null
           id?: number
           is_active?: boolean | null
+          max_discount_amount?: number | null
           max_global_uses?: number | null
           max_uses_per_user?: number | null
+          min_order_days?: number | null
           min_order_value?: number | null
-          partner_id?: string | null
           scope?: string
           start_date?: string | null
           updated_at?: string | null
           user_id?: string | null
+          waives_delivery?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "promo_codes_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       recipe: {
         Row: {
