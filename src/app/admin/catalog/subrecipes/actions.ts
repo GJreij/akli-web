@@ -59,13 +59,13 @@ export async function addSubrecipeIngredient(subrecipeId: number, formData: Form
   const optional = formData.get("optional") === "on";
   await (supabase.from("subrec_ingred") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .insert({ subrecipe_id: subrecipeId, ingredient_id, quantity, optional });
-  await supabase.rpc("update_subrecipe_macros", { p_subrecipe_id: subrecipeId });
+  await (supabase.rpc as any)("update_subrecipe_macros", { p_subrecipe_id: subrecipeId }); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath(`/admin/catalog/subrecipes/${subrecipeId}`);
 }
 
 export async function removeSubrecipeIngredient(subrecipeId: number, rowId: number) {
   const supabase = await createClient();
   await supabase.from("subrec_ingred").delete().eq("id", rowId);
-  await supabase.rpc("update_subrecipe_macros", { p_subrecipe_id: subrecipeId });
+  await (supabase.rpc as any)("update_subrecipe_macros", { p_subrecipe_id: subrecipeId }); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath(`/admin/catalog/subrecipes/${subrecipeId}`);
 }
