@@ -31,6 +31,13 @@ const DEFAULT_DIET: Record<Goal, DietType> = {
   lose: "high-protein", build: "high-protein", maintain: "balanced", health: "balanced",
 };
 
+// After the simulator produces an estimate, the client may only fine-tune
+// by +/-15% of that estimate — never below KCAL_FLOOR. Going further means
+// they don't trust the estimate at all, in which case they should enter
+// their own numbers via the manual ("I know my numbers") skip path instead
+// of dragging the simulator result somewhere it was never designed to reach.
+const WIZARD_ADJUST_PCT = 0.15;
+
 // ─── Logo (hides gracefully if public/logo.png not found) ────────────────────
 
 function LogoImage() {
@@ -166,6 +173,7 @@ export default function AkliApp({
   const [lastMacros, setLastMacros]     = useState({ p: 126, c: 220, f: 62 });
   const [showUpdated, setShowUpdated]   = useState(false);
   const [finetuneNote, setFinetuneNote] = useState("");
+  const [showEstimateLimitMsg, setShowEstimateLimitMsg] = useState(false);
   const [resultSubtitle, setResultSubtitle] = useState("Not a verdict. Adjust anytime.");
   const [dayPrice, setDayPrice]         = useState<number | null>(null);
   const [priceLoading, setPriceLoading] = useState(false);
@@ -247,9 +255,27 @@ export default function AkliApp({
     flash();
   }
 
+  // Only the GUIDED/simulator path (weightKnown=true) is capped to +/-15%
+  // of its own estimate. The manual/skip path (weightKnown=false) is the
+  // client entering their own numbers already, so it keeps the full
+  // [KCAL_FLOOR, KCAL_CEIL] range it always had.
+  function simulatorBounds() {
+    if (!weightKnown) return { low: KCAL_FLOOR, high: KCAL_CEIL };
+    return {
+      low: Math.max(KCAL_FLOOR, Math.round(kcalDefault * (1 - WIZARD_ADJUST_PCT))),
+      high: Math.round(kcalDefault * (1 + WIZARD_ADJUST_PCT)),
+    };
+  }
+
   function nudgeKcal(delta: number) {
+    const { low, high } = simulatorBounds();
     setKcalFixed(prev => {
-      const next = Math.min(KCAL_CEIL, Math.max(KCAL_FLOOR, prev + delta));
+      const next = prev + delta;
+      if (next < low || next > high) {
+        setShowEstimateLimitMsg(true);
+        return prev;
+      }
+      setShowEstimateLimitMsg(false);
       setNote(next);
       const m = getMacros(next, dietType);
       setLastMacros({ p: m.protein, c: m.carbs, f: m.fat });
@@ -260,9 +286,17 @@ export default function AkliApp({
   }
 
   function resetKcal() {
+    setShowEstimateLimitMsg(false);
     setKcalFixed(kcalDefault);
     setNote(kcalDefault);
     repaint(kcalDefault, dietType);
+  }
+
+  function redirectToManualEntry() {
+    setKcalIn(kcalFixed);
+    setShowEstimateLimitMsg(false);
+    setPath(SKIP_PATH);
+    setIdx(1);
   }
 
   function changeDiet(d: DietType) {
@@ -1022,7 +1056,7 @@ export default function AkliApp({
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
                     <button aria-label="Decrease"
                       style={{ width: 34, height: 34, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}
-                      onClick={() => nudgeKcal(-KCAL_STEP)} disabled={kcalFixed <= KCAL_FLOOR}>
+                      onClick={() => nudgeKcal(-KCAL_STEP)} disabled={kcalFixed <= simulatorBounds().low}>
                       <IconMinus size={16} />
                     </button>
                     <p style={{ fontFamily: "'Playfair Display', serif", fontSize: 30, fontWeight: 500, margin: 0, minWidth: 140, textAlign: "center" }}>
@@ -1030,7 +1064,7 @@ export default function AkliApp({
                     </p>
                     <button aria-label="Increase"
                       style={{ width: 34, height: 34, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%" }}
-                      onClick={() => nudgeKcal(KCAL_STEP)} disabled={kcalFixed >= KCAL_CEIL}>
+                      onClick={() => nudgeKcal(KCAL_STEP)} disabled={kcalFixed >= simulatorBounds().high}>
                       <IconPlus size={16} />
                     </button>
                   </div>
@@ -1054,6 +1088,20 @@ export default function AkliApp({
                     </a>
                   )}
                 </p>
+
+                {showEstimateLimitMsg && weightKnown && (
+                  <div className="info-card" style={{ textAlign: "center", marginBottom: 14, padding: "12px 14px", background: "#fdf6ec" }}>
+                    <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 8px", lineHeight: 1.5 }}>
+                      This is an estimation — we only let you fine-tune it by ±15%. If you know your exact numbers, you can enter them yourself instead.
+                    </p>
+                    <button onClick={redirectToManualEntry} style={{
+                      fontSize: 12.5, fontWeight: 600, color: C.tealDark, background: "none",
+                      border: `1.5px solid ${C.tealDark}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer",
+                    }}>
+                      Enter my own numbers
+                    </button>
+                  </div>
+                )}
 
                 {/* Diet chips */}
                 <div style={{ marginBottom: 12 }}>
