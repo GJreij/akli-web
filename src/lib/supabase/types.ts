@@ -1242,6 +1242,61 @@ export type Database = {
           },
         ]
       }
+      recipe_subrecipe_rule: {
+        Row: {
+          created_at: string
+          fixed_servings: number | null
+          id: number
+          ratio: number
+          recipe_id: number
+          rule_type: string
+          subrecipe_a_id: number
+          subrecipe_b_id: number | null
+        }
+        Insert: {
+          created_at?: string
+          fixed_servings?: number | null
+          id?: number
+          ratio?: number
+          recipe_id: number
+          rule_type: string
+          subrecipe_a_id: number
+          subrecipe_b_id?: number | null
+        }
+        Update: {
+          created_at?: string
+          fixed_servings?: number | null
+          id?: number
+          ratio?: number
+          recipe_id?: number
+          rule_type?: string
+          subrecipe_a_id?: number
+          subrecipe_b_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_subrecipe_rule_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_subrecipe_rule_subrecipe_a_id_fkey"
+            columns: ["subrecipe_a_id"]
+            isOneToOne: false
+            referencedRelation: "subrecipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_subrecipe_rule_subrecipe_b_id_fkey"
+            columns: ["subrecipe_b_id"]
+            isOneToOne: false
+            referencedRelation: "subrecipe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subrec_ingred: {
         Row: {
           created_at: string

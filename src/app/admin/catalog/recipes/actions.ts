@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { validateRuleConsistency, type ExistingRule, type RuleType } from "./rule-validation";
 
 function num(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -64,5 +65,50 @@ export async function addRecipeSubrecipe(recipeId: number, formData: FormData) {
 export async function removeRecipeSubrecipe(recipeId: number, rowId: number) {
   const supabase = await createClient();
   await supabase.from("recipe_subrecipe").delete().eq("id", rowId);
+  revalidatePath(`/admin/catalog/recipes/${recipeId}`);
+}
+
+// =============================================================================
+// SUBRECIPE SCALING RULES
+// =============================================================================
+
+function parseRuleForm(formData: FormData) {
+  const subrecipe_a_id = Number(formData.get("subrecipe_a_id"));
+  const rule_type = String(formData.get("rule_type") ?? "") as RuleType;
+  const subrecipe_b_id = rule_type === "fixed" ? null : num(formData, "subrecipe_b_id");
+  const ratio = rule_type === "fixed" ? 1.0 : (num(formData, "ratio") ?? 1.0);
+  const fixed_servings = rule_type === "fixed" ? num(formData, "fixed_servings") : null;
+  return { subrecipe_a_id, subrecipe_b_id, rule_type, ratio, fixed_servings };
+}
+
+export async function addRecipeSubrecipeRule(recipeId: number, formData: FormData) {
+  const supabase = await createClient();
+  const newRule = parseRuleForm(formData);
+
+  if (!newRule.subrecipe_a_id || (newRule.rule_type !== "fixed" && !newRule.subrecipe_b_id)) {
+    redirect(`/admin/catalog/recipes/${recipeId}?ruleError=${encodeURIComponent("Select both subrecipes for this rule type.")}`);
+  }
+  if (newRule.rule_type === "fixed" && newRule.fixed_servings == null) {
+    redirect(`/admin/catalog/recipes/${recipeId}?ruleError=${encodeURIComponent("Enter a fixed serving count.")}`);
+  }
+
+  const { data: existing } = await supabase
+    .from("recipe_subrecipe_rule")
+    .select("subrecipe_a_id,subrecipe_b_id,rule_type,ratio,fixed_servings")
+    .eq("recipe_id", recipeId);
+
+  const check = validateRuleConsistency((existing ?? []) as ExistingRule[], newRule);
+  if (!check.ok) {
+    redirect(`/admin/catalog/recipes/${recipeId}?ruleError=${encodeURIComponent(check.error)}`);
+  }
+
+  await (supabase.from("recipe_subrecipe_rule") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .insert({ recipe_id: recipeId, ...newRule });
+  revalidatePath(`/admin/catalog/recipes/${recipeId}`);
+}
+
+export async function removeRecipeSubrecipeRule(recipeId: number, ruleId: number) {
+  const supabase = await createClient();
+  await supabase.from("recipe_subrecipe_rule").delete().eq("id", ruleId);
   revalidatePath(`/admin/catalog/recipes/${recipeId}`);
 }
