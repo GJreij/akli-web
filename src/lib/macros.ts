@@ -5,7 +5,7 @@
 // The % tables below are tuned to land close to what byWeight produces for a
 // ~70kg adult at a ~2000 kcal target, so the two paths agree instead of diverging.
 
-export type DietType = "high-protein" | "balanced" | "low-carb" | "low-fat";
+export type DietType = "high-protein" | "balanced" | "low-fat";
 
 export const KCAL_FLOOR = 900, KCAL_CEIL = 4000, KCAL_STEP = 50;
 
@@ -21,14 +21,12 @@ export const DIET_OPTIONS: {
 }[] = [
   { id: "high-protein", label: "High Protein", emoji: "💪", split: { p: 28, c: 47, f: 25 }, forWho: "Active people or anyone who gets hungry fast." },
   { id: "balanced",     label: "Balanced",     emoji: "⚖️", split: { p: 22, c: 46, f: 32 }, forWho: "Everyday health and maintenance." },
-  { id: "low-carb",     label: "Low Carb",     emoji: "🔥", split: { p: 27, c: 36, f: 37 }, forWho: "Fewer energy spikes, steady focus." },
   { id: "low-fat",      label: "Low Fat",      emoji: "🥗", split: { p: 25, c: 59, f: 16 }, forWho: "Light meals, calorie-conscious eating." },
 ];
 
 const PER_KG: Record<DietType, { pk: number; fk: number }> = {
   "high-protein": { pk: 2.0, fk: 0.8 },
   "low-fat":      { pk: 1.8, fk: 0.5 },
-  "low-carb":     { pk: 1.9, fk: 1.2 },
   "balanced":     { pk: 1.6, fk: 1.0 },
 };
 

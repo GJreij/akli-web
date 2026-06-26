@@ -1107,11 +1107,11 @@ export default function AkliApp({
                 <div style={{ marginBottom: 12 }}>
                   <p style={{ fontSize: 12, color: C.muted, margin: "0 0 6px" }}>Macro split</p>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {(["high-protein", "balanced", "low-carb", "low-fat"] as DietType[]).map(d => (
+                    {(["high-protein", "balanced", "low-fat"] as DietType[]).map(d => (
                       <button key={d} className={`diet-chip${dietType === d ? " selected" : ""}`}
                         style={{ flex: "1 1 auto" }}
                         onClick={() => changeDiet(d)}>
-                        {d === "high-protein" ? "High protein" : d === "low-fat" ? "Low fat" : d === "low-carb" ? "Low carb" : "Balanced"}
+                        {d === "high-protein" ? "High protein" : d === "low-fat" ? "Low fat" : "Balanced"}
                       </button>
                     ))}
                   </div>
