@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { PackagingDay } from "@/lib/flask";
+import type { PackagingDay, PackagingClient } from "@/lib/flask";
 import { markPackaged } from "@/app/admin/packaging/actions";
 import { C } from "../ui";
 
@@ -11,10 +11,53 @@ function fmtSlot(slot: { start_time: string | null; end_time: string | null } | 
   return `${slot.start_time?.slice(0, 5) ?? "?"}–${slot.end_time?.slice(0, 5) ?? "?"}`;
 }
 
+const MEAL_ORDER = ["breakfast", "lunch", "dinner", "snack"];
+
+function groupByMealType(client: PackagingClient) {
+  const groups = new Map<string, typeof client.recipes>();
+  for (const recipe of client.recipes) {
+    const key = recipe.meal_type ?? "other";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(recipe);
+  }
+  return [...groups.entries()].sort((a, b) => {
+    const ai = MEAL_ORDER.indexOf(a[0]);
+    const bi = MEAL_ORDER.indexOf(b[0]);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+}
+
+function DayCombination({ client }: { client: PackagingClient }) {
+  const groups = groupByMealType(client);
+  return (
+    <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
+      {groups.map(([mealType, recipes]) => (
+        <div key={mealType} style={{ fontSize: 11.5 }}>
+          <span style={{ fontWeight: 700, color: C.muted, textTransform: "capitalize" }}>{mealType}: </span>
+          {recipes.map((r, i) => (
+            <span key={r.meal_plan_day_recipe_id}>
+              {i > 0 && " + "}
+              <span style={{ color: C.primary, fontWeight: 600 }}>{r.recipe_name ?? "—"}</span>
+              {r.subrecipes.length > 0 && (
+                <span style={{ color: C.light }}>
+                  {" ("}
+                  {r.subrecipes.map(s => s.subrecipe_name ?? "?").join(", ")}
+                  {")"}
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [marking, setMarking] = useState<number | null>(null);
+  const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
 
   function toggle(mpdrId: number, currentlyPackaged: boolean) {
     setMarking(mpdrId);
@@ -22,6 +65,14 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
       await markPackaged(mpdrId, !currentlyPackaged);
       setMarking(null);
       router.refresh();
+    });
+  }
+
+  function toggleClientExpanded(key: string) {
+    setExpandedClients(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
     });
   }
 
@@ -45,13 +96,29 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                 </p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {slot.clients.map((client, ci) => (
+                  {slot.clients.map((client, ci) => {
+                    const clientKey = `${day.delivery_date}-${slot.slot_id}-${ci}`;
+                    const isExpanded = expandedClients.has(clientKey);
+                    return (
                     <div key={ci} style={{ background: C.white, borderRadius: 8, padding: "8px 10px", border: `1px solid ${C.border}` }}>
-                      <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 600, color: C.primary }}>
-                        {`${client.name ?? ""} ${client.last_name ?? ""}`.trim() || "Unknown client"}
-                      </p>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.primary }}>
+                          {`${client.name ?? ""} ${client.last_name ?? ""}`.trim() || "Unknown client"}
+                        </p>
+                        <button
+                          onClick={() => toggleClientExpanded(clientKey)}
+                          style={{
+                            background: isExpanded ? C.primary : C.offWhite, color: isExpanded ? C.white : C.muted,
+                            border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 10.5, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >
+                          {isExpanded ? "Hide combination" : "View combination"}
+                        </button>
+                      </div>
 
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      {isExpanded && <DayCombination client={client} />}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: isExpanded ? 8 : 0 }}>
                         {client.recipes.map(recipe => {
                           const packaged = recipe.packaging_status === "completed";
                           return (
@@ -83,7 +150,8 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                         })}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
