@@ -24,7 +24,7 @@ type Sex      = "female" | "male";
 const CHOICE_PATH: Step[] = ["choice"];
 const FULL_PATH: Step[] = ["choice", "goal", "basics", "activity", "result"];
 const MANUAL_PATH: Step[] = ["choice", "manual", "result"];
-const VALID_DIETS: DietType[] = ["high-protein", "balanced", "low-carb", "low-fat"];
+const VALID_DIETS: DietType[] = ["high-protein", "balanced", "low-fat"];
 const TENANT_ID = 1;
 const DEFAULT_DIET: Record<Goal, DietType> = {
   lose: "high-protein", build: "high-protein", maintain: "balanced", health: "balanced",
@@ -565,9 +565,9 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
             <div style={{ marginBottom: 12 }}>
               <p style={{ fontSize: 12, color: C.muted, margin: "0 0 6px" }}>Macro split</p>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(["high-protein", "balanced", "low-carb", "low-fat"] as DietType[]).map(d => (
+                {(["high-protein", "balanced", "low-fat"] as DietType[]).map(d => (
                   <button key={d} className={`diet-chip${dietType === d ? " selected" : ""}`} style={{ flex: "1 1 auto" }} onClick={() => changeDiet(d)}>
-                    {d === "high-protein" ? "High protein" : d === "low-fat" ? "Low fat" : d === "low-carb" ? "Low carb" : "Balanced"}
+                    {d === "high-protein" ? "High protein" : d === "low-fat" ? "Low fat" : "Balanced"}
                   </button>
                 ))}
               </div>
