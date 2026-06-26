@@ -78,20 +78,42 @@ export function macrosFromDiet(kcal: number, diet: DietType) {
   };
 }
 
+const MEALS_PER_DAY = 3;
+
+// Fallback only — used when the live /simple_price_simulator call fails and
+// dayPrice comes back null. Mirrors current macro_price table values
+// (protein/carbs/fat $/g + $1/meal recipe packaging) so a stale fetch
+// doesn't show a wildly different number than checkout will. Still just a
+// guess: if macro_price changes in Supabase, this constant won't follow it,
+// so formatPrice marks it with "~" rather than presenting it as exact.
+const FALLBACK_PROTEIN_PRICE_PER_G = 0.092;
+const FALLBACK_CARBS_PRICE_PER_G = 0.042;
+const FALLBACK_FAT_PRICE_PER_G = 0.057;
+const FALLBACK_RECIPE_PACKAGING_PER_MEAL = 1;
+
+export function isEstimatedPrice(dayPrice: number | null) {
+  return dayPrice == null;
+}
+
 function roundedDayPrice(dayPrice: number | null, p: number, c: number, f: number) {
-  const price = dayPrice ?? p * 0.018 + c * 0.006 + f * 0.022 + 1.8; // macro cost + avg packaging
+  const price = dayPrice ?? (
+    p * FALLBACK_PROTEIN_PRICE_PER_G
+    + c * FALLBACK_CARBS_PRICE_PER_G
+    + f * FALLBACK_FAT_PRICE_PER_G
+    + MEALS_PER_DAY * FALLBACK_RECIPE_PACKAGING_PER_MEAL
+  );
   // Round to nearest $0.50 — a clean number reads as a real price, not a spreadsheet output
   return Math.round(price * 2) / 2;
 }
 
 export function formatPrice(dayPrice: number | null, p: number, c: number, f: number) {
-  return `$${roundedDayPrice(dayPrice, p, c, f).toFixed(2)}`;
+  const prefix = isEstimatedPrice(dayPrice) ? "~$" : "$";
+  return `${prefix}${roundedDayPrice(dayPrice, p, c, f).toFixed(2)}`;
 }
 
-const MEALS_PER_DAY = 3;
-
 export function formatPricePerMeal(dayPrice: number | null, p: number, c: number, f: number) {
-  return `$${(roundedDayPrice(dayPrice, p, c, f) / MEALS_PER_DAY).toFixed(2)}`;
+  const prefix = isEstimatedPrice(dayPrice) ? "~$" : "$";
+  return `${prefix}${(roundedDayPrice(dayPrice, p, c, f) / MEALS_PER_DAY).toFixed(2)}`;
 }
 
 // A relatable anchor so the day price reads as a deal, not a bill.
