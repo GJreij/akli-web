@@ -23,16 +23,17 @@ function addDays(date: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-async function CookingResults({ start, end, subrecipe_id, client_id }: { start: string; end: string; subrecipe_id?: string; client_id?: string }) {
+async function CookingResults({ start, end, subrecipe_id, client_id, recipe_id }: { start: string; end: string; subrecipe_id?: string; client_id?: string; recipe_id?: string }) {
   const recipes = await getCookingOverview(start, end, {
     subrecipe_id: subrecipe_id || undefined,
     client_id: client_id || undefined,
+    recipe_id: recipe_id || undefined,
   });
   return <CookingBoard recipes={recipes} />;
 }
 
-export default async function CookingPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string; subrecipe_id?: string; client_id?: string }> }) {
-  const { start, end, subrecipe_id, client_id } = await searchParams;
+export default async function CookingPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string; subrecipe_id?: string; client_id?: string; recipe_id?: string }> }) {
+  const { start, end, subrecipe_id, client_id, recipe_id } = await searchParams;
   const today = new Date().toISOString().slice(0, 10);
   const rangeStart = start ?? today;
   const rangeEnd = end ?? today;
@@ -51,6 +52,10 @@ export default async function CookingPage({ searchParams }: { searchParams: Prom
 
   const availableSubrecipes = [...new Map(
     unfilteredOverview.flatMap(r => r.subrecipes.map(s => [s.subrecipe_id, s.name] as const))
+  ).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+
+  const availableRecipes = [...new Map(
+    unfilteredOverview.map(r => [r.recipe_id, r.name] as const)
   ).entries()].sort((a, b) => a[1].localeCompare(b[1]));
 
   const deliveryUsers = (deliveriesRes.data ?? []) as Pick<Database["public"]["Tables"]["deliveries"]["Row"], "user_id">[];
@@ -73,6 +78,12 @@ export default async function CookingPage({ searchParams }: { searchParams: Prom
             <label style={{ ...labelStyle, flex: "0 1 150px" }}>End date
               <input type="date" name="end" defaultValue={rangeEnd} style={inputStyle} />
             </label>
+            <label style={{ ...labelStyle, flex: "1 1 180px" }}>Recipe
+              <select name="recipe_id" defaultValue={recipe_id ?? ""} style={inputStyle}>
+                <option value="">All recipes ({availableRecipes.length})</option>
+                {availableRecipes.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </label>
             <label style={{ ...labelStyle, flex: "1 1 180px" }}>Subrecipe
               <select name="subrecipe_id" defaultValue={subrecipe_id ?? ""} style={inputStyle}>
                 <option value="">All subrecipes ({availableSubrecipes.length})</option>
@@ -91,8 +102,8 @@ export default async function CookingPage({ searchParams }: { searchParams: Prom
           </form>
         </Section>
 
-        <Suspense fallback={<BoardFallback />} key={`${rangeStart}-${rangeEnd}-${subrecipe_id}-${client_id}`}>
-          <CookingResults start={rangeStart} end={rangeEnd} subrecipe_id={subrecipe_id} client_id={client_id} />
+        <Suspense fallback={<BoardFallback />} key={`${rangeStart}-${rangeEnd}-${subrecipe_id}-${client_id}-${recipe_id}`}>
+          <CookingResults start={rangeStart} end={rangeEnd} subrecipe_id={subrecipe_id} client_id={client_id} recipe_id={recipe_id} />
         </Suspense>
       </div>
     </div>

@@ -340,6 +340,89 @@ export interface PortioningSummary {
   clients: PortioningClient[];
 }
 
+// ─── /packaging ───────────────────────────────────────────────────────────
+
+export interface PackagingSubrecipe {
+  subrecipe_id: number;
+  subrecipe_name: string | null;
+  serving_size: number | null;
+}
+
+export interface PackagingRecipe {
+  meal_plan_day_recipe_id: number;
+  meal_type: string | null;
+  recipe_name: string | null;
+  packaging_status: string;
+  subrecipes: PackagingSubrecipe[];
+}
+
+export interface PackagingClient {
+  name: string | null;
+  last_name: string | null;
+  recipes: PackagingRecipe[];
+}
+
+export interface PackagingSlot {
+  slot_id: number | null;
+  start_time: string | null;
+  end_time: string | null;
+  clients: PackagingClient[];
+}
+
+export interface PackagingDay {
+  delivery_date: string;
+  slots: PackagingSlot[];
+}
+
+export async function getPackagingView(
+  start_date: string,
+  end_date: string
+): Promise<PackagingDay[]> {
+  const res = await fetch(`${FLASK_URL}/packaging`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_date, end_date }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`packaging error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+// ─── /deliveries/overview ───────────────────────────────────────────────────
+
+export interface DeliveryPayment {
+  amount: number | null;
+  currency: string | null;
+  provider: string | null;
+  status: string | null;
+  collect_cash: boolean;
+}
+
+export interface DeliveryRow {
+  id: number;
+  delivery_date: string | null;
+  status: string | null;
+  delivery_slot: { id: number; start_time: string | null; end_time: string | null } | null;
+  client: { id: string | null; name: string | null; last_name: string | null; phone_number: string | null } | null;
+  address: string | null;
+  maps_link: string | null;
+  payment: DeliveryPayment | null;
+}
+
+export async function getDeliveriesOverview(
+  start_date: string,
+  end_date: string
+): Promise<DeliveryRow[]> {
+  const res = await fetch(`${FLASK_URL}/deliveries/overview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_date, end_date }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`deliveries_overview error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 export async function getPortioningSummary(
   subrecipe_id: number,
   meal_plan_day_recipe_ids: number[],
