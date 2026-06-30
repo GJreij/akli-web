@@ -115,12 +115,13 @@ function localISO(d: Date): string {
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, onPick, onRemoveDay }: {
+function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, closureDays, onPick, onRemoveDay }: {
   orderableWeeks: OrderableWeek[];
   rangeStart: string | null;
   rangeEnd:   string | null;
   removed:    Set<string>;
-  orderedDays: Set<string>;
+  orderedDays:  Set<string>;
+  closureDays:  Map<string, string | null>;
   onPick:      (iso: string) => void;
   onRemoveDay: (iso: string) => void;
 }) {
@@ -135,7 +136,7 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
     const end = new Date(rangeEnd   + "T12:00:00");
     while (cur <= end) {
       const iso = localISO(cur);
-      if (availableSet.has(iso) && !removed.has(iso) && !orderedDays.has(iso)) selectedInRange.add(iso);
+      if (availableSet.has(iso) && !removed.has(iso) && !orderedDays.has(iso) && !closureDays.has(iso)) selectedInRange.add(iso);
       cur.setDate(cur.getDate() + 1);
     }
   }
@@ -162,9 +163,15 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
             : `${sortedSelected.length} day${sortedSelected.length !== 1 ? "s" : ""} selected — tap a day to reset`}
       </p>
       {orderedDays.size > 0 && (
-        <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.light, margin: "0 0 12px" }}>
+        <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.light, margin: "0 0 8px" }}>
           <span style={{ width: 11, height: 11, borderRadius: 3, background: "#bfa280", display: "inline-block" }} />
           Already ordered — skipped automatically if inside your range
+        </p>
+      )}
+      {closureDays.size > 0 && (
+        <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#c45f00", margin: "0 0 12px" }}>
+          <span style={{ width: 11, height: 11, borderRadius: 3, background: "#e07b39", display: "inline-block" }} />
+          Kitchen closed — cannot be ordered
         </p>
       )}
 
@@ -211,9 +218,10 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   const isPast      = iso < today;
                   const isToday     = iso === today;
                   const isOrdered   = orderedDays.has(iso);
+                  const isClosed    = closureDays.has(iso);
                   // Already-ordered days can't be picked as a start/end point — but they're still
                   // allowed to fall *inside* a chosen range, where they just get auto-skipped.
-                  const disabled    = isWeekend || isPast || !isAvail || isOrdered;
+                  const disabled    = isWeekend || isPast || !isAvail || isOrdered || isClosed;
                   const isStart     = iso === rangeStart;
                   const isEnd       = iso === rangeEnd;
                   const inRange     = rangeStart && rangeEnd && iso >= rangeStart && iso <= rangeEnd && isAvail;
@@ -222,7 +230,7 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   const dayNum      = parseInt(iso.split("-")[2], 10);
 
                   // Too-soon = within the 48h notice window (not yet orderable, but not "past" either)
-                  const isTooSoon  = !isPast && !isWeekend && !isAvail && !isOrdered;
+                  const isTooSoon  = !isPast && !isWeekend && !isAvail && !isOrdered && !isClosed;
 
                   // Visual state
                   let bg = "transparent";
@@ -231,7 +239,10 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   let border = "none";
                   let opacity = 1;
 
-                  if (isOrdered) {
+                  if (isClosed) {
+                    bg = "#fff3e8"; color = "#e07b39"; fontWeight = 600;
+                    border = `1px solid #f0b87a`;
+                  } else if (isOrdered) {
                     bg = "#bfa280"; color = C.white; fontWeight = 600;
                   } else if (isStart || isEnd) {
                     bg = C.primary; color = C.white; fontWeight = 700;
@@ -244,7 +255,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                     bg = "#f5f5f3"; color = "#d0cbc5";
                   }
 
-                  if (isToday && !isStart && !isEnd) border = `1.5px solid ${C.teal}`;
+                  if (isToday && !isStart && !isEnd && !isClosed) border = `1.5px solid ${C.teal}`;
+
+                  const closureReason = isClosed ? closureDays.get(iso) : undefined;
 
                   return (
                     <button
@@ -252,7 +265,8 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                       onClick={() => !disabled && onPick(iso)}
                       disabled={disabled}
                       title={
-                        isOrdered ? "You already have an order on this day — it's skipped automatically"
+                        isClosed ? `Kitchen closed${closureReason ? ` — ${closureReason}` : ""}`
+                        : isOrdered ? "You already have an order on this day — it's skipped automatically"
                         : isTooSoon ? "Orders need 48h notice — too soon to add this day"
                         : undefined
                       }
@@ -1224,7 +1238,7 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
 
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
-  volumeDiscountRules = [],
+  closureDays = [], volumeDiscountRules = [],
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1234,6 +1248,7 @@ export default function OrderFlow({
   initialPrefs?: Record<number, PrefRating>;
   addresses?: AddressRow[];
   orderedDays?: string[];
+  closureDays?: { date: string; reason: string | null }[];
   volumeDiscountRules?: VolumeDiscountRule[];
 }) {
   const router = useRouter();
@@ -1243,6 +1258,7 @@ export default function OrderFlow({
 
   const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
   const orderedDaysSet = new Set(orderedDays);
+  const closureDaysMap = new Map(closureDays.map(c => [c.date, c.reason]));
   const [rangeStart, setRangeStart] = useState<string | null>(() => readDraft()?.rangeStart ?? null);
   const [rangeEnd,   setRangeEnd]   = useState<string | null>(() => readDraft()?.rangeEnd ?? null);
   const [removed,    setRemoved]    = useState<Set<string>>(() => new Set(readDraft()?.removed ?? []));
@@ -1256,7 +1272,7 @@ export default function OrderFlow({
     const end = new Date(rangeEnd   + "T12:00:00");
     while (cur <= end) {
       const iso = localISO(cur);
-      if (availableSet.has(iso) && !removed.has(iso) && !orderedDaysSet.has(iso)) selected.add(iso);
+      if (availableSet.has(iso) && !removed.has(iso) && !orderedDaysSet.has(iso) && !closureDaysMap.has(iso)) selected.add(iso);
       cur.setDate(cur.getDate() + 1);
     }
   }
@@ -1656,6 +1672,7 @@ export default function OrderFlow({
               rangeEnd={rangeEnd}
               removed={removed}
               orderedDays={orderedDaysSet}
+              closureDays={closureDaysMap}
               onPick={handlePickDay}
               onRemoveDay={handleRemoveDay}
             />
