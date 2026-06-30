@@ -1247,6 +1247,8 @@ export default function OrderFlow({
   const [rangeEnd,   setRangeEnd]   = useState<string | null>(() => readDraft()?.rangeEnd ?? null);
   const [removed,    setRemoved]    = useState<Set<string>>(() => new Set(readDraft()?.removed ?? []));
 
+  const hasAutoScrolled = useRef(false);
+
   // Derive selected: all available days in [rangeStart, rangeEnd] minus removed minus already-ordered
   const selected = new Set<string>();
   if (rangeStart && rangeEnd) {
@@ -1378,6 +1380,12 @@ export default function OrderFlow({
         setRangeEnd(iso);
       }
       setRemoved(new Set());
+      if (!hasAutoScrolled.current) {
+        hasAutoScrolled.current = true;
+        setTimeout(() => {
+          window.scrollBy({ top: 300, behavior: "smooth" });
+        }, 100);
+      }
     }
   }
 
