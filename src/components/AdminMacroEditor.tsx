@@ -9,6 +9,14 @@ const C = {
   border: "#e0dbd5", white: "#ffffff", error: "#c0392b",
 };
 
+const DIET_OPTIONS = [
+  { id: "high-protein", label: "💪 High Protein", description: "More protein, less fat — great for active clients" },
+  { id: "balanced",     label: "⚖️ Balanced",     description: "Everyday maintenance, no strong restriction" },
+  { id: "low-fat",      label: "🥗 Light & Clean", description: "Lower fat, higher carbs — calorie-conscious" },
+] as const;
+
+type DietType = typeof DIET_OPTIONS[number]["id"];
+
 type MacroRow = {
   id: number;
   created_at: string;
@@ -49,6 +57,10 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
   onSaved: (row: MacroRow) => void;
 }) {
   const [mode, setMode] = useState<Mode>("kcal_pct");
+
+  const prev = history[0] ?? null;
+  const inheritedDiet = (DIET_OPTIONS.find(o => o.id === prev?.diet_type) ? prev!.diet_type : null) as DietType | null;
+  const [dietType, setDietType] = useState<DietType>(inheritedDiet ?? "balanced");
 
   // kcal + % mode
   const [kcal, setKcal]       = useState("");
@@ -104,9 +116,6 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
     setSaving(true); setErr(null); setSuccess(false);
     try {
       const supabase = createClient();
-      // Carry forward "about the person" fields from the previous latest row so the
-      // Diet Wizard pre-fills correctly after an admin override.
-      const prev = history[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.from("daily_macro_target") as any)
         .insert({
@@ -118,8 +127,8 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
           fat_g:          preview.fat_g,
           source:         "admin",
           method:         mode === "kcal_pct" ? "kcal_pct" : "manual_macros",
+          diet_type:      dietType,
           // Inherited from previous record
-          diet_type:      prev?.diet_type      ?? null,
           goal:           prev?.goal           ?? null,
           sex:            prev?.sex            ?? null,
           height_cm:      prev?.height_cm      ?? null,
@@ -144,7 +153,12 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
           Diet history
         </p>
         {history.length === 0 ? (
-          <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No macro targets set yet.</p>
+          <div style={{ padding: "12px 14px", borderRadius: 10, background: "#fff8f0", border: `1px solid #f0b87a`, fontSize: 13 }}>
+            <p style={{ margin: "0 0 4px", fontWeight: 600, color: "#c45f00" }}>No history — first time setting this client&apos;s diet</p>
+            <p style={{ margin: 0, color: C.muted, fontSize: 12 }}>
+              Physical stats (height, weight, sex) won&apos;t be set — the client will see defaults in their Diet Wizard until they complete onboarding.
+            </p>
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {history.map((row, i) => {
@@ -153,6 +167,7 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
               const cb = row.carbs_g ?? 0;
               const f = row.fat_g ?? 0;
               const isLatest = i === 0;
+              const dietLabel = DIET_OPTIONS.find(o => o.id === row.diet_type)?.label ?? row.diet_type;
               return (
                 <div
                   key={row.id}
@@ -170,8 +185,8 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
                           Active
                         </span>
                       )}
-                      {row.diet_type && (
-                        <span style={{ fontSize: 11, color: C.muted }}>{row.diet_type}</span>
+                      {dietLabel && (
+                        <span style={{ fontSize: 11, color: C.muted }}>{dietLabel}</span>
                       )}
                       {row.source === "admin" && (
                         <span style={{ fontSize: 10, color: C.light, fontStyle: "italic" }}>admin-set</span>
@@ -208,6 +223,31 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
         <p style={{ fontSize: 12, color: C.light, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 14px" }}>
           Set new target
         </p>
+
+        {/* Diet type picker */}
+        <div style={{ marginBottom: 18 }}>
+          <p style={{ fontSize: 11.5, color: C.muted, margin: "0 0 8px" }}>Diet style — shown to the client on their profile</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {DIET_OPTIONS.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setDietType(opt.id)}
+                title={opt.description}
+                style={{
+                  padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  border: `2px solid ${dietType === opt.id ? C.tealDark : C.border}`,
+                  background: dietType === opt.id ? "#f0f7f7" : C.white,
+                  color: dietType === opt.id ? C.tealDark : C.muted,
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: C.light, margin: "6px 0 0" }}>
+            {DIET_OPTIONS.find(o => o.id === dietType)?.description}
+          </p>
+        </div>
 
         {/* Mode toggle */}
         <div style={{ display: "flex", gap: 0, marginBottom: 18, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden", width: "fit-content" }}>
