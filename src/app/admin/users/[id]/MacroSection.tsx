@@ -14,6 +14,10 @@ type MacroRow = {
   goal: string | null;
   source: string | null;
   method: string | null;
+  sex: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  activity_level: number | null;
 };
 
 export default function MacroSection({ userId, initialHistory }: {

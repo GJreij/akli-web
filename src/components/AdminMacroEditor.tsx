@@ -20,6 +20,10 @@ type MacroRow = {
   goal: string | null;
   source: string | null;
   method: string | null;
+  sex: string | null;
+  height_cm: number | null;
+  weight_kg: number | null;
+  activity_level: number | null;
 };
 
 // kcal per gram
@@ -100,17 +104,27 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
     setSaving(true); setErr(null); setSuccess(false);
     try {
       const supabase = createClient();
+      // Carry forward "about the person" fields from the previous latest row so the
+      // Diet Wizard pre-fills correctly after an admin override.
+      const prev = history[0] ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.from("daily_macro_target") as any)
         .insert({
-          user_id:     userId,
-          tenant_id:   1,
-          kcal_target: preview.kcal,
-          protein_g:   preview.protein_g,
-          carbs_g:     preview.carbs_g,
-          fat_g:       preview.fat_g,
-          source:      "admin",
-          method:      mode === "kcal_pct" ? "kcal_pct" : "manual_macros",
+          user_id:        userId,
+          tenant_id:      1,
+          kcal_target:    preview.kcal,
+          protein_g:      preview.protein_g,
+          carbs_g:        preview.carbs_g,
+          fat_g:          preview.fat_g,
+          source:         "admin",
+          method:         mode === "kcal_pct" ? "kcal_pct" : "manual_macros",
+          // Inherited from previous record
+          diet_type:      prev?.diet_type      ?? null,
+          goal:           prev?.goal           ?? null,
+          sex:            prev?.sex            ?? null,
+          height_cm:      prev?.height_cm      ?? null,
+          weight_kg:      prev?.weight_kg      ?? null,
+          activity_level: prev?.activity_level ?? null,
         })
         .select()
         .single();
@@ -171,8 +185,16 @@ export default function AdminMacroEditor({ userId, history, onSaved }: {
                     <span><strong>{Math.round(cb)}g</strong> <span style={{ color: C.light }}>carbs ({pct(cb, k, "carbs")}%)</span></span>
                     <span><strong>{Math.round(f)}g</strong> <span style={{ color: C.light }}>fat ({pct(f, k, "fat")}%)</span></span>
                   </div>
-                  {row.goal && (
-                    <p style={{ margin: "4px 0 0", fontSize: 11.5, color: C.muted }}>Goal: {row.goal}</p>
+                  {(row.goal || row.weight_kg || row.height_cm || row.sex) && (
+                    <p style={{ margin: "4px 0 0", fontSize: 11.5, color: C.muted }}>
+                      {[
+                        row.goal && `Goal: ${row.goal}`,
+                        row.sex,
+                        row.weight_kg && `${row.weight_kg}kg`,
+                        row.height_cm && `${row.height_cm}cm`,
+                        row.activity_level && `activity ×${row.activity_level}`,
+                      ].filter(Boolean).join(" · ")}
+                    </p>
                   )}
                 </div>
               );
