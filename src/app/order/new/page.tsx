@@ -38,7 +38,7 @@ export default async function OrderNewPage() {
   const today = beirutISODate(0);
   const minOrderable = beirutISODate(2); // 48h lead time — earliest day a new order can cover
 
-  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes] = await Promise.all([
+  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes, closuresRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*").eq("user_id", user.id)
       .order("created_at", { ascending: false }).limit(1).single(),
@@ -64,6 +64,10 @@ export default async function OrderNewPage() {
       .select("min_order_days,discount_type,discount_value,max_discount_amount,start_date,end_date")
       .eq("is_active", true)
       .order("min_order_days", { ascending: true }),
+    supabase.from("kitchen_closure")
+      .select("closure_date, reason")
+      .gte("closure_date", today)
+      .order("closure_date", { ascending: true }),
   ]);
 
   // Filter to rules whose date window covers today — done here rather than in
@@ -79,6 +83,10 @@ export default async function OrderNewPage() {
   const orderedDays = ((orderedDaysRes.data ?? []) as unknown as { date: string | null }[])
     .map(d => d.date)
     .filter((d): d is string => !!d);
+
+  type ClosureRow = { closure_date: string; reason: string | null };
+  const closureDays = ((closuresRes.data ?? []) as unknown as ClosureRow[])
+    .map(c => ({ date: c.closure_date, reason: c.reason }));
 
   // Build orderable weeks — only future weekdays
   type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { recipe: RecipeRow | null }[] };
@@ -120,6 +128,7 @@ export default async function OrderNewPage() {
       initialPrefs={initialPrefs}
       addresses={(addressesRes.data ?? []) as Database["public"]["Tables"]["user_delivery_address"]["Row"][]}
       orderedDays={orderedDays}
+      closureDays={closureDays}
       volumeDiscountRules={activeVolumeRules}
     />
   );
