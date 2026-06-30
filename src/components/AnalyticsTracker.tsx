@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { trackPageView, setAnalyticsUserId } from "@/lib/analytics";
+import { trackPageView, setAnalyticsUserId, setAnalyticsAdminFlag } from "@/lib/analytics";
 
 // Mounted once in the root layout. Fires a page_view on every route change —
 // this is what lets the dashboard show the full path someone takes through
@@ -17,9 +17,17 @@ export default function AnalyticsTracker() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setAnalyticsUserId(data.user?.id ?? null));
+
+    async function syncUser(userId: string | null) {
+      setAnalyticsUserId(userId);
+      if (!userId) { setAnalyticsAdminFlag(false); return; }
+      const { data } = await supabase.from("user").select("role").eq("id", userId).single();
+      setAnalyticsAdminFlag((data as { role: string | null } | null)?.role === "admin");
+    }
+
+    supabase.auth.getUser().then(({ data }) => syncUser(data.user?.id ?? null));
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAnalyticsUserId(session?.user?.id ?? null);
+      syncUser(session?.user?.id ?? null);
     });
     return () => sub.subscription.unsubscribe();
   }, []);

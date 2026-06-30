@@ -108,6 +108,11 @@ type EventRow = {
 let queue: EventRow[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let cachedUserId: string | null = null;
+let isAdminUser = false;
+
+export function setAnalyticsAdminFlag(isAdmin: boolean) {
+  isAdminUser = isAdmin;
+}
 
 const FLUSH_INTERVAL_MS = 4000;
 const FLUSH_BATCH_SIZE = 20;
@@ -155,6 +160,7 @@ function scheduleFlush() {
 
 export function track(eventName: string, metadata: Record<string, unknown> = {}, category = "general") {
   if (typeof window === "undefined") return;
+  if (isAdminUser) return;
   const utm = getUtm();
   const device = getDeviceInfo();
   queue.push({
