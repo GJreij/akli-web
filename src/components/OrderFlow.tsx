@@ -1644,7 +1644,7 @@ export default function OrderFlow({
           onBack={() => router.push("/home")}
         />
 
-        <div style={{ flex: 1, padding: "22px 20px 130px" }}>
+        <div style={{ flex: 1, padding: "22px 20px 200px" }}>
 
           {/* ── Range picker ── */}
           {orderableWeeks.length === 0 ? (
