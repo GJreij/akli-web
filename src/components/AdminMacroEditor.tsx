@@ -10,9 +10,10 @@ const C = {
 };
 
 const DIET_OPTIONS = [
-  { id: "high-protein", label: "💪 High Protein", description: "More protein, less fat — great for active clients" },
-  { id: "balanced",     label: "⚖️ Balanced",     description: "Everyday maintenance, no strong restriction" },
-  { id: "low-fat",      label: "🥗 Light & Clean", description: "Lower fat, higher carbs — calorie-conscious" },
+  { id: "high-protein",  label: "💪 High Protein",       description: "More protein, less fat — great for active clients" },
+  { id: "balanced",      label: "⚖️ Balanced",            description: "Everyday maintenance, no strong restriction" },
+  { id: "low-fat",       label: "🥗 Light & Clean",       description: "Lower fat, higher carbs — calorie-conscious" },
+  { id: "personalized",  label: "✨ Personalized Macros", description: "Custom targets set by Akli based on your specific needs" },
 ] as const;
 
 type DietType = typeof DIET_OPTIONS[number]["id"];
