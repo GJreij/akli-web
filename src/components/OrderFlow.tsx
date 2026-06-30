@@ -171,7 +171,7 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
       {closureDays.size > 0 && (
         <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#c45f00", margin: "0 0 12px" }}>
           <span style={{ width: 11, height: 11, borderRadius: 3, background: "#e07b39", display: "inline-block" }} />
-          Kitchen closed — cannot be ordered
+          Akli is not taking orders on these days
         </p>
       )}
 
