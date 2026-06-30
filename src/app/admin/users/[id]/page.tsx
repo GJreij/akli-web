@@ -4,12 +4,14 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import AdminUserEditForm from "@/components/AdminUserEditForm";
+import MacroSection from "./MacroSection";
 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name" | "email" | "phone_number" | "created_at" | "onboarding" | "role" | "status">;
 type Address = Pick<Database["public"]["Tables"]["user_delivery_address"]["Row"], "id" | "label" | "is_default" | "address_text">;
 type MealPlan = Pick<Database["public"]["Tables"]["meal_plan"]["Row"], "id" | "start_date" | "end_date">;
 type MealPlanDay = Pick<Database["public"]["Tables"]["meal_plan_day"]["Row"], "id" | "meal_plan_id">;
 type Payment = Pick<Database["public"]["Tables"]["payment"]["Row"], "id" | "amount" | "currency" | "provider" | "status" | "created_at">;
+type MacroRow = Pick<Database["public"]["Tables"]["daily_macro_target"]["Row"], "id" | "created_at" | "kcal_target" | "protein_g" | "carbs_g" | "fat_g" | "diet_type" | "goal" | "source" | "method">;
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -60,13 +62,18 @@ async function UserDetail({ id }: { id: string }) {
   const user = userData as UserRow | null;
   if (!user) notFound();
 
-  const [addressesRes, mealPlansRes] = await Promise.all([
+  const [addressesRes, mealPlansRes, macrosRes] = await Promise.all([
     supabase.from("user_delivery_address").select("id,label,is_default,address_text").eq("user_id", id),
     supabase.from("meal_plan").select("id,start_date,end_date").eq("user_id", id).order("start_date", { ascending: false }),
+    supabase.from("daily_macro_target")
+      .select("id,created_at,kcal_target,protein_g,carbs_g,fat_g,diet_type,goal,source,method")
+      .eq("user_id", id)
+      .order("created_at", { ascending: false }),
   ]);
 
   const addresses = (addressesRes.data ?? []) as Address[];
   const mealPlans = (mealPlansRes.data ?? []) as MealPlan[];
+  const macros    = (macrosRes.data ?? []) as MacroRow[];
   const mealPlanIds = mealPlans.map(m => m.id);
 
   const mealPlanDaysRes = mealPlanIds.length
@@ -102,6 +109,10 @@ async function UserDetail({ id }: { id: string }) {
           <div><span style={{ color: C.light }}>Onboarded</span><br /><strong>{user.onboarding ? "Yes" : "No"}</strong></div>
         </div>
         <AdminUserEditForm userId={user.id} initialRole={user.role} initialStatus={user.status} />
+      </Section>
+
+      <Section title="Macro targets">
+        <MacroSection userId={user.id} initialHistory={macros} />
       </Section>
 
       <Section title={`Delivery addresses (${addresses.length})`}>
