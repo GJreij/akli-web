@@ -11,7 +11,7 @@ type Address = Pick<Database["public"]["Tables"]["user_delivery_address"]["Row"]
 type MealPlan = Pick<Database["public"]["Tables"]["meal_plan"]["Row"], "id" | "start_date" | "end_date">;
 type MealPlanDay = Pick<Database["public"]["Tables"]["meal_plan_day"]["Row"], "id" | "meal_plan_id">;
 type Payment = Pick<Database["public"]["Tables"]["payment"]["Row"], "id" | "amount" | "currency" | "provider" | "status" | "created_at">;
-type MacroRow = Pick<Database["public"]["Tables"]["daily_macro_target"]["Row"], "id" | "created_at" | "kcal_target" | "protein_g" | "carbs_g" | "fat_g" | "diet_type" | "goal" | "source" | "method">;
+type MacroRow = Pick<Database["public"]["Tables"]["daily_macro_target"]["Row"], "id" | "created_at" | "kcal_target" | "protein_g" | "carbs_g" | "fat_g" | "diet_type" | "goal" | "source" | "method" | "sex" | "height_cm" | "weight_kg" | "activity_level">;
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -66,7 +66,7 @@ async function UserDetail({ id }: { id: string }) {
     supabase.from("user_delivery_address").select("id,label,is_default,address_text").eq("user_id", id),
     supabase.from("meal_plan").select("id,start_date,end_date").eq("user_id", id).order("start_date", { ascending: false }),
     supabase.from("daily_macro_target")
-      .select("id,created_at,kcal_target,protein_g,carbs_g,fat_g,diet_type,goal,source,method")
+      .select("id,created_at,kcal_target,protein_g,carbs_g,fat_g,diet_type,goal,source,method,sex,height_cm,weight_kg,activity_level")
       .eq("user_id", id)
       .order("created_at", { ascending: false }),
   ]);
