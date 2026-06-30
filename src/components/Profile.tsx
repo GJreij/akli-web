@@ -30,6 +30,7 @@ const C = {
 
 const DIET_LABELS: Record<string, string> = {
   "high-protein": "💪 High Protein", balanced: "⚖️ Balanced", "low-carb": "🥗 Low Carb", "low-fat": "🥗 Light & Clean",
+  "personalized": "✨ Personalized Macros",
 };
 
 const GOAL_LABELS: Record<string, string> = {
