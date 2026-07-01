@@ -176,7 +176,14 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                               </button>
                               <button
                                 onClick={() => setPanelTargets([{ subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: r.meal_plan_day_recipe_ids }])}
-                                style={{ background: C.primary, color: C.white, border: "none", borderRadius: 7, padding: "5px 11px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}
+                                disabled={s.status === "pending"}
+                                title={s.status === "pending" ? "Mark this subrecipe as cooked before portioning" : undefined}
+                                style={{
+                                  background: s.status === "pending" ? C.offWhite : C.primary,
+                                  color: s.status === "pending" ? C.light : C.white,
+                                  border: "none", borderRadius: 7, padding: "5px 11px", fontSize: 11.5, fontWeight: 600,
+                                  cursor: s.status === "pending" ? "not-allowed" : "pointer",
+                                }}
                               >
                                 Portion
                               </button>
