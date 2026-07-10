@@ -359,11 +359,27 @@ export default function AkliApp({
       setSaveErrors(p => ({ ...p, dob: "Please enter your date of birth" }));
       return;
     }
-    if (step === "activity") { fillResultFromBasics(); track("onboarding_step", { step: "activity" }, "onboarding"); setIdx(i => i + 1); return; }
-    if (step === "manual")   { fillResultFromManual();  track("onboarding_step", { step: "manual" },  "onboarding"); setIdx(i => i + 1); return; }
+    if (step === "activity") {
+      fillResultFromBasics();
+      track("onboarding_step", { step: "activity", activity_level: activity }, "onboarding");
+      setIdx(i => i + 1);
+      return;
+    }
+    if (step === "manual") {
+      fillResultFromManual();
+      track("onboarding_step", { step: "manual", kcal_target: kcalIn, diet_type: dietType }, "onboarding");
+      setIdx(i => i + 1);
+      return;
+    }
     if (step === "save")     { await handleSave(); return; }
     setSaveErrors({});
-    track("onboarding_step", { step }, "onboarding");
+    if (step === "goal") {
+      track("onboarding_step", { step: "goal", goal }, "onboarding");
+    } else if (step === "basics") {
+      track("onboarding_step", { step: "basics", age: dob ? ageFromDob(dob) : null, sex, height_cm: height, weight_kg: weight }, "onboarding");
+    } else {
+      track("onboarding_step", { step }, "onboarding");
+    }
     setIdx(i => i + 1);
   }
 

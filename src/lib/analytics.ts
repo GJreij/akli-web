@@ -24,11 +24,19 @@ function uuid(): string {
   });
 }
 
+// akli-lb.org (landing) and app.akli-lb.org (this app) are different origins,
+// so localStorage isn't shared — without this, every landing-page CTA click
+// looked like a brand new person the moment they arrived here. The landing
+// page appends the visitor's anon_id as ?lid= on its CTA links (see
+// Marketing/landing/index.html), so on a device's first-ever visit here we
+// adopt that id instead of minting a fresh one, keeping the funnel joined.
 export function getAnonId(): string {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem(ANON_ID_KEY);
   if (!id) {
-    id = uuid();
+    const lid = new URLSearchParams(window.location.search).get("lid");
+    const isUuid = lid ? /^[0-9a-f-]{36}$/i.test(lid) : false;
+    id = isUuid ? lid! : uuid();
     localStorage.setItem(ANON_ID_KEY, id);
   }
   return id;
