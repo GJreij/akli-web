@@ -111,7 +111,7 @@ function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; wid
       <Text style={styles.mealType}>{label.meal_type}</Text>
       <View style={styles.rule} />
       <Text style={styles.row}>
-        <Text style={styles.bold}>Client : </Text>
+        <Text style={styles.bold}>For : </Text>
         {label.client_name} {label.client_last_name}
       </Text>
       <Text style={styles.row}>
