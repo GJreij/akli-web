@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { byWeight, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+import { byWeight, roundedDayPrice, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 
 type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "very_active";
 type Goal = "lose_weight" | "maintain" | "build_muscle" | "general_health";
@@ -38,7 +38,7 @@ export default function LandingPage() {
 
   const m = byWeight(kcal, calcInputs.weight, "balanced");
   const macros = { protein_g: Math.round(m.protein), carbs_g: Math.round(m.carbs), fat_g: Math.round(m.fat) };
-  const estimatedPrice = ((macros.protein_g * 0.05 + macros.carbs_g * 0.015 + macros.fat_g * 0.04 + 3.5)).toFixed(2);
+  const estimatedPrice = roundedDayPrice(null, macros.protein_g, macros.carbs_g, macros.fat_g).toFixed(2);
 
   return (
     <div className="min-h-screen bg-akli-cream">
