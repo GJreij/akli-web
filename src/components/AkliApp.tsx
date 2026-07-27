@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { track, linkAnonToUser } from "@/lib/analytics";
 import { simplePriceSimulator } from "@/lib/flask";
@@ -124,6 +124,18 @@ export default function AkliApp({
   const [screen, setScreen]       = useState<Screen>(initialScreen);
   const [visible, setVisible]     = useState(true);
   const transTimer                = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Visitors arriving via a marketing-site CTA (?start=onboarding, see
+  // src/app/page.tsx) skip this app's own landing screen entirely, so they
+  // never click the button that normally fires landing_cta_click below.
+  // Without this, marketing-driven onboarding starts would be invisible in
+  // that funnel event — fire the same event here, tagged by source, so the
+  // two entry paths stay comparable in analytics_event.
+  useEffect(() => {
+    if (initialScreen === "onboarding") {
+      track("landing_cta_click", { source: "marketing_handoff" }, "onboarding");
+    }
+  }, [initialScreen]);
 
   function transition(to: Screen, cb?: () => void) {
     setVisible(false);
@@ -307,7 +319,7 @@ export default function AkliApp({
   // ── Navigation ────────────────────────────────────────────────────────────────
 
   function startOnboarding() {
-    track("landing_cta_click", {}, "onboarding");
+    track("landing_cta_click", { source: "in_app_landing" }, "onboarding");
     transition("onboarding", () => { setPath(FULL_PATH); setIdx(0); });
   }
 
