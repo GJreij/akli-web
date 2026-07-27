@@ -84,16 +84,16 @@ const MEALS_PER_DAY = 3;
 // doesn't show a wildly different number than checkout will. Still just a
 // guess: if macro_price changes in Supabase, this constant won't follow it,
 // so formatPrice marks it with "~" rather than presenting it as exact.
-const FALLBACK_PROTEIN_PRICE_PER_G = 0.092;
-const FALLBACK_CARBS_PRICE_PER_G = 0.042;
-const FALLBACK_FAT_PRICE_PER_G = 0.057;
+const FALLBACK_PROTEIN_PRICE_PER_G = 0.071;
+const FALLBACK_CARBS_PRICE_PER_G = 0.035;
+const FALLBACK_FAT_PRICE_PER_G = 0.048;
 const FALLBACK_RECIPE_PACKAGING_PER_MEAL = 1;
 
 export function isEstimatedPrice(dayPrice: number | null) {
   return dayPrice == null;
 }
 
-function roundedDayPrice(dayPrice: number | null, p: number, c: number, f: number) {
+export function roundedDayPrice(dayPrice: number | null, p: number, c: number, f: number) {
   const price = dayPrice ?? (
     p * FALLBACK_PROTEIN_PRICE_PER_G
     + c * FALLBACK_CARBS_PRICE_PER_G
