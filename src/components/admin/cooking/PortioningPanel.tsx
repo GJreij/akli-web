@@ -43,7 +43,13 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
       const next: Record<number, PortioningSummary> = {};
       const errors: string[] = [];
       results.forEach((res, i) => {
-        if (res.error) errors.push(`${targets[i].name}: ${typeof res.error === "string" ? res.error : "failed"}`);
+        if (res.error) {
+          const e = res.error;
+          const msg = typeof e === "string"
+            ? e
+            : `${e.error} — ${e.missing.length} recipe${e.missing.length === 1 ? "" : "s"} not marked as cooked yet (ids: ${e.missing.join(", ")})`;
+          errors.push(`${targets[i].name}: ${msg}`);
+        }
         else if (res.data) next[targets[i].subrecipeId] = res.data;
       });
       setBySubrecipe(next);

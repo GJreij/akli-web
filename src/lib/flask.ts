@@ -423,11 +423,20 @@ export async function getDeliveriesOverview(
   return res.json();
 }
 
+// services/portioning_service.py returns this shape (not a plain string) when
+// some but not all of the requested meal_plan_day_recipe_ids have a
+// "completed" serving row for the subrecipe — a partial-batch mismatch.
+export interface PortioningPartialError {
+  error: string;
+  missing: number[];
+  extra_found: number[];
+}
+
 export async function getPortioningSummary(
   subrecipe_id: number,
   meal_plan_day_recipe_ids: number[],
   cooking_status: string = "completed"
-): Promise<{ data?: PortioningSummary; error?: string }> {
+): Promise<{ data?: PortioningSummary; error?: string | PortioningPartialError }> {
   const res = await fetch(`${FLASK_URL}/portioning/summary`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
