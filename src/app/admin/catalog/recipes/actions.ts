@@ -71,22 +71,23 @@ export async function removeRecipeSubrecipe(recipeId: number, rowId: number) {
 }
 
 // =============================================================================
-// MAIN ASSIGNMENT
+// COMPOSITION ROW SETTINGS (main flag + per-recipe max_serving override)
 // =============================================================================
 
-export async function updateRecipeSubrecipeMains(recipeId: number, formData: FormData) {
+export async function updateRecipeSubrecipeSettings(recipeId: number, formData: FormData) {
   const supabase = await createClient();
   const { data: composition } = await supabase
     .from("recipe_subrecipe")
     .select("id")
     .eq("recipe_id", recipeId);
 
-  const rows: MainRow[] = ((composition ?? []) as { id: number }[]).map(row => ({
+  const rows = ((composition ?? []) as { id: number }[]).map(row => ({
     id: row.id,
     is_main: formData.get(`is_main_${row.id}`) === "on",
+    max_serving: num(formData, `max_serving_${row.id}`),
   }));
 
-  const check = validateMainAssignment(rows);
+  const check = validateMainAssignment(rows as MainRow[]);
   if (!check.ok) {
     redirect(`/admin/catalog/recipes/${recipeId}?mainError=${encodeURIComponent(check.error)}`);
   }
@@ -94,7 +95,7 @@ export async function updateRecipeSubrecipeMains(recipeId: number, formData: For
   await Promise.all(
     rows.map(row =>
       (supabase.from("recipe_subrecipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-        .update({ is_main: row.is_main })
+        .update({ is_main: row.is_main, max_serving: row.max_serving })
         .eq("id", row.id),
     ),
   );
