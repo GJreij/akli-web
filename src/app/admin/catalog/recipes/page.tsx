@@ -6,6 +6,12 @@ import { createRecipe } from "./actions";
 
 type Recipe = Pick<Database["public"]["Tables"]["recipe"]["Row"], "id" | "name" | "could_be_breakfast" | "could_be_lunch" | "could_be_dinner" | "could_be_snack" | "prep_time" | "cook_time" | "always_available">;
 
+type CompositionSummary = {
+  subCount: number;
+  mainNames: string[];
+  cappedCount: number;
+};
+
 function mealLabel(r: Recipe): string {
   const labels = [];
   if (r.could_be_breakfast) labels.push("B");
@@ -23,6 +29,33 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
   if (q) query = query.ilike("name", `%${q}%`);
   const { data } = await query;
   const recipes = (data ?? []) as Recipe[];
+
+  const recipeIds = recipes.map(r => r.id);
+  const summaryByRecipe = new Map<number, CompositionSummary>();
+  if (recipeIds.length > 0) {
+    const { data: compositionData } = await supabase
+      .from("recipe_subrecipe")
+      .select("recipe_id, is_main, max_serving, subrecipe(name, max_serving)")
+      .in("recipe_id", recipeIds);
+
+    type CompositionRow = {
+      recipe_id: number | null;
+      is_main: boolean;
+      max_serving: number | null;
+      subrecipe: { name: string | null; max_serving: number | null } | null;
+    };
+
+    for (const row of (compositionData ?? []) as unknown as CompositionRow[]) {
+      const rid = row.recipe_id;
+      if (rid == null) continue;
+      const summary = summaryByRecipe.get(rid) ?? { subCount: 0, mainNames: [], cappedCount: 0 };
+      summary.subCount += 1;
+      if (row.is_main) summary.mainNames.push(row.subrecipe?.name ?? "?");
+      const resolvedCap = row.max_serving ?? row.subrecipe?.max_serving ?? null;
+      if (resolvedCap != null) summary.cappedCount += 1;
+      summaryByRecipe.set(rid, summary);
+    }
+  }
 
   return (
     <div style={{ padding: "16px 20px 60px" }}>
@@ -50,6 +83,8 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
                 <tr>
                   <th style={th}>Name</th>
                   <th style={th}>Meal</th>
+                  <th style={th}>Main(s)</th>
+                  <th style={th}>Capped</th>
                   <th style={th}>Prep</th>
                   <th style={th}>Cook</th>
                   <th style={th}>Always avail.</th>
@@ -57,20 +92,30 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
               </thead>
               <tbody>
                 {recipes.length === 0 ? (
-                  <tr><td style={td} colSpan={5}>No recipes found.</td></tr>
-                ) : recipes.map(r => (
-                  <tr key={r.id}>
-                    <td style={td}>
-                      <Link href={`/admin/catalog/recipes/${r.id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
-                        {r.name}
-                      </Link>
-                    </td>
-                    <td style={{ ...td, color: C.muted }}>{mealLabel(r)}</td>
-                    <td style={{ ...td, color: C.muted }}>{r.prep_time ?? "—"}</td>
-                    <td style={{ ...td, color: C.muted }}>{r.cook_time ?? "—"}</td>
-                    <td style={{ ...td, color: C.muted }}>{r.always_available ? "Yes" : "No"}</td>
-                  </tr>
-                ))}
+                  <tr><td style={td} colSpan={7}>No recipes found.</td></tr>
+                ) : recipes.map(r => {
+                  const summary = summaryByRecipe.get(r.id);
+                  const noMainWarning = !!summary && summary.subCount > 1 && summary.mainNames.length === 0;
+                  return (
+                    <tr key={r.id}>
+                      <td style={td}>
+                        <Link href={`/admin/catalog/recipes/${r.id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
+                          {r.name}
+                        </Link>
+                      </td>
+                      <td style={{ ...td, color: C.muted }}>{mealLabel(r)}</td>
+                      <td style={{ ...td, color: noMainWarning ? C.warn : C.muted }}>
+                        {noMainWarning ? "⚠ none set" : (summary?.mainNames.join(", ") || "—")}
+                      </td>
+                      <td style={{ ...td, color: C.muted }}>
+                        {summary ? `${summary.cappedCount}/${summary.subCount}` : "—"}
+                      </td>
+                      <td style={{ ...td, color: C.muted }}>{r.prep_time ?? "—"}</td>
+                      <td style={{ ...td, color: C.muted }}>{r.cook_time ?? "—"}</td>
+                      <td style={{ ...td, color: C.muted }}>{r.always_available ? "Yes" : "No"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
