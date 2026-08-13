@@ -1198,6 +1198,7 @@ export type Database = {
         Row: {
           created_at: string
           id: number
+          is_main: boolean
           max_serving: number | null
           optional: boolean | null
           recipe_id: number | null
@@ -1208,6 +1209,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: number
+          is_main?: boolean
           max_serving?: number | null
           optional?: boolean | null
           recipe_id?: number | null
@@ -1218,6 +1220,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: number
+          is_main?: boolean
           max_serving?: number | null
           optional?: boolean | null
           recipe_id?: number | null
@@ -1256,7 +1259,7 @@ export type Database = {
         Insert: {
           created_at?: string
           fixed_servings?: number | null
-          id?: number
+          id?: never
           ratio?: number
           recipe_id: number
           rule_type: string
@@ -1266,7 +1269,7 @@ export type Database = {
         Update: {
           created_at?: string
           fixed_servings?: number | null
-          id?: number
+          id?: never
           ratio?: number
           recipe_id?: number
           rule_type?: string
