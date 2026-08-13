@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { validateRuleConsistency, type ExistingRule, type RuleType } from "./rule-validation";
+import { validateMainAssignment, type MainRow } from "./main-validation";
 
 function num(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -56,15 +57,47 @@ export async function addRecipeSubrecipe(recipeId: number, formData: FormData) {
   const subrecipe_id = Number(formData.get("subrecipe_id"));
   const subrecipe_label = String(formData.get("subrecipe_label") ?? "").trim() || null;
   const optional = formData.get("optional") === "on";
+  const is_main = formData.get("is_main") === "on";
   const max_serving = num(formData, "max_serving");
   await (supabase.from("recipe_subrecipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-    .insert({ recipe_id: recipeId, subrecipe_id, subrecipe_label, optional, max_serving });
+    .insert({ recipe_id: recipeId, subrecipe_id, subrecipe_label, optional, is_main, max_serving });
   revalidatePath(`/admin/catalog/recipes/${recipeId}`);
 }
 
 export async function removeRecipeSubrecipe(recipeId: number, rowId: number) {
   const supabase = await createClient();
   await supabase.from("recipe_subrecipe").delete().eq("id", rowId);
+  revalidatePath(`/admin/catalog/recipes/${recipeId}`);
+}
+
+// =============================================================================
+// MAIN ASSIGNMENT
+// =============================================================================
+
+export async function updateRecipeSubrecipeMains(recipeId: number, formData: FormData) {
+  const supabase = await createClient();
+  const { data: composition } = await supabase
+    .from("recipe_subrecipe")
+    .select("id")
+    .eq("recipe_id", recipeId);
+
+  const rows: MainRow[] = ((composition ?? []) as { id: number }[]).map(row => ({
+    id: row.id,
+    is_main: formData.get(`is_main_${row.id}`) === "on",
+  }));
+
+  const check = validateMainAssignment(rows);
+  if (!check.ok) {
+    redirect(`/admin/catalog/recipes/${recipeId}?mainError=${encodeURIComponent(check.error)}`);
+  }
+
+  await Promise.all(
+    rows.map(row =>
+      (supabase.from("recipe_subrecipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .update({ is_main: row.is_main })
+        .eq("id", row.id),
+    ),
+  );
   revalidatePath(`/admin/catalog/recipes/${recipeId}`);
 }
 
