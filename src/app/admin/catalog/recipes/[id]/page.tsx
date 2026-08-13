@@ -5,7 +5,7 @@ import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, primaryButton, dangerButton, subtleButton, th, td, C } from "@/components/admin/ui";
 import {
   updateRecipe, deleteRecipe, addRecipeSubrecipe, removeRecipeSubrecipe,
-  addRecipeSubrecipeRule, removeRecipeSubrecipeRule, updateRecipeSubrecipeMains,
+  addRecipeSubrecipeRule, removeRecipeSubrecipeRule, updateRecipeSubrecipeSettings,
 } from "../actions";
 
 type Recipe = Database["public"]["Tables"]["recipe"]["Row"];
@@ -45,7 +45,7 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
   const deleteAction = deleteRecipe.bind(null, recipe.id);
   const addSubrecipeAction = addRecipeSubrecipe.bind(null, recipe.id);
   const addRuleAction = addRecipeSubrecipeRule.bind(null, recipe.id);
-  const updateMainsAction = updateRecipeSubrecipeMains.bind(null, recipe.id);
+  const updateCompositionAction = updateRecipeSubrecipeSettings.bind(null, recipe.id);
 
   return (
     <div style={{ padding: "16px 20px 60px" }}>
@@ -106,10 +106,10 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
             <p style={{ fontSize: 13, color: C.light, margin: "0 0 12px" }}>No subrecipes added yet.</p>
           ) : (
             <>
-              {/* Empty form, referenced by the "Main" checkboxes + save button below via the
-                  form="mains-form" attribute — kept outside the table so it never nests
-                  inside each row's own per-row "Remove" form. */}
-              <form id="mains-form" action={updateMainsAction} />
+              {/* Empty form, referenced by the "Max serving"/"Main" inputs + save button below
+                  via the form="composition-form" attribute — kept outside the table so it
+                  never nests inside each row's own per-row "Remove" form. */}
+              <form id="composition-form" action={updateCompositionAction} />
               <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
                 <thead>
                   <tr>
@@ -129,12 +129,21 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
                       <tr key={row.id}>
                         <td style={td}>{sub?.name ?? `#${row.subrecipe_id}`}</td>
                         <td style={{ ...td, color: C.muted }}>{row.subrecipe_label ?? "—"}</td>
-                        <td style={{ ...td, color: C.muted }}>{row.max_serving ?? "—"}</td>
+                        <td style={td}>
+                          <input
+                            type="number"
+                            form="composition-form"
+                            name={`max_serving_${row.id}`}
+                            defaultValue={row.max_serving ?? ""}
+                            placeholder="—"
+                            style={{ ...inputStyle, width: 80 }}
+                          />
+                        </td>
                         <td style={{ ...td, color: C.muted }}>{row.optional ? "Yes" : "No"}</td>
                         <td style={td}>
                           <input
                             type="checkbox"
-                            form="mains-form"
+                            form="composition-form"
                             name={`is_main_${row.id}`}
                             defaultChecked={row.is_main}
                           />
@@ -149,12 +158,15 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
                   })}
                 </tbody>
               </table>
-              <button type="submit" form="mains-form" style={{ ...subtleButton, marginBottom: 14 }}>Save mains</button>
+              <button type="submit" form="composition-form" style={{ ...subtleButton, marginBottom: 14 }}>Save changes</button>
               {composition.length > 1 && !composition.some(row => row.is_main) && (
                 <p style={{ fontSize: 11.5, color: C.warn, marginTop: -8, marginBottom: 14 }}>
                   No subrecipe is marked main yet — pick the biggest-serving one and save before this recipe is ready.
                 </p>
               )}
+              <p style={{ fontSize: 11.5, color: C.light, marginTop: -8, marginBottom: 14 }}>
+                Max serving here overrides this subrecipe&apos;s global max serving, just for this recipe. Leave blank to use the global value (or no cap, once mains govern balance).
+              </p>
             </>
           )}
 
