@@ -6,7 +6,6 @@ import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
   IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
   IconMapPin, IconPlus, IconTrash, IconScaleOutline,
-  IconClipboardList,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
@@ -826,36 +825,70 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
   const [collapsedUsed, setCollapsedUsed] = useState<Set<string>>(new Set());
   const [expandedNotUsed, setExpandedNotUsed] = useState<Set<string>>(new Set());
 
+  // Swipe-to-dismiss: drag the header left or right past SWIPE_CLOSE_PX and
+  // let go to close, mirroring the pull-down-to-close gesture users expect
+  // on a floating panel that otherwise sits on top of the macro totals.
+  const SWIPE_CLOSE_PX = 70;
+  const [dragX, setDragX] = useState(0);
+  const draggingRef = useRef(false);
+  const touchStartXRef = useRef(0);
+
   function toggle(set: Set<string>, setSet: (s: Set<string>) => void, key: string) {
     const n = new Set(set);
     n.has(key) ? n.delete(key) : n.add(key);
     setSet(n);
   }
 
+  function handleTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    draggingRef.current = true;
+    touchStartXRef.current = e.touches[0].clientX;
+  }
+  function handleTouchMove(e: React.TouchEvent<HTMLDivElement>) {
+    if (!draggingRef.current) return;
+    setDragX(e.touches[0].clientX - touchStartXRef.current);
+  }
+  function handleTouchEnd() {
+    draggingRef.current = false;
+    if (Math.abs(dragX) > SWIPE_CLOSE_PX) {
+      onToggle();
+    }
+    setDragX(0);
+  }
+
   return (
     <>
-      <button
-        onClick={onToggle}
-        title={open ? "Hide food summary" : "Show food summary"}
-        style={{
-          position: "fixed", right: 16, top: 82, zIndex: 41,
-          display: "flex", alignItems: "center", gap: 6,
-          background: open ? C.primary : C.tealDark, color: C.white, border: "none",
-          borderRadius: 20, padding: "8px 14px", fontSize: 12, fontWeight: 600,
-          boxShadow: "0 6px 18px rgba(6,51,48,0.25)", cursor: "pointer",
-        }}
-      >
-        <IconClipboardList size={15} />
-        Food summary
-      </button>
+      {!open && (
+        <button
+          onClick={onToggle}
+          title="Show food summary"
+          aria-label="Show food summary"
+          style={{
+            position: "fixed", right: 16, top: 82, zIndex: 41,
+            width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
+            background: C.tealDark, border: "none", borderRadius: "50%",
+            fontSize: 18, lineHeight: 1,
+            boxShadow: "0 6px 18px rgba(6,51,48,0.25)", cursor: "pointer",
+          }}
+        >
+          📋
+        </button>
+      )}
 
       {open && (
         <div style={{
           position: "fixed", top: 126, right: 16, left: 16, margin: "0 auto", maxWidth: 420, zIndex: 40,
           background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
           boxShadow: "0 10px 28px rgba(6,51,48,0.18)", maxHeight: "65vh", overflowY: "auto",
+          transform: `translateX(${dragX}px)`,
+          opacity: Math.max(1 - Math.abs(dragX) / 200, 0.3),
+          transition: draggingRef.current ? "none" : "transform 0.2s, opacity 0.2s",
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px", borderBottom: `1px solid ${C.border}` }}>
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px", borderBottom: `1px solid ${C.border}`, touchAction: "pan-y" }}
+          >
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700 }}>Your food, at a glance</p>
             <button onClick={onToggle} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
               <IconX size={16} />
