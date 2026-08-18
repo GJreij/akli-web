@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
   IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
   IconMapPin, IconPlus, IconTrash, IconScaleOutline,
+  IconClipboardList,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
@@ -13,6 +14,7 @@ import { track } from "@/lib/analytics";
 import {
   generateMealPlan, getCheckoutSummary, confirmOrder, updateMealPlan, simplePriceSimulator,
   type GenerateMealPlanResponse, type CheckoutSummaryResponse, type PlanDay, type Meal, type ChangeLog,
+  type PlanSummaryPeriod,
 } from "@/lib/flask";
 import { type PrefRating } from "@/lib/preferences";
 import AddressForm from "@/components/AddressForm";
@@ -685,35 +687,37 @@ function MealRow({ meal, onRemove, onReplace, expanded }: {
 }) {
   const [imgErr, setImgErr] = useState(false);
   return (
-    <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-      <div style={{ width: 48, height: 48, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        {meal.photo && !imgErr
-          // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={meal.photo} alt="" onError={() => setImgErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          : <IconLeaf size={18} color={C.light} />
-        }
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {meal.recipe_name}
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-          <span style={mealBadgeStyle(meal.meal_type)}>
-            {meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1)}
-          </span>
-          <span style={{ fontSize: 10.5, color: C.light }}>
-            {Math.round(meal.macros.kcal)} kcal · {Math.round(meal.macros.protein)}g protein
-            {expanded && ` · ${Math.round(meal.macros.carbs)}g carbs · ${Math.round(meal.macros.fat)}g fat`}
-          </span>
+    <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {meal.photo && !imgErr
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={meal.photo} alt="" onError={() => setImgErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            : <IconLeaf size={18} color={C.light} />
+          }
         </div>
-      </div>
-      <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
-        <button onClick={onReplace} title="Replace" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
-          <IconRefresh size={14} />
-        </button>
-        <button onClick={onRemove} title="Remove" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
-          <IconX size={14} />
-        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 3px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {meal.recipe_name}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+            <span style={mealBadgeStyle(meal.meal_type)}>
+              {meal.meal_type.charAt(0).toUpperCase() + meal.meal_type.slice(1)}
+            </span>
+            <span style={{ fontSize: 10.5, color: C.light }}>
+              {Math.round(meal.macros.kcal)} kcal · {Math.round(meal.macros.protein)}g protein
+              {expanded && ` · ${Math.round(meal.macros.carbs)}g carbs · ${Math.round(meal.macros.fat)}g fat`}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+          <button onClick={onReplace} title="Replace" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
+            <IconRefresh size={14} />
+          </button>
+          <button onClick={onRemove} title="Remove" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
+            <IconX size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -784,6 +788,121 @@ function DailyGoalCard({ target }: { target: { protein_g: number; carbs_g: numbe
   );
 }
 
+// ─── Plan food summary (floating, toggleable) ──────────────────────────────
+//
+// A standing tab the user can open/close/reopen any time, not a one-shot
+// dismissible toast — that's the whole point for a month-long plan they
+// might return to repeatedly. Two independently collapsible sections:
+// what's actually in the plan (with how many times), and what from the
+// eligible catalog never made it in at all.
+
+function SummarySection({ title, count, expanded, onToggle, children }: {
+  title: string; count: number; expanded: boolean; onToggle: () => void; children: ReactNode;
+}) {
+  return (
+    <div style={{ borderTop: `1px solid ${C.border}` }}>
+      <button
+        onClick={onToggle}
+        style={{
+          width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "11px 14px", background: "none", border: "none", cursor: "pointer",
+        }}
+      >
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: C.primary }}>{title} ({count})</span>
+        <IconChevronDown size={14} color={C.light} style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+      </button>
+      {expanded && <div style={{ padding: "0 14px 12px" }}>{children}</div>}
+    </div>
+  );
+}
+
+function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPeriod[]; open: boolean; onToggle: () => void }) {
+  // "used" sections default OPEN, "not planned" sections default CLOSED,
+  // per period. Tracked as toggled-away-from-default sets (keyed by
+  // period start_date, which is stable across regenerates) rather than
+  // an index-keyed initializer, so a period that appears after a
+  // regenerate still gets the right default instead of needing to have
+  // been known at mount time.
+  const [collapsedUsed, setCollapsedUsed] = useState<Set<string>>(new Set());
+  const [expandedNotUsed, setExpandedNotUsed] = useState<Set<string>>(new Set());
+
+  function toggle(set: Set<string>, setSet: (s: Set<string>) => void, key: string) {
+    const n = new Set(set);
+    n.has(key) ? n.delete(key) : n.add(key);
+    setSet(n);
+  }
+
+  return (
+    <>
+      <button
+        onClick={onToggle}
+        title={open ? "Hide food summary" : "Show food summary"}
+        style={{
+          position: "fixed", right: 16, top: 82, zIndex: 41,
+          display: "flex", alignItems: "center", gap: 6,
+          background: open ? C.primary : C.tealDark, color: C.white, border: "none",
+          borderRadius: 20, padding: "8px 14px", fontSize: 12, fontWeight: 600,
+          boxShadow: "0 6px 18px rgba(6,51,48,0.25)", cursor: "pointer",
+        }}
+      >
+        <IconClipboardList size={15} />
+        Food summary
+      </button>
+
+      {open && (
+        <div style={{
+          position: "fixed", top: 126, right: 16, left: 16, margin: "0 auto", maxWidth: 420, zIndex: 40,
+          background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
+          boxShadow: "0 10px 28px rgba(6,51,48,0.18)", maxHeight: "65vh", overflowY: "auto",
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px", borderBottom: `1px solid ${C.border}` }}>
+            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700 }}>Your food, at a glance</p>
+            <button onClick={onToggle} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
+              <IconX size={16} />
+            </button>
+          </div>
+
+          {periods.map(period => {
+            const key = period.start_date;
+            const usedExpanded = !collapsedUsed.has(key);
+            const notUsedExpanded = expandedNotUsed.has(key);
+            return (
+              <div key={key} style={{ borderBottom: `1px solid ${C.border}` }}>
+                <p style={{ margin: 0, padding: "11px 14px 0", fontSize: 12, fontWeight: 700, color: C.tealDark }}>
+                  {fmtDayChip(period.start_date)} – {fmtDayChip(period.end_date)}
+                </p>
+
+                <SummarySection title="What you'll eat" count={period.used.length} expanded={usedExpanded} onToggle={() => toggle(collapsedUsed, setCollapsedUsed, key)}>
+                  <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                    {period.used.map(u => (
+                      <li key={u.recipe_id} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, color: C.muted, padding: "3px 0" }}>
+                        <span>{u.recipe_name}</span>
+                        <span style={{ color: C.light, flexShrink: 0 }}>×{u.times_used}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </SummarySection>
+
+                <SummarySection title="Not planned this time" count={period.not_used.length} expanded={notUsedExpanded} onToggle={() => toggle(expandedNotUsed, setExpandedNotUsed, key)}>
+                  {period.not_used.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: 12.5, color: C.light }}>Nothing missed — every eligible recipe made it into this stretch.</p>
+                  ) : (
+                    <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
+                      {period.not_used.map(u => (
+                        <li key={u.recipe_id} style={{ fontSize: 12.5, color: C.muted, padding: "3px 0" }}>{u.recipe_name}</li>
+                      ))}
+                    </ul>
+                  )}
+                </SummarySection>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
 function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onAddMeal, isOnlyDay }: {
   day: PlanDay;
   expanded: boolean;
@@ -820,7 +939,13 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
       )}
       <div style={{ padding: "0 14px" }}>
         {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
-          <MealRow key={meal.meal_key} meal={meal} onRemove={() => onRemoveMeal(meal)} onReplace={() => onReplaceMeal(meal)} expanded={expanded} />
+          <MealRow
+            key={meal.meal_key}
+            meal={meal}
+            onRemove={() => onRemoveMeal(meal)}
+            onReplace={() => onReplaceMeal(meal)}
+            expanded={expanded}
+          />
         ))}
         {missingTypes.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7, padding: "8px 0 10px" }}>
@@ -1322,6 +1447,11 @@ export default function OrderFlow({
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const allDaysExpanded = !!plan && plan.days.length > 0 && plan.days.every(d => expandedDays.has(d.date));
 
+  // Floating food-summary panel — a standing toggle, not a one-shot toast,
+  // so it stays reachable throughout review for a plan the user might
+  // revisit repeatedly (e.g. a full month).
+  const [summaryOpen, setSummaryOpen] = useState(false);
+
   function pushHistory() {
     if (plan) setPlanHistory(h => [...h, plan]);
   }
@@ -1441,6 +1571,48 @@ export default function OrderFlow({
         kcal_override: finalKcalOverride,
       });
       result.days = result.days.filter(d => selected.has(d.date));
+
+      // The backend computes each plan_summary period from the full
+      // [first-selected, last-selected] span, before this filter narrows
+      // it down to the user's actual picked days -- recompute each
+      // period against the SAME filtered days so the summary panel's
+      // counts (and displayed date range) always match what's actually
+      // visible (same class of staleness bug the old macro_advisory card
+      // used to hit). A period with no visible days left is dropped.
+      result.plan_summary = result.plan_summary
+        .map((period): PlanSummaryPeriod | null => {
+          const periodDays = result.days.filter(d => d.date >= period.start_date && d.date <= period.end_date);
+          if (periodDays.length === 0) return null;
+
+          const recipeNames = new Map<number, string | null>();
+          const usedCounts = new Map<number, number>();
+          for (const day of periodDays) {
+            for (const meal of day.meals) {
+              recipeNames.set(meal.recipe_id, meal.recipe_name);
+              usedCounts.set(meal.recipe_id, (usedCounts.get(meal.recipe_id) ?? 0) + 1);
+            }
+          }
+          const eligibleIds = new Set<number>();
+          for (const u of [...period.used, ...period.not_used]) {
+            eligibleIds.add(u.recipe_id);
+            if (!recipeNames.has(u.recipe_id)) recipeNames.set(u.recipe_id, u.recipe_name);
+          }
+          for (const rid of usedCounts.keys()) eligibleIds.add(rid);
+
+          const visibleDates = periodDays.map(d => d.date).sort();
+          return {
+            start_date: visibleDates[0],
+            end_date: visibleDates[visibleDates.length - 1],
+            used: [...usedCounts.entries()]
+              .map(([recipe_id, times_used]) => ({ recipe_id, recipe_name: recipeNames.get(recipe_id) ?? null, times_used }))
+              .sort((a, b) => b.times_used - a.times_used),
+            not_used: [...eligibleIds]
+              .filter(rid => !usedCounts.has(rid))
+              .map(rid => ({ recipe_id: rid, recipe_name: recipeNames.get(rid) ?? null })),
+          };
+        })
+        .filter((p): p is PlanSummaryPeriod => p !== null);
+
       setPlan(result);
       setOriginalPlan(result);
       setPlanHistory([]);
@@ -1907,6 +2079,7 @@ export default function OrderFlow({
   if (step === "review" && plan) {
     return (
       <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
+        <PlanSummaryPanel periods={plan.plan_summary} open={summaryOpen} onToggle={() => setSummaryOpen(v => !v)} />
         <StepHeader
           step={2} total={3}
           title="Your plan"

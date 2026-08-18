@@ -80,6 +80,26 @@ export interface PlanDay {
   meals: Meal[];
 }
 
+export interface PlanSummaryUsedRecipe {
+  recipe_id: number;
+  recipe_name: string | null;
+  times_used: number;
+}
+
+export interface PlanSummaryUnusedRecipe {
+  recipe_id: number;
+  recipe_name: string | null;
+}
+
+// One per weekly_menu period the plan spans -- "what you'll eat / what
+// you won't" is scoped to what was actually available in that window.
+export interface PlanSummaryPeriod {
+  start_date: string;
+  end_date: string;
+  used: PlanSummaryUsedRecipe[];
+  not_used: PlanSummaryUnusedRecipe[];
+}
+
 export interface GenerateMealPlanResponse {
   user_id: string;
   start_date: string;
@@ -87,6 +107,7 @@ export interface GenerateMealPlanResponse {
   daily_macro_target: { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
   excluded_dates: string[];
   days: PlanDay[];
+  plan_summary: PlanSummaryPeriod[];
 }
 
 export async function generateMealPlan(
