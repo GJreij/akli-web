@@ -833,6 +833,17 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
   const draggingRef = useRef(false);
   const touchStartXRef = useRef(0);
 
+  // Tapping anywhere outside the panel closes it too, like a popover.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: PointerEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) onToggle();
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open, onToggle]);
+
   function toggle(set: Set<string>, setSet: (s: Set<string>) => void, key: string) {
     const n = new Set(set);
     n.has(key) ? n.delete(key) : n.add(key);
@@ -875,7 +886,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
       )}
 
       {open && (
-        <div style={{
+        <div ref={panelRef} style={{
           position: "fixed", top: 126, right: 16, left: 16, margin: "0 auto", maxWidth: 420, zIndex: 40,
           background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
           boxShadow: "0 10px 28px rgba(6,51,48,0.18)", maxHeight: "65vh", overflowY: "auto",
@@ -887,7 +898,11 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px", borderBottom: `1px solid ${C.border}`, touchAction: "pan-y" }}
+            style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 14px",
+              borderBottom: `1px solid ${C.border}`, touchAction: "pan-y",
+              position: "sticky", top: 0, background: C.white, borderRadius: "14px 14px 0 0", zIndex: 1,
+            }}
           >
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700 }}>Your food, at a glance</p>
             <button onClick={onToggle} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
