@@ -7,7 +7,7 @@ type DeliverySlot = Pick<Database["public"]["Tables"]["delivery_slots"]["Row"], 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name">;
 type KitchenClosure = Pick<Database["public"]["Tables"]["kitchen_closure"]["Row"], "reason">;
 type MealPlanDay = Pick<Database["public"]["Tables"]["meal_plan_day"]["Row"], "id">;
-type MealPlanDayRecipe = Pick<Database["public"]["Tables"]["meal_plan_day_recipe"]["Row"], "cooking_status" | "packaging_status">;
+type MealPlanDayRecipe = Pick<Database["public"]["Tables"]["meal_plan_day_recipe"]["Row"], "packaging_status">;
 type Payment = Pick<Database["public"]["Tables"]["payment"]["Row"], "id" | "amount" | "currency" | "provider" | "status">;
 
 const C = {
@@ -80,7 +80,7 @@ async function OperationsData() {
       ? supabase.from("user").select("id,name,last_name").in("id", userIds)
       : Promise.resolve({ data: [] as UserRow[] }),
     mpdIds.length
-      ? supabase.from("meal_plan_day_recipe").select("cooking_status,packaging_status").in("meal_plan_day_id", mpdIds)
+      ? supabase.from("meal_plan_day_recipe").select("packaging_status").in("meal_plan_day_id", mpdIds)
       : Promise.resolve({ data: [] as MealPlanDayRecipe[] }),
     mpdIds.length
       ? supabase.from("payment").select("id,amount,currency,provider,status").in("meal_plan_day_id", mpdIds)
@@ -103,7 +103,6 @@ async function OperationsData() {
   const deliveriesPending = deliveries.filter(d => d.status === "pending").length;
   const deliveriesDone = deliveries.filter(d => d.status === "completed").length;
 
-  const cookingDone = recipes.filter(r => r.cooking_status === "completed").length;
   const packagingDone = recipes.filter(r => r.packaging_status === "completed").length;
 
   const paidAmount = payments.filter(p => p.status === "paid").reduce((sum, p) => sum + (p.amount ?? 0), 0);
@@ -127,7 +126,6 @@ async function OperationsData() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
           <Card label="Deliveries today" value={String(deliveries.length)} sub={`${deliveriesDone} completed`} />
           <Card label="Meal plan days" value={String(mealPlanDays.length)} />
-          <Card label="Cooked" value={`${cookingDone}/${recipes.length}`} sub="recipes" />
           <Card label="Packaged" value={`${packagingDone}/${recipes.length}`} sub="recipes" />
           <Card label="Paid today" value={`$${paidAmount.toFixed(0)}`} sub={pendingAmount > 0 ? `$${pendingAmount.toFixed(0)} pending` : undefined} accent={C.tealDark} />
         </div>

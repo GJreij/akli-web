@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 
 type MealPlanDay = Pick<Database["public"]["Tables"]["meal_plan_day"]["Row"], "id">;
-type MealPlanDayRecipe = Pick<Database["public"]["Tables"]["meal_plan_day_recipe"]["Row"], "cooking_status">;
+type MealPlanDayRecipe = Pick<Database["public"]["Tables"]["meal_plan_day_recipe"]["Row"], "id">;
 type Delivery = Pick<Database["public"]["Tables"]["deliveries"]["Row"], "status">;
 type EventRow = Pick<Database["public"]["Tables"]["analytics_event"]["Row"], "anon_id">;
 
@@ -80,11 +80,10 @@ async function DashboardStats() {
   const mpdIds = mealPlanDays.map(d => d.id);
 
   const recipesRes = mpdIds.length
-    ? await supabase.from("meal_plan_day_recipe").select("cooking_status").in("meal_plan_day_id", mpdIds)
+    ? await supabase.from("meal_plan_day_recipe").select("id").in("meal_plan_day_id", mpdIds)
     : { data: [] as MealPlanDayRecipe[] };
   const recipes = (recipesRes.data ?? []) as MealPlanDayRecipe[];
   const mealsToCook = recipes.length;
-  const mealsDone = recipes.filter(r => r.cooking_status === "completed").length;
 
   const deliveries = (deliveriesRes.data ?? []) as Delivery[];
   const deliveriesPending = deliveries.filter(d => d.status === "pending").length;
@@ -96,7 +95,7 @@ async function DashboardStats() {
 
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-      <StatCard label="Meals to cook" value={String(mealsToCook)} sub={mealsToCook ? `${mealsDone} done` : "today"} />
+      <StatCard label="Meals to cook" value={String(mealsToCook)} sub="today" />
       <StatCard label="Deliveries today" value={String(deliveries.length)} sub={deliveriesPending ? `${deliveriesPending} pending` : "none pending"} />
       <StatCard label="New signups" value={String(newSignups)} sub="last 24h" />
       <StatCard label="Site visits" value={String(uniqueVisitors)} sub="unique, last 24h" />

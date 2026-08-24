@@ -47,7 +47,7 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
           const e = res.error;
           const msg = typeof e === "string"
             ? e
-            : `${e.error} — ${e.missing.length} recipe${e.missing.length === 1 ? "" : "s"} not marked as cooked yet (ids: ${e.missing.join(", ")})`;
+            : `${e.error} — ${e.missing.length} recipe${e.missing.length === 1 ? "" : "s"} missing a serving row (ids: ${e.missing.join(", ")})`;
           errors.push(`${targets[i].name}: ${msg}`);
         }
         else if (res.data) next[targets[i].subrecipeId] = res.data;
@@ -59,43 +59,79 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
     return () => { cancelled = true; };
   }, [targets]);
 
-  // Rows keyed by (client, delivery date) — a client with orders on multiple
-  // days must NOT be merged into one row; each date is its own portion.
-  type RowInfo = { key: string; name: string; date: string | null; perTarget: Record<number, { servingId: number; demand: number }> };
+  // Rows are keyed by (client, delivery date, meal_plan_day_recipe) — i.e. one
+  // physical meal instance. This matters because the same subrecipe can show
+  // up twice for the same client on the same day but in TWO DIFFERENT MEALS
+  // (e.g. a salad in both their lunch and dinner recipe) — those need two
+  // separate portions, not one combined blob. Multiple TARGETS (subrecipes)
+  // that belong to the SAME meal (e.g. turkey + cheese for one sandwich) are
+  // still meant to combine into one row — that's the "portion together"
+  // feature — so the key must include the meal, not just client+date.
+  // perTarget still holds an array (rather than a single entry) as a defensive
+  // measure in case a subrecipe genuinely appears twice within one meal.
+  type ServingEntry = { servingId: number; demand: number };
+  type RowInfo = {
+    key: string; name: string; date: string | null; mealLabel: string | null;
+    perTarget: Record<number, ServingEntry[]>;
+  };
   const rowByKey = new Map<string, RowInfo>();
   const rows: RowInfo[] = [];
+
+  function capitalize(s: string) {
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
 
   for (const target of targets) {
     const summary = bySubrecipe[target.subrecipeId];
     for (const c of summary?.clients ?? []) {
-      const key = `${c.client?.id ?? "unknown"}|${c.delivery_date ?? ""}`;
+      const key = `${c.client?.id ?? "unknown"}|${c.delivery_date ?? ""}|${c.meal_plan_day_recipe_id}`;
       let row = rowByKey.get(key);
       if (!row) {
-        row = { key, name: displayName(c.client), date: c.delivery_date, perTarget: {} };
+        const mealLabel = [c.meal_type ? capitalize(c.meal_type) : null, c.recipe_name].filter(Boolean).join(" · ") || null;
+        row = { key, name: displayName(c.client), date: c.delivery_date, mealLabel, perTarget: {} };
         rowByKey.set(key, row);
         rows.push(row);
       }
-      row.perTarget[target.subrecipeId] = { servingId: c.meal_plan_day_recipe_serving_id, demand: c.servings_for_client ?? 0 };
+      (row.perTarget[target.subrecipeId] ??= []).push({
+        servingId: c.meal_plan_day_recipe_serving_id,
+        demand: c.servings_for_client ?? 0,
+      });
     }
   }
-  rows.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.name.localeCompare(b.name));
+  rows.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.name.localeCompare(b.name) || (a.mealLabel ?? "").localeCompare(b.mealLabel ?? ""));
+
+  function rowDemand(row: RowInfo, subrecipeId: number) {
+    return (row.perTarget[subrecipeId] ?? []).reduce((sum, e) => sum + e.demand, 0);
+  }
 
   // Each subrecipe is portioned entirely independently — its own total demand,
   // its own weight input, its own per-client grams. No blending across targets.
   function totalDemand(subrecipeId: number) {
-    return rows.reduce((sum, r) => sum + (r.perTarget[subrecipeId]?.demand ?? 0), 0);
+    return rows.reduce((sum, r) => sum + rowDemand(r, subrecipeId), 0);
   }
 
+  // Total grams for this row (across all its serving entries for this subrecipe).
   function gramsFor(row: RowInfo, subrecipeId: number) {
-    const entry = row.perTarget[subrecipeId];
-    if (!entry) return null;
+    const entries = row.perTarget[subrecipeId];
+    if (!entries || entries.length === 0) return null;
     const mode = modes[subrecipeId] ?? "total";
     const weight = parseFloat(weights[subrecipeId] ?? "");
     if (isNaN(weight) || weight <= 0) return null;
+    const demand = rowDemand(row, subrecipeId);
     const td = totalDemand(subrecipeId);
     return mode === "total"
-      ? (td > 0 ? weight * (entry.demand / td) : 0)
-      : weight * entry.demand;
+      ? (td > 0 ? weight * (demand / td) : 0)
+      : weight * demand;
+  }
+
+  // Grams for one specific serving row, splitting the row's total grams
+  // proportionally when a client has more than one serving of this subrecipe
+  // on the same day.
+  function gramsForServing(row: RowInfo, subrecipeId: number, entry: ServingEntry) {
+    const rowGrams = gramsFor(row, subrecipeId);
+    if (rowGrams == null) return null;
+    const demand = rowDemand(row, subrecipeId);
+    return demand > 0 ? rowGrams * (entry.demand / demand) : 0;
   }
 
   function isValid(subrecipeId: number) {
@@ -109,11 +145,13 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
     setSaving(true);
     const toSave = rows.flatMap(row =>
       targets
-        .filter(t => row.perTarget[t.subrecipeId] && isValid(t.subrecipeId))
-        .map(t => ({
-          meal_plan_day_recipe_serving_id: row.perTarget[t.subrecipeId].servingId,
-          weight_after_cooking: Math.round((gramsFor(row, t.subrecipeId) ?? 0) * 10) / 10,
-        }))
+        .filter(t => row.perTarget[t.subrecipeId]?.length && isValid(t.subrecipeId))
+        .flatMap(t =>
+          row.perTarget[t.subrecipeId].map(entry => ({
+            meal_plan_day_recipe_serving_id: entry.servingId,
+            weight_after_cooking: Math.round((gramsForServing(row, t.subrecipeId, entry) ?? 0) * 10) / 10,
+          }))
+        )
     );
     await savePortioning(toSave);
     setSaving(false);
@@ -177,11 +215,13 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
                 <tr style={{ textAlign: "left", color: C.light, borderBottom: `1px solid ${C.border}` }}>
                   <th style={{ padding: "4px 6px" }}>Client</th>
                   <th style={{ padding: "4px 6px" }}>Delivery date</th>
+                  <th style={{ padding: "4px 6px" }}>Meal</th>
                   {targets.map(t => (
                     <th key={t.subrecipeId} colSpan={2} style={{ padding: "4px 6px" }}>{t.name}</th>
                   ))}
                 </tr>
                 <tr style={{ textAlign: "left", color: C.light, borderBottom: `1px solid ${C.border}`, fontSize: 11 }}>
+                  <th></th>
                   <th></th>
                   <th></th>
                   {targets.map(t => (
@@ -197,12 +237,13 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
                   <tr key={row.key} style={{ borderBottom: `1px solid ${C.offWhite}` }}>
                     <td style={{ padding: "6px 6px", fontWeight: 600 }}>{row.name}</td>
                     <td style={{ padding: "6px 6px", color: C.muted, whiteSpace: "nowrap" }}>{row.date ?? "—"}</td>
+                    <td style={{ padding: "6px 6px", color: C.muted, whiteSpace: "nowrap" }}>{row.mealLabel ?? "—"}</td>
                     {targets.map(t => {
-                      const entry = row.perTarget[t.subrecipeId];
-                      const grams = entry ? gramsFor(row, t.subrecipeId) : null;
+                      const entries = row.perTarget[t.subrecipeId];
+                      const grams = entries?.length ? gramsFor(row, t.subrecipeId) : null;
                       return (
                         <Fragment key={t.subrecipeId}>
-                          <td style={{ padding: "6px 6px", color: C.muted }}>{entry ? entry.demand : "—"}</td>
+                          <td style={{ padding: "6px 6px", color: C.muted }}>{entries?.length ? rowDemand(row, t.subrecipeId) : "—"}</td>
                           <td style={{ padding: "6px 6px", fontWeight: 600, color: C.tealDark }}>
                             {grams != null ? `${grams.toFixed(1)}g` : "—"}
                           </td>

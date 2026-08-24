@@ -13,11 +13,3 @@ export async function savePortioning(rows: { meal_plan_day_recipe_serving_id: nu
     )
   );
 }
-
-export async function markCooked(servingIds: number[], cooked: boolean) {
-  const supabase = await createClient();
-
-  await (supabase.from("meal_plan_day_recipe_serving") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-    .update({ cooking_status: cooked ? "completed" : "pending" })
-    .in("id", servingIds);
-}

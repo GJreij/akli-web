@@ -285,8 +285,6 @@ export interface CookingSubrecipe {
   name: string;
   description: string | null;
   instructions: string | null;
-  status: "completed" | "in_progress" | "pending";
-  progress: number;
   total_servings: number;
   selected_meal_plan_day_recipe_serving_id: number[];
   ingredients_needed: CookingIngredient[];
@@ -299,8 +297,6 @@ export interface CookingRecipe {
   instructions: string | null;
   meal_plan_day_recipe_ids: number[];
   earliest_date: string;
-  cooking_status: string | null;
-  progress: number;
   ingredients_needed: CookingIngredient[];
   subrecipes: CookingSubrecipe[];
   comments: CookingComment[];
@@ -311,7 +307,6 @@ export interface CookingOverviewFilters {
   delivery_slot_id?: string;
   recipe_id?: string;
   subrecipe_id?: string;
-  cooking_status?: string;
 }
 
 export async function getCookingOverview(
@@ -333,11 +328,13 @@ export async function getCookingOverview(
 
 export interface PortioningClient {
   meal_plan_day_recipe_serving_id: number;
+  meal_plan_day_recipe_id: number;
+  recipe_name: string | null;
+  meal_type: string | null;
   delivery_date: string | null;
   delivery_slot: { id: number; start_time: string; end_time: string } | null;
   client: { id: string; name: string | null; last_name: string | null } | null;
   servings_for_client: number | null;
-  cooking_status: string | null;
   portioning_status: string | null;
   weight_after_cooking: number;
   has_weight_after_cooking: boolean;
@@ -445,8 +442,8 @@ export async function getDeliveriesOverview(
 }
 
 // services/portioning_service.py returns this shape (not a plain string) when
-// some but not all of the requested meal_plan_day_recipe_ids have a
-// "completed" serving row for the subrecipe — a partial-batch mismatch.
+// some but not all of the requested meal_plan_day_recipe_ids have a serving
+// row for the subrecipe — a partial-batch mismatch.
 export interface PortioningPartialError {
   error: string;
   missing: number[];
@@ -455,13 +452,12 @@ export interface PortioningPartialError {
 
 export async function getPortioningSummary(
   subrecipe_id: number,
-  meal_plan_day_recipe_ids: number[],
-  cooking_status: string = "completed"
+  meal_plan_day_recipe_ids: number[]
 ): Promise<{ data?: PortioningSummary; error?: string | PortioningPartialError }> {
   const res = await fetch(`${FLASK_URL}/portioning/summary`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ subrecipe_id, meal_plan_day_recipe_ids, cooking_status }),
+    body: JSON.stringify({ subrecipe_id, meal_plan_day_recipe_ids }),
     cache: "no-store",
   });
   const json = await res.json();

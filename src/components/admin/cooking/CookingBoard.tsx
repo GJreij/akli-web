@@ -1,18 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { CookingRecipe } from "@/lib/flask";
 import CopyListButton from "../CopyListButton";
 import PortioningPanel, { type PortionTarget } from "./PortioningPanel";
-import { markCooked } from "@/app/admin/cooking/actions";
 import { C } from "../ui";
-
-function statusColor(status: string) {
-  if (status === "completed") return C.tealDark;
-  if (status === "in_progress") return C.warn;
-  return C.muted;
-}
 
 interface Occurrence {
   recipeId: number;
@@ -22,22 +14,33 @@ interface Occurrence {
 }
 
 export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) {
-  const router = useRouter();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [selected, setSelected] = useState<Map<string, Occurrence>>(new Map());
   const [panelTargets, setPanelTargets] = useState<PortionTarget[] | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [marking, setMarking] = useState<number | null>(null);
 
   const occurrences = [...selected.values()];
   const existingSubIds = new Set(occurrences.map(o => o.subrecipeId));
   const existingRecipeIds = new Set(occurrences.map(o => o.recipeId));
 
-  async function toggleCooked(subrecipeId: number, servingIds: number[], currentlyCooked: boolean) {
-    setMarking(subrecipeId);
-    await markCooked(servingIds, !currentlyCooked);
-    setMarking(null);
-    router.refresh();
+  // Every occurrence of each subrecipe across all recipes currently on the
+  // board (i.e. within the date range/filters already applied) — powers the
+  // "select all" shortcut so admins don't have to expand every recipe card
+  // and click each one by hand.
+  const occurrencesBySubrecipe = new Map<number, Occurrence[]>();
+  for (const r of recipes) {
+    for (const s of r.subrecipes) {
+      const list = occurrencesBySubrecipe.get(s.subrecipe_id) ?? [];
+      list.push({ recipeId: r.recipe_id, subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: r.meal_plan_day_recipe_ids });
+      occurrencesBySubrecipe.set(s.subrecipe_id, list);
+    }
+  }
+
+  function selectAllOccurrences(subrecipeId: number) {
+    const occs = occurrencesBySubrecipe.get(subrecipeId) ?? [];
+    const next = new Map<string, Occurrence>();
+    for (const occ of occs) next.set(`${occ.recipeId}:${occ.subrecipeId}`, occ);
+    setSelected(next);
   }
 
   function toggleExpand(recipeId: number) {
@@ -56,15 +59,7 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
         next.delete(key);
         return next;
       }
-      // Two valid combinations only:
-      //   - the same subrecipe pulled from a different recipe (e.g. "Rice" used
-      //     in two recipes, cooked + portioned as one batch), or
-      //   - a different subrecipe from the SAME recipe (e.g. turkey + cheese +
-      //     bread that make up one sandwich, portioned together per client).
-      // Anything else (different subrecipe, different recipe) has no shared
-      // per-client basis to split a combined weight by, so it's blocked.
-      const allowed = next.size === 0 || existingSubIds.has(occ.subrecipeId) || existingRecipeIds.has(occ.recipeId);
-      if (!allowed) return prev;
+      if (!canSelect(occ.recipeId, occ.subrecipeId)) return prev;
       next.set(key, occ);
       return next;
     });
@@ -75,7 +70,27 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
   }
 
   function canSelect(recipeId: number, subrecipeId: number) {
-    return selected.size === 0 || isSelected(recipeId, subrecipeId) || existingSubIds.has(subrecipeId) || existingRecipeIds.has(recipeId);
+    if (selected.size === 0 || isSelected(recipeId, subrecipeId)) return true;
+
+    // Two valid combinations only:
+    //   - the same subrecipe pulled from different recipes (e.g. "Rice" used
+    //     in two recipes, cooked + portioned as one batch), or
+    //   - different subrecipes from the SAME recipe (e.g. turkey + cheese +
+    //     bread that make up one sandwich, portioned together per client).
+    // Once the selection has committed to one of those two modes — more than
+    // one recipe selected, or more than one subrecipe selected — only that
+    // mode's dimension may keep growing. Otherwise "select all occurrences of
+    // X" (many recipes, one subrecipe) would also let you add an unrelated
+    // subrecipe from any of those recipes, which has no shared per-client
+    // basis to split a combined weight by.
+    const sameSubrecipeMode = existingSubIds.size === 1 && existingRecipeIds.size > 1;
+    const sameRecipeMode = existingRecipeIds.size === 1 && existingSubIds.size > 1;
+
+    if (sameSubrecipeMode) return existingSubIds.has(subrecipeId);
+    if (sameRecipeMode) return existingRecipeIds.has(recipeId);
+
+    // Only one occurrence selected so far — either extension is still valid.
+    return existingSubIds.has(subrecipeId) || existingRecipeIds.has(recipeId);
   }
 
   function openCombined() {
@@ -115,9 +130,6 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                     {r.earliest_date} · {r.subrecipes.length} subrecipe{r.subrecipes.length === 1 ? "" : "s"} · {r.comments.length} comment{r.comments.length === 1 ? "" : "s"}
                   </p>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: statusColor(r.cooking_status ?? ""), textTransform: "uppercase" }}>
-                  {r.progress}%
-                </span>
               </button>
 
               {isOpen && (
@@ -149,6 +161,7 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                     {r.subrecipes.map(s => {
                       const checked = isSelected(r.recipe_id, s.subrecipe_id);
                       const disabled = !checked && !canSelect(r.recipe_id, s.subrecipe_id);
+                      const occurrenceCount = occurrencesBySubrecipe.get(s.subrecipe_id)?.length ?? 1;
                       return (
                         <div key={s.subrecipe_id} style={{ background: C.offWhite, borderRadius: 10, padding: "10px 12px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -162,27 +175,25 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                               {s.name}
                             </label>
                             <div style={{ display: "flex", gap: 6 }}>
-                              <button
-                                onClick={() => toggleCooked(s.subrecipe_id, s.selected_meal_plan_day_recipe_serving_id, s.status !== "pending")}
-                                disabled={marking === s.subrecipe_id}
-                                style={{
-                                  background: s.status !== "pending" ? C.tealDark : C.offWhite,
-                                  color: s.status !== "pending" ? C.white : C.muted,
-                                  border: "none", borderRadius: 7, padding: "5px 11px", fontSize: 11.5, fontWeight: 600,
-                                  cursor: marking === s.subrecipe_id ? "default" : "pointer", opacity: marking === s.subrecipe_id ? 0.6 : 1,
-                                }}
-                              >
-                                {s.status !== "pending" ? "Cooked ✓" : "Mark cooked"}
-                              </button>
+                              {occurrenceCount > 1 && (
+                                <button
+                                  onClick={() => selectAllOccurrences(s.subrecipe_id)}
+                                  title={`Select this subrecipe in all ${occurrenceCount} recipes it appears in`}
+                                  style={{
+                                    background: C.offWhite, color: C.primary, border: `1px solid ${C.border}`,
+                                    borderRadius: 7, padding: "5px 11px", fontSize: 11.5, fontWeight: 600,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Select all ({occurrenceCount})
+                                </button>
+                              )}
                               <button
                                 onClick={() => setPanelTargets([{ subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: r.meal_plan_day_recipe_ids }])}
-                                disabled={s.status === "pending"}
-                                title={s.status === "pending" ? "Mark this subrecipe as cooked before portioning" : undefined}
                                 style={{
-                                  background: s.status === "pending" ? C.offWhite : C.primary,
-                                  color: s.status === "pending" ? C.light : C.white,
+                                  background: C.primary, color: C.white,
                                   border: "none", borderRadius: 7, padding: "5px 11px", fontSize: 11.5, fontWeight: 600,
-                                  cursor: s.status === "pending" ? "not-allowed" : "pointer",
+                                  cursor: "pointer",
                                 }}
                               >
                                 Portion

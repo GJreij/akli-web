@@ -17,12 +17,6 @@ function BoardFallback() {
   );
 }
 
-function addDays(date: string, days: number) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
 async function CookingResults({ start, end, subrecipe_id, client_id, recipe_id }: { start: string; end: string; subrecipe_id?: string; client_id?: string; recipe_id?: string }) {
   const recipes = await getCookingOverview(start, end, {
     subrecipe_id: subrecipe_id || undefined,
@@ -38,16 +32,10 @@ export default async function CookingPage({ searchParams }: { searchParams: Prom
   const rangeStart = start ?? today;
   const rangeEnd = end ?? today;
 
-  // /cooking/overview treats the input range as the *cooking* date and shifts
-  // +1 day internally to match the *eating* date — mirror that here so the
-  // client dropdown lines up with what the overview actually returns.
-  const eatingStart = addDays(rangeStart, 1);
-  const eatingEnd = addDays(rangeEnd, 1);
-
   const supabase = await createClient();
   const [unfilteredOverview, deliveriesRes] = await Promise.all([
     getCookingOverview(rangeStart, rangeEnd),
-    supabase.from("deliveries").select("user_id").gte("delivery_date", eatingStart).lte("delivery_date", eatingEnd),
+    supabase.from("deliveries").select("user_id").gte("delivery_date", rangeStart).lte("delivery_date", rangeEnd),
   ]);
 
   const availableSubrecipes = [...new Map(
