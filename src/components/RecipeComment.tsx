@@ -1,30 +1,41 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { upsertRecipeComment } from "@/lib/preferences";
 
 export default function RecipeComment({
   userId,
   recipeId,
-  initialComment,
+  comment,
+  onCommentChange,
 }: {
   userId: string;
   recipeId: number;
-  initialComment: string;
+  // Controlled by the parent (TastesManager) rather than local state — the
+  // same recipe can appear in more than one week's menu, each rendering its
+  // own RecipeComment instance, and they all need to reflect one shared
+  // value instead of drifting out of sync until a full page reload.
+  comment: string;
+  onCommentChange: (recipeId: number, comment: string) => void;
 }) {
-  const [comment, setComment] = useState(initialComment);
+  // Local editing buffer so keystrokes don't propagate to sibling instances
+  // mid-typing — only committed to the shared value on blur/save.
+  const [draft, setDraft] = useState(comment);
   const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const lastSaved = useRef(initialComment);
+
+  useEffect(() => {
+    if (!expanded) setDraft(comment);
+  }, [comment, expanded]);
 
   async function handleBlur() {
     setExpanded(false);
-    if (comment === lastSaved.current) return;
+    if (draft === comment) return;
     setSaving(true);
     try {
-      await upsertRecipeComment(userId, recipeId, comment);
-      lastSaved.current = comment;
+      await upsertRecipeComment(userId, recipeId, draft);
+      onCommentChange(recipeId, draft);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } finally {
@@ -53,8 +64,8 @@ export default function RecipeComment({
     <input
       type="text"
       autoFocus
-      value={comment}
-      onChange={e => setComment(e.target.value)}
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
       onBlur={handleBlur}
       placeholder="e.g. no onions"
       style={{

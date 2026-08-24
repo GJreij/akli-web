@@ -12,23 +12,29 @@ const RATINGS: { value: PrefRating; emoji: string; label: string; active: { colo
 export default function RecipeRater({
   userId,
   recipeId,
-  initialRating,
+  rating,
+  onRatingChange,
 }: {
   userId: string;
   recipeId: number;
-  initialRating: PrefRating;
+  // Controlled by the parent (TastesManager) rather than local state — the
+  // same recipe can appear in more than one week's menu, each rendering its
+  // own RecipeRater instance, and they all need to reflect one shared value
+  // instead of drifting out of sync until a full page reload.
+  rating: PrefRating;
+  onRatingChange: (recipeId: number, rating: PrefRating) => void;
 }) {
-  const [rating, setRating] = useState<PrefRating>(initialRating);
   const [saving, setSaving] = useState(false);
 
   async function handleTap(value: PrefRating) {
+    const prev = rating;
     const next = rating === value ? null : value;
-    setRating(next); // optimistic
+    onRatingChange(recipeId, next); // optimistic, shared across every instance of this recipe
     setSaving(true);
     try {
       await upsertRecipePref(userId, recipeId, next);
     } catch {
-      setRating(rating); // revert on error
+      onRatingChange(recipeId, prev); // revert on error
     } finally {
       setSaving(false);
     }

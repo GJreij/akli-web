@@ -60,13 +60,15 @@ function mealLabel(r: RecipeRow) {
 }
 
 function RecipeItem({
-  recipe, userId, initialRating, initialComment, isLast,
+  recipe, userId, rating, comment, isLast, onRatingChange, onCommentChange,
 }: {
   recipe: RecipeRow;
   userId: string;
-  initialRating: PrefRating;
-  initialComment: string;
+  rating: PrefRating;
+  comment: string;
   isLast: boolean;
+  onRatingChange: (recipeId: number, rating: PrefRating) => void;
+  onCommentChange: (recipeId: number, comment: string) => void;
 }) {
   const [imgErr, setImgErr] = useState(false);
 
@@ -88,15 +90,15 @@ function RecipeItem({
           {recipe.name}
         </p>
         <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 7px" }}>{mealLabel(recipe)}</p>
-        <RecipeRater userId={userId} recipeId={recipe.id} initialRating={initialRating} />
-        <RecipeComment userId={userId} recipeId={recipe.id} initialComment={initialComment} />
+        <RecipeRater userId={userId} recipeId={recipe.id} rating={rating} onRatingChange={onRatingChange} />
+        <RecipeComment userId={userId} recipeId={recipe.id} comment={comment} onCommentChange={onCommentChange} />
       </div>
     </div>
   );
 }
 
 function WeekSection({
-  week, userId, prefs, comments, activeFilter, defaultOpen,
+  week, userId, prefs, comments, activeFilter, defaultOpen, onRatingChange, onCommentChange,
 }: {
   week: WeekGroup;
   userId: string;
@@ -104,6 +106,8 @@ function WeekSection({
   comments: Record<number, string>;
   activeFilter: MealType | null;
   defaultOpen: boolean;
+  onRatingChange: (recipeId: number, rating: PrefRating) => void;
+  onCommentChange: (recipeId: number, comment: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -153,9 +157,11 @@ function WeekSection({
               key={recipe.id}
               recipe={recipe}
               userId={userId}
-              initialRating={prefs[recipe.id] ?? null}
-              initialComment={comments[recipe.id] ?? ""}
+              rating={prefs[recipe.id] ?? null}
+              comment={comments[recipe.id] ?? ""}
               isLast={i === filteredRecipes.length - 1}
+              onRatingChange={onRatingChange}
+              onCommentChange={onCommentChange}
             />
           ))}
         </div>
@@ -178,8 +184,23 @@ export default function TastesManager({
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<MealType | null>(null);
 
+  // Prefs/comments live here, not inside each RecipeRater/RecipeComment —
+  // the same recipe can appear in more than one week's menu, and every
+  // instance for that recipe needs to reflect one shared value instead of
+  // drifting out of sync until a full page reload.
+  const [prefs, setPrefs] = useState(initialPrefs);
+  const [comments, setComments] = useState(initialComments);
+
+  function handleRatingChange(recipeId: number, rating: PrefRating) {
+    setPrefs(prev => ({ ...prev, [recipeId]: rating }));
+  }
+
+  function handleCommentChange(recipeId: number, comment: string) {
+    setComments(prev => ({ ...prev, [recipeId]: comment }));
+  }
+
   const totalRecipes = new Set(weeks.flatMap(w => w.recipes.map(r => r.id))).size;
-  const totalRated   = Object.values(initialPrefs).filter(v => v != null).length;
+  const totalRated   = Object.values(prefs).filter(v => v != null).length;
 
   // Count how many recipes are visible under the active filter (across all weeks)
   const filteredTotal = activeFilter
@@ -289,10 +310,12 @@ export default function TastesManager({
                 key={week.id}
                 week={week}
                 userId={userId}
-                prefs={initialPrefs}
-                comments={initialComments}
+                prefs={prefs}
+                comments={comments}
                 activeFilter={activeFilter}
                 defaultOpen={i === 0}
+                onRatingChange={handleRatingChange}
+                onCommentChange={handleCommentChange}
               />
             ))}
             {activeFilter && weeks.every(w => w.recipes.every(r => !r[`could_be_${activeFilter}` as keyof RecipeRow])) && (
