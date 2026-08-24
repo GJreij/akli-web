@@ -40,7 +40,7 @@ export default function AdminNav() {
           </span>
           <div style={{ display: "flex", gap: 8 }}>
             <button
-              onClick={() => router.push("/home")}
+              onClick={() => router.push("/home?admin=1")}
               style={{
                 background: "rgba(255,255,255,0.1)", color: C.white, border: "none", borderRadius: 6,
                 padding: "6px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer",

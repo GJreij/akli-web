@@ -3,7 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import HomeDashboard from "@/components/HomeDashboard";
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ admin?: string }>;
+}) {
+  const { admin: adminOverride } = await searchParams;
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -38,7 +43,7 @@ export default async function HomePage() {
   ]);
 
   const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
-  if (profile?.role === "admin") redirect("/admin");
+  if (profile?.role === "admin" && adminOverride !== "1") redirect("/admin");
 
   // Affiliate/ambassador/athlete badge, if this user is an active member of the program.
   const affiliateRowRes = await supabase
@@ -111,6 +116,7 @@ export default async function HomePage() {
       macroTarget={macroRes.data}
       menuRecipes={menuRecipes}
       affiliateInfo={affiliateInfo}
+      isAdmin={profile?.role === "admin"}
     />
   );
 }

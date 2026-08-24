@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
 import {
   IconShoppingBag, IconClockHour4, IconLeaf, IconHeart, IconUserCircle, IconPencil,
-  IconCrown, IconStar, IconUsers, IconCopy, IconCheck,
+  IconCrown, IconStar, IconUsers, IconCopy, IconCheck, IconLayoutDashboard,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import DietWizard from "@/components/DietWizard";
@@ -318,11 +318,13 @@ export default function HomeDashboard({
   macroTarget,
   menuRecipes = [],
   affiliateInfo = null,
+  isAdmin = false,
 }: {
   profile:      UserRow | null;
   macroTarget:  MacroRow | null;
   menuRecipes?: RecipeRow[];
   affiliateInfo?: { tier: string; codes: { code: string; discount_value: number; start_date: string | null; end_date: string | null }[] } | null;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
@@ -378,6 +380,18 @@ export default function HomeDashboard({
             akli
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {isAdmin && (
+              <button
+                onClick={() => router.push("/admin")}
+                title="Back to admin dashboard"
+                style={{
+                  background: "none", border: "none", padding: 10, margin: -10,
+                  color: "rgba(255,255,255,0.7)", cursor: "pointer", display: "flex",
+                }}
+              >
+                <IconLayoutDashboard size={22} />
+              </button>
+            )}
             <button
               onClick={() => { setNavigatingProfile(true); router.push("/profile"); }}
               title="Profile"
