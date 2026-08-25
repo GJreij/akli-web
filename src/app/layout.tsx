@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   description: "Macro-optimised meal prep delivered fresh in Lebanon.",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Akli" },
+  robots: { index: false, follow: false },
 };
 
 export const viewport: Viewport = {
