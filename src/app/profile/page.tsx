@@ -7,7 +7,7 @@ export default async function ProfilePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
 
-  const [profileRes, macroHistoryRes, addressesRes] = await Promise.all([
+  const [profileRes, macroHistoryRes, addressesRes, walletRes, topupRequestsRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*")
       .eq("user_id", user.id)
@@ -17,7 +17,15 @@ export default async function ProfilePage() {
       .eq("user_id", user.id)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false }),
+    supabase.from("wallet_transactions").select("amount").eq("user_id", user.id),
+    supabase.from("wallet_topup_request").select("id, amount, status, payment_note, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
+
+  const walletTransactions = (walletRes.data ?? []) as { amount: number | null }[];
+  const walletBalance = walletTransactions.reduce((sum, t) => sum + (t.amount ?? 0), 0);
 
   return (
     <Profile
@@ -25,6 +33,8 @@ export default async function ProfilePage() {
       profile={profileRes.data}
       macroHistory={macroHistoryRes.data ?? []}
       addresses={addressesRes.data ?? []}
+      walletBalance={walletBalance}
+      walletTopupRequests={topupRequestsRes.data ?? []}
     />
   );
 }

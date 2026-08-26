@@ -116,12 +116,31 @@ function localISO(d: Date): string {
 
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, closureDays, onPick, onRemoveDay }: {
+const WALLET_TOPUP_MAX = 100;
+
+// Keeps the wallet top-up field to digits + at most one decimal place, and
+// clamps to WALLET_TOPUP_MAX — typed live, so it must accept in-progress
+// input like "10." without forcing it back to "10".
+function sanitizeTopupInput(raw: string): string {
+  let v = raw.replace(/[^\d.]/g, "");
+  const firstDot = v.indexOf(".");
+  if (firstDot !== -1) {
+    v = v.slice(0, firstDot + 1) + v.slice(firstDot + 1).replace(/\./g, "").slice(0, 1);
+  }
+  const num = parseFloat(v);
+  if (!Number.isNaN(num) && num > WALLET_TOPUP_MAX) {
+    v = String(WALLET_TOPUP_MAX);
+  }
+  return v;
+}
+
+function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, cancellationPendingDays, closureDays, onPick, onRemoveDay }: {
   orderableWeeks: OrderableWeek[];
   rangeStart: string | null;
   rangeEnd:   string | null;
   removed:    Set<string>;
   orderedDays:  Set<string>;
+  cancellationPendingDays: Set<string>;
   closureDays:  Map<string, string | null>;
   onPick:      (iso: string) => void;
   onRemoveDay: (iso: string) => void;
@@ -167,6 +186,12 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
         <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: C.light, margin: "0 0 8px" }}>
           <span style={{ width: 11, height: 11, borderRadius: 3, background: "#bfa280", display: "inline-block" }} />
           Already ordered — skipped automatically if inside your range
+        </p>
+      )}
+      {cancellationPendingDays.size > 0 && (
+        <p style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#b45309", margin: "0 0 8px" }}>
+          <span style={{ width: 11, height: 11, borderRadius: 3, background: "#f0b429", display: "inline-block" }} />
+          Cancellation pending review — will free up if approved
         </p>
       )}
       {closureDays.size > 0 && (
@@ -219,8 +244,10 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   const isPast      = iso < today;
                   const isToday     = iso === today;
                   const isOrdered   = orderedDays.has(iso);
+                  const isCancellationPending = cancellationPendingDays.has(iso);
                   const isClosed    = closureDays.has(iso);
-                  // Already-ordered days can't be picked as a start/end point — but they're still
+                  // Already-ordered days (including ones with a cancellation still awaiting
+                  // admin review) can't be picked as a start/end point — but they're still
                   // allowed to fall *inside* a chosen range, where they just get auto-skipped.
                   const disabled    = isWeekend || isPast || !isAvail || isOrdered || isClosed;
                   const isStart     = iso === rangeStart;
@@ -243,6 +270,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   if (isClosed) {
                     bg = "#fff3e8"; color = "#e07b39"; fontWeight = 600;
                     border = `1px solid #f0b87a`;
+                  } else if (isCancellationPending) {
+                    bg = "#fdf0d5"; color = "#b45309"; fontWeight = 600;
+                    border = `1px solid #f0b429`;
                   } else if (isOrdered) {
                     bg = "#bfa280"; color = C.white; fontWeight = 600;
                   } else if (isStart || isEnd) {
@@ -267,6 +297,7 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                       disabled={disabled}
                       title={
                         isClosed ? `Kitchen closed${closureReason ? ` — ${closureReason}` : ""}`
+                        : isCancellationPending ? "A cancellation for this day is awaiting review — it'll free up if approved"
                         : isOrdered ? "You already have an order on this day — it's skipped automatically"
                         : isTooSoon ? "Orders need 48h notice — too soon to add this day"
                         : undefined
@@ -1411,7 +1442,7 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
 
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
-  closureDays = [], volumeDiscountRules = [],
+  cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [],
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1421,6 +1452,7 @@ export default function OrderFlow({
   initialPrefs?: Record<number, PrefRating>;
   addresses?: AddressRow[];
   orderedDays?: string[];
+  cancellationPendingDays?: string[];
   closureDays?: { date: string; reason: string | null }[];
   volumeDiscountRules?: VolumeDiscountRule[];
 }) {
@@ -1431,6 +1463,7 @@ export default function OrderFlow({
 
   const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
   const orderedDaysSet = new Set(orderedDays);
+  const cancellationPendingSet = new Set(cancellationPendingDays);
   const closureDaysMap = new Map(closureDays.map(c => [c.date, c.reason]));
   const [rangeStart, setRangeStart] = useState<string | null>(() => readDraft()?.rangeStart ?? null);
   const [rangeEnd,   setRangeEnd]   = useState<string | null>(() => readDraft()?.rangeEnd ?? null);
@@ -1535,6 +1568,10 @@ export default function OrderFlow({
   const [confirming, setConfirming]     = useState(false);
   const [confirmErr, setConfirmErr]     = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "whish" | "neo" | null>(null);
+  const [useWalletCredit, setUseWalletCredit] = useState(false);
+  // Adding funds to the wallet at checkout — separate from useWalletCredit,
+  // which spends the wallet down: this one adds to it, on top of the order total.
+  const [walletTopupInput, setWalletTopupInput] = useState("");
 
   const [estDayPrice, setEstDayPrice] = useState<number | null>(null);
   useEffect(() => {
@@ -1751,13 +1788,18 @@ export default function OrderFlow({
   }
 
   // Some failures (timeouts, dropped responses) happen after the backend has
-  // already written the order — checking My Orders avoids telling the client
-  // "it failed" when it actually went through.
+  // already started writing the order — checking My Orders avoids telling
+  // the client "it failed" when it actually went through. But confirm_order
+  // writes meal_plan first and payment LAST, one day at a time — a mid-write
+  // crash (e.g. a backend timeout) can leave a meal_plan row with some days
+  // missing and/or no payment at all. A bare meal_plan match is not proof of
+  // success: require every requested day to exist AND every one of those
+  // days to have a payment row before calling it placed.
   async function orderWasActuallyPlaced(sortedDates: string[]): Promise<boolean> {
     if (sortedDates.length === 0) return false;
     const supabase = createClient();
     const since = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-    const { data } = await supabase
+    const { data: plansData } = await supabase
       .from("meal_plan")
       .select("id")
       .eq("user_id", userId)
@@ -1766,7 +1808,21 @@ export default function OrderFlow({
       .gte("created_at", since)
       .order("created_at", { ascending: false })
       .limit(1);
-    return !!data && data.length > 0;
+    const plan = ((plansData ?? []) as { id: number }[])[0];
+    if (!plan) return false;
+
+    const { data: daysData } = await supabase
+      .from("meal_plan_day")
+      .select("id")
+      .eq("meal_plan_id", plan.id);
+    const days = (daysData ?? []) as { id: number }[];
+    if (days.length !== sortedDates.length) return false;
+
+    const { count } = await supabase
+      .from("payment")
+      .select("id", { count: "exact", head: true })
+      .in("meal_plan_day_id", days.map((d) => d.id));
+    return (count ?? 0) >= days.length;
   }
 
   function selectPaymentMethod(method: "cash" | "whish" | "neo") {
@@ -1775,13 +1831,21 @@ export default function OrderFlow({
   }
 
   async function handleConfirm() {
-    if (!plan || !checkoutData || !slotId || !paymentMethod || !addressId) return;
+    if (!plan || !checkoutData || !slotId || !addressId) return;
+    const walletAmountApplied = useWalletCredit ? (checkoutData.price_breakdown.wallet_max_applicable ?? 0) : 0;
+    const walletTopupAmount = parseFloat(walletTopupInput) || 0;
+    const amountDue = Math.max((checkoutData.price_breakdown.final_price ?? 0) - walletAmountApplied, 0) + walletTopupAmount;
+    // A payment method only matters when there's actually something to pay
+    // outside the wallet — when it's fully covered, don't make the client
+    // pick cash/whish/neo for $0. Adding a top-up always counts as "something
+    // to pay", even if the order itself is fully wallet-covered.
+    if (amountDue > 0.005 && !paymentMethod) return;
     setConfirming(true);
     setConfirmErr(null);
     setStep("confirming");
     const sortedDates = plan.days.map(d => d.date).sort();
     try {
-      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod, addressId);
+      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod ?? "cash", addressId, walletAmountApplied, walletTopupAmount);
       // confirmOrder() already throws on a non-2xx response, so reaching here without
       // an explicit error means the backend confirmed the order — don't rely solely
       // on a `success` flag that some backend responses omit.
@@ -1892,6 +1956,7 @@ export default function OrderFlow({
               rangeEnd={rangeEnd}
               removed={removed}
               orderedDays={orderedDaysSet}
+              cancellationPendingDays={cancellationPendingSet}
               closureDays={closureDaysMap}
               onPick={handlePickDay}
               onRemoveDay={handleRemoveDay}
@@ -2249,6 +2314,11 @@ export default function OrderFlow({
     const totalPrice = bd?.final_price ?? (estDayPrice !== null ? estDayPrice * (plan?.days.length ?? 1) : null);
     const dayCount   = plan?.days.length ?? 0;
     const freeThreshold = bd?.delivery?.minimum_per_day_for_free_delivery ?? 25;
+    const walletMaxApplicable = bd?.wallet_max_applicable ?? 0;
+    const walletApplied = useWalletCredit ? walletMaxApplicable : 0;
+    const walletTopupAmount = parseFloat(walletTopupInput) || 0;
+    const amountDue = totalPrice !== null ? Math.max(totalPrice - walletApplied, 0) + walletTopupAmount : null;
+    const paymentRequired = amountDue === null || amountDue > 0.005;
 
     return (
       <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
@@ -2295,16 +2365,97 @@ export default function OrderFlow({
               🚚 Free delivery on days totalling over ${freeThreshold}
             </div>
 
+            {walletApplied > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, color: C.tealDark }}>
+                <span style={{ fontSize: 13 }}>Wallet credit</span>
+                <span style={{ fontSize: 13 }}>-${walletApplied.toFixed(2)}</span>
+              </div>
+            )}
+
+            {walletTopupAmount > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
+                <span style={{ fontSize: 13 }}>Add to wallet</span>
+                <span style={{ fontSize: 13 }}>+${walletTopupAmount.toFixed(2)}</span>
+              </div>
+            )}
+
             <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>Total</span>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>{walletApplied > 0 || walletTopupAmount > 0 ? "Amount due" : "Total"}</span>
               <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 500 }}>
-                {totalPrice !== null ? `$${totalPrice.toFixed(2)}` : "—"}
+                {amountDue !== null ? `$${amountDue.toFixed(2)}` : "—"}
               </span>
             </div>
 
             {bd?.daily_breakdown && bd.daily_breakdown.length > 0 && (
               <DailyBreakdown breakdown={bd.daily_breakdown} />
             )}
+          </div>
+
+          {/* Wallet credit */}
+          {walletMaxApplicable > 0 && (
+            <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>Wallet balance</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: C.primary }}>${(bd?.wallet_balance ?? 0).toFixed(2)}</span>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={useWalletCredit}
+                  onChange={e => setUseWalletCredit(e.target.checked)}
+                  style={{ width: 18, height: 18, flexShrink: 0 }}
+                />
+                <span style={{ flex: 1 }}>
+                  <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>
+                    Apply ${walletMaxApplicable.toFixed(2)} to this order
+                  </span>
+                  <span style={{ display: "block", fontSize: 11.5, color: C.light }}>
+                    {(bd?.wallet_balance ?? 0) > walletMaxApplicable
+                      ? `This order only costs $${walletMaxApplicable.toFixed(2)}, so that's the most that can be applied — the rest of your balance stays for next time.`
+                      : "This uses your entire wallet balance."}
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Add funds to wallet */}
+          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+            <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 4px" }}>Add funds to your wallet</p>
+            <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 10px" }}>
+              Optional — top up now and pay it together with this order. Credited once your payment is confirmed.
+            </p>
+            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+              {[5, 10, 15, 20].map(preset => {
+                const active = walletTopupInput === String(preset);
+                return (
+                  <button
+                    key={preset}
+                    onClick={() => setWalletTopupInput(active ? "" : String(preset))}
+                    style={{
+                      flex: 1, padding: "8px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      border: `1px solid ${active ? C.primary : C.border}`,
+                      background: active ? C.primary : C.white,
+                      color: active ? C.white : C.muted,
+                    }}
+                  >
+                    ${preset}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14, color: C.muted }}>$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={walletTopupInput}
+                onChange={e => setWalletTopupInput(sanitizeTopupInput(e.target.value))}
+                style={{ flex: 1 }}
+              />
+            </div>
+            <p style={{ fontSize: 10.5, color: C.light, margin: "6px 0 0" }}>Up to $100 per order.</p>
           </div>
 
           {/* Promo code */}
@@ -2370,7 +2521,16 @@ export default function OrderFlow({
             }}
           />
 
-          {/* Payment method */}
+          {/* Payment method — skipped entirely once wallet credit covers the
+              full order, so nobody's asked to pick cash/whish/neo for $0. */}
+          {!paymentRequired ? (
+            <div style={{ background: "#f0f7f7", border: `1px solid ${C.teal}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 20 }}>👛</span>
+              <p style={{ margin: 0, fontSize: 13, color: C.tealDark, fontWeight: 500 }}>
+                Fully covered by your wallet credit — no payment method needed.
+              </p>
+            </div>
+          ) : (
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
             <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 12px" }}>Payment method</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2465,6 +2625,7 @@ export default function OrderFlow({
 
             </div>
           </div>
+          )}
 
         </div>
 
@@ -2474,11 +2635,11 @@ export default function OrderFlow({
               {confirmErr}
             </div>
           )}
-          {!confirming && (!slotId || !paymentMethod || !addressId) && (
+          {!confirming && (!slotId || (paymentRequired && !paymentMethod) || !addressId) && (
             <p style={{ fontSize: 12, color: C.error, textAlign: "center", margin: "0 0 8px" }}>
               {!addressId
                 ? "Add or select a delivery address to confirm your order."
-                : !paymentMethod
+                : paymentRequired && !paymentMethod
                   ? "Choose a payment method to confirm your order."
                   : "Choose a delivery time to confirm your order."}
             </p>
@@ -2487,7 +2648,7 @@ export default function OrderFlow({
             className="btn-primary"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}
             onClick={handleConfirm}
-            disabled={confirming || !slotId || !paymentMethod || !addressId}
+            disabled={confirming || !slotId || (paymentRequired && !paymentMethod) || !addressId}
           >
             {confirming ? "Confirming…" : <><IconCheck size={16} /> Confirm order</>}
           </button>

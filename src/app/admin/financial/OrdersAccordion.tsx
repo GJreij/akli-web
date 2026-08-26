@@ -5,9 +5,11 @@ import { useState, useTransition } from "react";
 import { th, td, C } from "@/components/admin/ui";
 import { setPaymentStatus } from "./actions";
 
-export type OrderDay = { id: number; date: string; amount: number; currency: string; status: string };
+export type OrderDay = { id: number; date: string; amount: number; currency: string; status: string; cancelled: boolean };
+export type OrderTopup = { checkoutTopupId: number; walletTransactionId: number | null; amount: number; creditedAt: string | null };
 export type OrderGroup = {
   key: string;
+  mealPlanId: number | null;
   userId: string | null;
   clientName: string;
   startDate: string;
@@ -16,6 +18,7 @@ export type OrderGroup = {
   currency: string;
   status: "paid" | "pending" | "partial";
   days: OrderDay[];
+  topup?: OrderTopup | null;
 };
 
 const STATUS_LABEL: Record<OrderGroup["status"], string> = {
@@ -50,6 +53,25 @@ function fmtMoney(amount: number, currency = "$") {
   return `${currency}${amount.toFixed(2)}`;
 }
 
+// Reverting a paid order to pending never claws back an already-credited
+// checkout wallet top-up — that money deliberately stays put. Since that's
+// silent otherwise, force a confirmation that points straight at the rows
+// to hand-fix in Supabase if a real reversal is ever needed.
+function confirmUnpaidRevert(topup: OrderTopup | null | undefined): boolean {
+  if (!topup) return true;
+  const credited = topup.creditedAt ? fmtDate(topup.creditedAt) : "an earlier date";
+  return window.confirm(
+    `Heads up: this order included a ${fmtMoney(topup.amount)} wallet top-up already credited to the client (on ${credited}).\n\n` +
+    `Marking it unpaid will NOT reverse that credit — the money stays in their wallet.\n\n` +
+    `To reverse it by hand in Supabase if needed:\n` +
+    `• wallet_checkout_topup, id = ${topup.checkoutTopupId} → set credited = false\n` +
+    (topup.walletTransactionId != null
+      ? `• wallet_transactions, id = ${topup.walletTransactionId} → delete or offset this +${fmtMoney(topup.amount)} row\n\n`
+      : `• wallet_transactions → find and delete/offset the matching +${fmtMoney(topup.amount)} "checkout_topup" row\n\n`) +
+    `Continue marking this order unpaid?`
+  );
+}
+
 function actionBtnStyle(color: string): React.CSSProperties {
   return {
     fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 6,
@@ -75,12 +97,12 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
     });
   }
 
-  function updateStatus(actionKey: string, paymentIds: number[], status: "paid" | "pending") {
+  function updateStatus(actionKey: string, paymentIds: number[], status: "paid" | "pending", mealPlanId?: number | null) {
     setError(null);
     setPendingKeys(prev => new Set(prev).add(actionKey));
     startTransition(async () => {
       try {
-        await setPaymentStatus(paymentIds, status);
+        await setPaymentStatus(paymentIds, status, mealPlanId);
         window.location.reload();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to update payment status.");
@@ -104,11 +126,14 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
           const isOpen = expanded.has(o.key);
           const markPaidKey = `order-${o.key}-paid`;
           const markUnpaidKey = `order-${o.key}-unpaid`;
-          const allDayIds = o.days.map(d => d.id);
+          const allDayIds = o.days.filter(d => !d.cancelled).map(d => d.id);
           return (
             <div key={o.key} style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => toggle(o.key)}
+                onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(o.key); } }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
                   padding: "10px 12px", background: isOpen ? C.offWhite : C.white, border: "none", cursor: "pointer",
@@ -138,7 +163,7 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
                   <StatusPill status={o.status} />
                   {o.status !== "paid" && (
                     <button
-                      onClick={e => { e.stopPropagation(); updateStatus(markPaidKey, allDayIds, "paid"); }}
+                      onClick={e => { e.stopPropagation(); updateStatus(markPaidKey, allDayIds, "paid", o.mealPlanId); }}
                       disabled={pendingKeys.has(markPaidKey)}
                       style={actionBtnStyle(C.tealDark)}
                     >
@@ -147,7 +172,11 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
                   )}
                   {o.status !== "pending" && (
                     <button
-                      onClick={e => { e.stopPropagation(); updateStatus(markUnpaidKey, allDayIds, "pending"); }}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (!confirmUnpaidRevert(o.topup)) return;
+                        updateStatus(markUnpaidKey, allDayIds, "pending");
+                      }}
                       disabled={pendingKeys.has(markUnpaidKey)}
                       style={actionBtnStyle(C.muted)}
                     >
@@ -155,7 +184,7 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
                     </button>
                   )}
                 </span>
-              </button>
+              </div>
 
               {isOpen && (
                 <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", borderTop: `1px solid ${C.border}` }}>
@@ -171,6 +200,20 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
                     {o.days.map(d => {
                       const dayKey = `day-${d.id}`;
                       const isPaid = d.status === "paid";
+                      if (d.cancelled) {
+                        return (
+                          <tr key={d.id} style={{ opacity: 0.6 }}>
+                            <td style={{ ...td, color: C.muted }}>{fmtDate(d.date)}</td>
+                            <td style={{ ...td, textDecoration: "line-through", color: C.muted }}>{fmtMoney(d.amount, d.currency)}</td>
+                            <td style={td}>
+                              <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6, color: C.error, background: `${C.error}1a`, whiteSpace: "nowrap" }}>
+                                Cancelled
+                              </span>
+                            </td>
+                            <td style={td}></td>
+                          </tr>
+                        );
+                      }
                       return (
                         <tr key={d.id}>
                           <td style={{ ...td, color: C.muted }}>{fmtDate(d.date)}</td>
@@ -180,7 +223,10 @@ export default function OrdersAccordion({ orders }: { orders: OrderGroup[] }) {
                           </td>
                           <td style={{ ...td, textAlign: "right" }}>
                             <button
-                              onClick={() => updateStatus(dayKey, [d.id], isPaid ? "pending" : "paid")}
+                              onClick={() => {
+                                if (isPaid && !confirmUnpaidRevert(o.topup)) return;
+                                updateStatus(dayKey, [d.id], isPaid ? "pending" : "paid", o.mealPlanId);
+                              }}
                               disabled={pendingKeys.has(dayKey)}
                               style={actionBtnStyle(isPaid ? C.muted : C.tealDark)}
                             >

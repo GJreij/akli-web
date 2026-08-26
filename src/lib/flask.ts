@@ -176,6 +176,8 @@ export interface CheckoutSummaryResponse {
       delivery_fee: number;
       total_price_with_delivery: number;
     }>;
+    wallet_balance: number;
+    wallet_max_applicable: number;
   };
 }
 
@@ -201,15 +203,223 @@ export async function confirmOrder(
   checkout_summary: CheckoutSummaryResponse,
   delivery_slot_id: number,
   payment_method: "cash" | "whish" | "neo",
-  delivery_address_id: number
+  delivery_address_id: number,
+  wallet_amount_requested?: number,
+  wallet_topup_amount?: number
 ): Promise<{ success: boolean; order_id?: number; error?: string }> {
   const res = await fetch(`${FLASK_URL}/confirm_order`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id, meal_plan, checkout_summary, delivery_slot_id, payment_method, delivery_address_id }),
+    body: JSON.stringify({
+      user_id, meal_plan, checkout_summary, delivery_slot_id, payment_method, delivery_address_id,
+      wallet_amount_requested: wallet_amount_requested ?? 0,
+      wallet_topup_amount: wallet_topup_amount ?? 0,
+    }),
   });
   if (!res.ok) throw new Error(`confirm_order error ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+// ─── /request_cancellation ──────────────────────────────────────────────────
+
+export async function requestCancellation(
+  user_id: string,
+  meal_plan_id: number,
+  meal_plan_day_ids?: number[]
+): Promise<{ success: boolean; cancellation_request_id?: number; error?: string }> {
+  const res = await fetch(`${FLASK_URL}/request_cancellation`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id, meal_plan_id, meal_plan_day_ids: meal_plan_day_ids ?? null }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { success: false, error: json.error ?? `request_cancellation error ${res.status}` };
+  return json;
+}
+
+export interface DiscountImpactPreview {
+  amount: number;
+  note: string;
+}
+
+export async function previewCancellationDiscountImpact(
+  user_id: string,
+  meal_plan_id: number,
+  meal_plan_day_ids: number[]
+): Promise<{ discount_impact: DiscountImpactPreview | null; error?: string }> {
+  const res = await fetch(`${FLASK_URL}/preview_cancellation_discount_impact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id, meal_plan_id, meal_plan_day_ids }),
+  });
+  const json = await res.json();
+  if (!res.ok) return { discount_impact: null, error: json.error ?? `preview error ${res.status}` };
+  return json;
+}
+
+// ─── /available_recipes_for_date ────────────────────────────────────────────
+
+export async function getAvailableRecipeIdsForDate(date: string): Promise<number[]> {
+  const res = await fetch(`${FLASK_URL}/available_recipes_for_date`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date }),
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const json = await res.json();
+  return Array.isArray(json?.recipe_ids) ? json.recipe_ids : [];
+}
+
+// ─── /modify_meal/preview & /modify_meal/confirm ────────────────────────────
+
+export interface MealSwapRequest {
+  user_id: string;
+  meal_plan_day_id: number;
+  meal_plan_day_recipe_id: number;
+  new_recipe_id: number;
+}
+
+export type MealSwapMode = "meal_only" | "rebalance_day";
+
+export interface MealSwapConfirmRequest extends MealSwapRequest {
+  mode: MealSwapMode;
+}
+
+export interface MealSwapMacros {
+  protein: number;
+  carbs: number;
+  fat: number;
+  kcal: number;
+}
+
+export interface MealSwapMealSnapshot {
+  meal: { recipe_id: number; name: string | null; macros: MealSwapMacros };
+  day_totals: MealSwapMacros & { price: number | null };
+}
+
+export interface MealSwapOtherMeal {
+  meal_plan_day_recipe_id: number;
+  meal_type: string;
+  recipe_name: string | null;
+  before_macros: MealSwapMacros;
+  after_macros: MealSwapMacros;
+}
+
+export interface MealSwapWallet {
+  balance_before: number;
+  delta: number;
+  balance_after: number;
+  sufficient: boolean;
+}
+
+export interface MealSwapOption {
+  eligible: boolean;
+  reason: string | null;
+  // Set only when eligible is false (reason "insufficient_wallet") — how
+  // much more the client would need in their wallet for this exact option.
+  required_topup: number | null;
+  after: MealSwapMealSnapshot & { other_meals: MealSwapOtherMeal[] };
+  price_delta: number;
+  wallet: MealSwapWallet;
+}
+
+export interface MealSwapResponse {
+  before: MealSwapMealSnapshot;
+  options: {
+    meal_only: MealSwapOption;
+    // null only in the rare case where even the loosest bounded rebalance
+    // can't find any solution at all — the client only sees "just this meal".
+    rebalance_day: MealSwapOption | null;
+  };
+  swap_id: number | null;
+  confirmed_mode?: MealSwapMode;
+}
+
+export interface MealSwapErrorResponse {
+  error: string;
+  suggestion?: string;
+  reason?: string;
+  required_topup?: number;
+}
+
+async function postMealSwap(
+  path: "preview" | "confirm",
+  req: MealSwapRequest | MealSwapConfirmRequest
+): Promise<{ data?: MealSwapResponse; error?: MealSwapErrorResponse }> {
+  const res = await fetch(`${FLASK_URL}/modify_meal/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  const json = await res.json();
+  if (!res.ok) return { error: json as MealSwapErrorResponse };
+  return { data: json as MealSwapResponse };
+}
+
+export function previewMealSwap(req: MealSwapRequest) {
+  return postMealSwap("preview", req);
+}
+
+export function confirmMealSwap(req: MealSwapConfirmRequest) {
+  return postMealSwap("confirm", req);
+}
+
+// ─── /edit_day/preview & /edit_day/confirm ──────────────────────────────────
+
+export interface DayEditChange {
+  action: "delete" | "replace" | "add";
+  meal_plan_day_recipe_id?: number;
+  new_recipe_id?: number;
+  meal_type?: string;
+}
+
+export interface DayEditRequest {
+  user_id: string;
+  meal_plan_day_id: number;
+  changes: DayEditChange[];
+}
+
+export interface DayEditMeal {
+  meal_plan_day_recipe_id: number | null;
+  meal_type: string;
+  recipe_id: number;
+  recipe_name: string | null;
+  macros: MealSwapMacros;
+}
+
+export interface DayEditResponse {
+  eligible: boolean;
+  reason: string | null;
+  required_topup: number | null;
+  goal: MealSwapMacros;
+  before: { day_totals: MealSwapMacros & { price: number } };
+  after: { day_totals: MealSwapMacros & { price: number }; meals: DayEditMeal[] };
+  price_delta: number;
+  wallet: MealSwapWallet;
+  edit_id: number | null;
+}
+
+async function postDayEdit(
+  path: "preview" | "confirm",
+  req: DayEditRequest
+): Promise<{ data?: DayEditResponse; error?: MealSwapErrorResponse }> {
+  const res = await fetch(`${FLASK_URL}/edit_day/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  const json = await res.json();
+  if (!res.ok) return { error: json as MealSwapErrorResponse };
+  return { data: json as DayEditResponse };
+}
+
+export function previewDayEdit(req: DayEditRequest) {
+  return postDayEdit("preview", req);
+}
+
+export function confirmDayEdit(req: DayEditRequest) {
+  return postDayEdit("confirm", req);
 }
 
 // ─── /update_meal_plan ───────────────────────────────────────────────────────
@@ -300,6 +510,10 @@ export interface CookingRecipe {
   ingredients_needed: CookingIngredient[];
   subrecipes: CookingSubrecipe[];
   comments: CookingComment[];
+  // True if this recipe was swapped in (via the client-facing "Modify"
+  // feature) on any of the underlying days grouped into this card — a
+  // pre-swap printed label may show the wrong macros.
+  any_swapped?: boolean;
 }
 
 export interface CookingOverviewFilters {
@@ -371,6 +585,9 @@ export interface PackagingRecipe {
   meal_type: string | null;
   recipe_name: string | null;
   packaging_status: string;
+  // True if this exact meal was swapped in (via the client-facing "Modify"
+  // feature) — a pre-swap printed label may show the wrong macros.
+  is_swapped: boolean;
   subrecipes: PackagingSubrecipe[];
 }
 

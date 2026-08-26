@@ -8,7 +8,7 @@ const withPWA = require("next-pwa")({
 });
 
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ["192.168.10.66", "172.20.10.2"],
+  allowedDevOrigins: ["192.168.10.66", "172.20.10.2", "192.168.1.95"],
   images: {
     remotePatterns: [
       {

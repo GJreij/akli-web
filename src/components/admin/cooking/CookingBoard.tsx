@@ -125,7 +125,17 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                 }}
               >
                 <div>
-                  <p style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 500, color: C.primary }}>{r.name}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <p style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 16, fontWeight: 500, color: C.primary }}>{r.name}</p>
+                    {r.any_swapped && (
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
+                        padding: "2px 8px", borderRadius: 20, background: "#fff8e6", color: "#b45309",
+                      }}>
+                        Modified
+                      </span>
+                    )}
+                  </div>
                   <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light }}>
                     {r.earliest_date} · {r.subrecipes.length} subrecipe{r.subrecipes.length === 1 ? "" : "s"} · {r.comments.length} comment{r.comments.length === 1 ? "" : "s"}
                   </p>

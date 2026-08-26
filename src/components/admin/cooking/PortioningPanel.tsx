@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { getPortioningSummary, type PortioningSummary } from "@/lib/flask";
 import { savePortioning } from "@/app/admin/cooking/actions";
+import { mealTypeRank } from "@/lib/mealOrder";
 import { C } from "../ui";
 
 export interface PortionTarget {
@@ -33,6 +34,7 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
   const [weights, setWeights] = useState<Record<number, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +57,10 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
       setBySubrecipe(next);
       if (errors.length) setError(errors.join(" — "));
       setLoading(false);
+    }).catch(e => {
+      if (cancelled) return;
+      setError(e instanceof Error ? e.message : "Failed to load portioning data — unknown error.");
+      setLoading(false);
     });
     return () => { cancelled = true; };
   }, [targets]);
@@ -69,9 +75,9 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
   // feature — so the key must include the meal, not just client+date.
   // perTarget still holds an array (rather than a single entry) as a defensive
   // measure in case a subrecipe genuinely appears twice within one meal.
-  type ServingEntry = { servingId: number; demand: number };
+  type ServingEntry = { servingId: number; demand: number; savedWeight: number | null };
   type RowInfo = {
-    key: string; name: string; date: string | null; mealLabel: string | null;
+    key: string; name: string; date: string | null; mealType: string | null; mealLabel: string | null;
     perTarget: Record<number, ServingEntry[]>;
   };
   const rowByKey = new Map<string, RowInfo>();
@@ -88,17 +94,23 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
       let row = rowByKey.get(key);
       if (!row) {
         const mealLabel = [c.meal_type ? capitalize(c.meal_type) : null, c.recipe_name].filter(Boolean).join(" · ") || null;
-        row = { key, name: displayName(c.client), date: c.delivery_date, mealLabel, perTarget: {} };
+        row = { key, name: displayName(c.client), date: c.delivery_date, mealType: c.meal_type ?? null, mealLabel, perTarget: {} };
         rowByKey.set(key, row);
         rows.push(row);
       }
       (row.perTarget[target.subrecipeId] ??= []).push({
         servingId: c.meal_plan_day_recipe_serving_id,
         demand: c.servings_for_client ?? 0,
+        savedWeight: c.has_weight_after_cooking ? c.weight_after_cooking : null,
       });
     }
   }
-  rows.sort((a, b) => (a.date ?? "").localeCompare(b.date ?? "") || a.name.localeCompare(b.name) || (a.mealLabel ?? "").localeCompare(b.mealLabel ?? ""));
+  rows.sort((a, b) =>
+    (a.date ?? "").localeCompare(b.date ?? "")
+    || a.name.localeCompare(b.name)
+    || mealTypeRank(a.mealType) - mealTypeRank(b.mealType)
+    || (a.mealLabel ?? "").localeCompare(b.mealLabel ?? "")
+  );
 
   function rowDemand(row: RowInfo, subrecipeId: number) {
     return (row.perTarget[subrecipeId] ?? []).reduce((sum, e) => sum + e.demand, 0);
@@ -134,6 +146,17 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
     return demand > 0 ? rowGrams * (entry.demand / demand) : 0;
   }
 
+  // Already-saved grams for one row (sum of each serving's persisted
+  // weight_after_cooking) — shown as a fallback when no new weight has been
+  // typed yet, so a previously-saved portion doesn't look identical to an
+  // unsaved one.
+  function savedGramsFor(row: RowInfo, subrecipeId: number) {
+    const entries = row.perTarget[subrecipeId];
+    if (!entries || entries.length === 0) return null;
+    if (entries.some(e => e.savedWeight == null)) return null;
+    return entries.reduce((sum, e) => sum + (e.savedWeight ?? 0), 0);
+  }
+
   function isValid(subrecipeId: number) {
     const weight = parseFloat(weights[subrecipeId] ?? "");
     return !isNaN(weight) && weight > 0;
@@ -142,7 +165,9 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
   const anyValid = targets.some(t => isValid(t.subrecipeId));
 
   async function handleSave() {
+    console.log("[portioning] handleSave clicked. weights =", weights, "anyValid =", anyValid);
     setSaving(true);
+    setSaveError(null);
     const toSave = rows.flatMap(row =>
       targets
         .filter(t => row.perTarget[t.subrecipeId]?.length && isValid(t.subrecipeId))
@@ -153,10 +178,18 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
           }))
         )
     );
-    await savePortioning(toSave);
-    setSaving(false);
-    setSaved(true);
-    onSaved();
+    console.log("[portioning] toSave =", toSave);
+    try {
+      await savePortioning(toSave);
+      console.log("[portioning] savePortioning resolved with no error");
+      setSaved(true);
+      onSaved();
+    } catch (e) {
+      console.error("[portioning] savePortioning threw:", e);
+      setSaveError(e instanceof Error ? e.message : "Save failed — unknown error.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const hasNoData = !loading && !error && rows.length === 0;
@@ -241,11 +274,20 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
                     {targets.map(t => {
                       const entries = row.perTarget[t.subrecipeId];
                       const grams = entries?.length ? gramsFor(row, t.subrecipeId) : null;
+                      const savedGrams = entries?.length ? savedGramsFor(row, t.subrecipeId) : null;
+                      // A freshly-typed weight always previews ahead of whatever
+                      // was saved before — only fall back to the saved value
+                      // when nothing new has been entered yet.
+                      const showSaved = grams == null && savedGrams != null;
                       return (
                         <Fragment key={t.subrecipeId}>
                           <td style={{ padding: "6px 6px", color: C.muted }}>{entries?.length ? rowDemand(row, t.subrecipeId) : "—"}</td>
-                          <td style={{ padding: "6px 6px", fontWeight: 600, color: C.tealDark }}>
-                            {grams != null ? `${grams.toFixed(1)}g` : "—"}
+                          <td style={{ padding: "6px 6px", fontWeight: 600, color: showSaved ? C.muted : C.tealDark }}>
+                            {grams != null
+                              ? `${grams.toFixed(1)}g`
+                              : showSaved
+                                ? `${savedGrams.toFixed(1)}g ✓ saved`
+                                : "—"}
                           </td>
                         </Fragment>
                       );
@@ -265,6 +307,9 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
             >
               {saving ? "Saving…" : saved ? "Saved ✓" : "Save portions"}
             </button>
+            {saveError && (
+              <p style={{ margin: "8px 0 0", fontSize: 12.5, color: C.error }}>{saveError}</p>
+            )}
           </>
         )}
       </div>

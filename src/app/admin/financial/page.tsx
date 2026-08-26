@@ -122,16 +122,50 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
     .order("created_at", { ascending: false });
   if (userId !== "all") owedQuery = owedQuery.eq("ordered_user_id", userId);
 
-  const [rangeRes, owedRes, usersRes] = await Promise.all([
+  // Wallet top-ups (both sources: added at checkout, and requested from
+  // Profile) — the ledger is the single source of truth, not re-derived
+  // from wallet_checkout_topup/wallet_topup_request separately.
+  let topupsQuery = supabase
+    .from("wallet_transactions")
+    .select("id, user_id, amount, type, note, created_at")
+    .in("type", ["checkout_topup", "wallet_topup"])
+    .order("created_at", { ascending: false });
+  if (start) topupsQuery = topupsQuery.gte("created_at", `${start}T00:00:00Z`);
+  if (end) {
+    const endExclusive = new Date(`${end}T00:00:00Z`);
+    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+    topupsQuery = topupsQuery.lt("created_at", endExclusive.toISOString());
+  }
+
+  const [rangeRes, owedRes, usersRes, topupsRes, pendingTopupRequestsRes] = await Promise.all([
     rangeQuery,
     owedQuery,
     supabase.from("user").select("id,name,last_name,phone_number"),
+    topupsQuery,
+    supabase.from("wallet_topup_request").select("id", { count: "exact", head: true }).eq("status", "pending"),
   ]);
 
   const rangeRows = (rangeRes.data ?? []) as PaymentRow[];
   const owedRows = (owedRes.data ?? []) as PaymentRow[];
   const users = (usersRes.data ?? []) as SimpleUser[];
+  type TopupRow = { id: number; user_id: string | null; amount: number | null; type: string | null; note: string | null; created_at: string };
+  const topupRows = (topupsRes.data ?? []) as TopupRow[];
+  const topupsInRange = topupRows.reduce((s, t) => s + (t.amount ?? 0), 0);
+  const pendingTopupRequestCount = pendingTopupRequestsRes.count ?? 0;
   const userMap = new Map(users.map(u => [u.id, u]));
+
+  // A cancelled day's payment row is left untouched for audit history, but it
+  // no longer represents real revenue or a real debt — without this, a
+  // cancelled order would keep inflating "Total owed" / "Clients who owe"
+  // forever, or double-count as void revenue in the range cards.
+  const allMpdIds = [...new Set(
+    [...rangeRows, ...owedRows].map(p => p.meal_plan_day_id).filter((id): id is number => id != null)
+  )];
+  const mpdStatusRes = allMpdIds.length
+    ? await supabase.from("meal_plan_day").select("id, status").in("id", allMpdIds)
+    : { data: [] as { id: number; status: string | null }[] };
+  const dayStatusMap = new Map((mpdStatusRes.data ?? []).map(d => [d.id, d.status]));
+  const isCancelled = (p: PaymentRow) => p.meal_plan_day_id != null && dayStatusMap.get(p.meal_plan_day_id) === "cancelled";
 
   const nameFor = (id: string | null) => {
     if (!id) return "Unknown client";
@@ -153,14 +187,41 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
     : { data: [] as MealPlanRow[] };
   const planMap = new Map(((planRes.data ?? []) as MealPlanRow[]).map(p => [p.id, p]));
 
-  const paidInRange = rangeRows.filter(p => p.status === "paid");
-  const pendingInRange = rangeRows.filter(p => p.status === "pending");
+  // Credited checkout top-ups are never auto-reversed when an order's payment
+  // is later reverted to pending (the money stays in the client's wallet by
+  // design) — so admins need a clear pointer to the exact rows to fix by hand
+  // in Supabase if a revert really does need to claw the credit back.
+  type CheckoutTopupRow = { id: number; meal_plan_id: number; amount: number | null; credited_at: string | null };
+  type WalletTxRow = { id: number; related_order_id: number | null };
+  const [checkoutTopupsRes, walletTxRes] = await Promise.all([
+    planIds.length
+      ? supabase.from("wallet_checkout_topup").select("id, meal_plan_id, amount, credited_at").in("meal_plan_id", planIds).eq("credited", true)
+      : Promise.resolve({ data: [] as CheckoutTopupRow[] }),
+    planIds.length
+      ? supabase.from("wallet_transactions").select("id, related_order_id").eq("type", "checkout_topup").in("related_order_id", planIds)
+      : Promise.resolve({ data: [] as WalletTxRow[] }),
+  ]);
+  const walletTxByPlan = new Map(((walletTxRes.data ?? []) as WalletTxRow[]).map(t => [t.related_order_id, t.id]));
+  const creditedTopupByPlan = new Map(
+    ((checkoutTopupsRes.data ?? []) as CheckoutTopupRow[]).map(t => [t.meal_plan_id, {
+      checkoutTopupId: t.id,
+      walletTransactionId: walletTxByPlan.get(t.meal_plan_id) ?? null,
+      amount: t.amount ?? 0,
+      creditedAt: t.credited_at,
+    }])
+  );
+
+  const activeRangeRows = rangeRows.filter(p => !isCancelled(p));
+  const activeOwedRows = owedRows.filter(p => !isCancelled(p));
+
+  const paidInRange = activeRangeRows.filter(p => p.status === "paid");
+  const pendingInRange = activeRangeRows.filter(p => p.status === "pending");
   const revenueInRange = paidInRange.reduce((s, p) => s + (p.amount ?? 0), 0);
   const pendingInRangeTotal = pendingInRange.reduce((s, p) => s + (p.amount ?? 0), 0);
-  const totalOwed = owedRows.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const totalOwed = activeOwedRows.reduce((s, p) => s + (p.amount ?? 0), 0);
 
   const owedByClient = new Map<string, { name: string; phone: string | null; total: number; count: number }>();
-  for (const p of owedRows) {
+  for (const p of activeOwedRows) {
     const key = p.ordered_user_id ?? "unknown";
     const u = p.ordered_user_id ? userMap.get(p.ordered_user_id) : null;
     const existing = owedByClient.get(key);
@@ -193,6 +254,7 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
     if (!group) {
       group = {
         key,
+        mealPlanId: planId,
         userId: p.ordered_user_id,
         clientName: nameFor(p.ordered_user_id),
         startDate: plan?.start_date ?? dayDate,
@@ -201,16 +263,27 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
         currency: p.currency ?? "$",
         status: "pending",
         days: [],
+        topup: planId != null ? creditedTopupByPlan.get(planId) ?? null : null,
       };
       orderMap.set(key, group);
     }
-    group.total += p.amount ?? 0;
-    group.days.push({ id: p.id, date: dayDate, amount: p.amount ?? 0, currency: p.currency ?? "$", status: p.status ?? "unknown" });
+    const cancelled = isCancelled(p);
+    if (!cancelled) group.total += p.amount ?? 0;
+    group.days.push({ id: p.id, date: dayDate, amount: p.amount ?? 0, currency: p.currency ?? "$", status: p.status ?? "unknown", cancelled });
   }
   for (const group of orderMap.values()) {
     group.days.sort((a, b) => a.date.localeCompare(b.date));
-    const paidCount = group.days.filter(d => d.status === "paid").length;
-    group.status = paidCount === 0 ? "pending" : paidCount === group.days.length ? "paid" : "partial";
+    // Cancelled days stay visible in the day list (so a cancellation never
+    // reads as vanished data) but don't count toward the order's paid/pending
+    // status — that reflects what's still actually owed or collected.
+    const activeDays = group.days.filter(d => !d.cancelled);
+    const paidCount = activeDays.filter(d => d.status === "paid").length;
+    group.status = activeDays.length === 0 ? "paid" : paidCount === 0 ? "pending" : paidCount === activeDays.length ? "paid" : "partial";
+  }
+  // An order that's fully cancelled has nothing left to track financially.
+  for (const key of [...orderMap.keys()]) {
+    const group = orderMap.get(key)!;
+    if (group.days.length > 0 && group.days.every(d => d.cancelled)) orderMap.delete(key);
   }
   let orders = [...orderMap.values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
   if (statusFilter !== "all") orders = orders.filter(o => o.status === statusFilter);
@@ -222,8 +295,51 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
         <Card label={`Revenue ${rangeLabel}`} value={fmtMoney(revenueInRange)} sub={`${paidInRange.length} day${paidInRange.length === 1 ? "" : "s"} paid`} />
         <Card label={`Pending ${rangeLabel}`} value={fmtMoney(pendingInRangeTotal)} sub={`${pendingInRange.length} day${pendingInRange.length === 1 ? "" : "s"} unpaid`} />
-        <Card label="Total owed (all time)" value={fmtMoney(totalOwed)} sub={`${owedRows.length} day${owedRows.length === 1 ? "" : "s"} unpaid across ${owedList.length} client${owedList.length === 1 ? "" : "s"}`} />
+        <Card label="Total owed (all time)" value={fmtMoney(totalOwed)} sub={`${activeOwedRows.length} day${activeOwedRows.length === 1 ? "" : "s"} unpaid across ${owedList.length} client${owedList.length === 1 ? "" : "s"}`} />
+        <Card label={`Wallet top-ups ${rangeLabel}`} value={fmtMoney(topupsInRange)} sub="Checkout + profile requests, credited" />
       </div>
+
+      <Section title={`Wallet top-ups ${rangeLabel} (${topupRows.length})`}>
+        {topupRows.length === 0 ? (
+          <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No wallet top-ups in this range.</p>
+        ) : (
+          <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th style={th}>Client</th>
+                <th style={th}>Source</th>
+                <th style={th}>Amount</th>
+                <th style={th}>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {topupRows.map(t => (
+                <tr key={t.id}>
+                  <td style={td}>
+                    {t.user_id ? (
+                      <Link href={`/admin/users/${t.user_id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
+                        {nameFor(t.user_id)}
+                      </Link>
+                    ) : nameFor(null)}
+                  </td>
+                  <td style={{ ...td, color: C.muted }}>{t.type === "checkout_topup" ? "At checkout" : "Profile request"}</td>
+                  <td style={{ ...td, fontWeight: 700, color: C.primary }}>{fmtMoney(t.amount ?? 0)}</td>
+                  <td style={{ ...td, color: C.muted }}>{new Date(t.created_at).toLocaleDateString("en-GB", { timeZone: "Asia/Beirut" })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
+      {pendingTopupRequestCount > 0 && (
+        <Section title="Pending wallet top-up requests">
+          <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
+            {pendingTopupRequestCount} request{pendingTopupRequestCount === 1 ? "" : "s"} waiting for review —{" "}
+            <Link href="/admin/wallet-topups" style={{ color: C.primary, fontWeight: 600 }}>review them here</Link>.
+          </p>
+        </Section>
+      )}
 
       <Section title={`Clients who owe (${owedList.length})`}>
         {owedList.length === 0 ? (

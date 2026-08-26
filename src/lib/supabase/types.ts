@@ -218,6 +218,73 @@ export type Database = {
         }
         Relationships: []
       }
+      cancellation_request: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: number
+          meal_plan_day_ids: number[]
+          meal_plan_id: number
+          refund_amount: number | null
+          requested_at: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: number
+          meal_plan_day_ids?: number[]
+          meal_plan_id: number
+          refund_amount?: number | null
+          requested_at?: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: number
+          meal_plan_day_ids?: number[]
+          meal_plan_id?: number
+          refund_amount?: number | null
+          requested_at?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cancellation_request_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cancellation_request_meal_plan_id_fkey"
+            columns: ["meal_plan_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cancellation_request_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_macro_order: {
         Row: {
           carbs_ordered: number | null
@@ -940,6 +1007,7 @@ export type Database = {
           status: string | null
           tenant_id: number | null
           updated_at: string | null
+          wallet_amount_applied: number
         }
         Insert: {
           affiliate_id?: number | null
@@ -957,6 +1025,7 @@ export type Database = {
           status?: string | null
           tenant_id?: number | null
           updated_at?: string | null
+          wallet_amount_applied?: number
         }
         Update: {
           affiliate_id?: number | null
@@ -974,6 +1043,7 @@ export type Database = {
           status?: string | null
           tenant_id?: number | null
           updated_at?: string | null
+          wallet_amount_applied?: number
         }
         Relationships: [
           {
@@ -1575,6 +1645,71 @@ export type Database = {
           },
         ]
       }
+      wallet_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: number
+          note: string | null
+          related_cancellation_request_id: number | null
+          related_order_id: number | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: number
+          note?: string | null
+          related_cancellation_request_id?: number | null
+          related_order_id?: number | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: number
+          note?: string | null
+          related_cancellation_request_id?: number | null
+          related_order_id?: number | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_related_cancellation_request_id_fkey"
+            columns: ["related_cancellation_request_id"]
+            isOneToOne: false
+            referencedRelation: "cancellation_request"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_related_order_id_fkey"
+            columns: ["related_order_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weekly_menu: {
         Row: {
           created_at: string
@@ -1666,8 +1801,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      credit_wallet: {
+        Args: {
+          p_amount: number
+          p_note?: string
+          p_related_cancellation_request_id?: number
+          p_related_order_id?: number
+          p_type: string
+          p_user_id: string
+        }
+        Returns: number
+      }
+      decrement_delivery_slot_count: {
+        Args: { p_delivery_date: string; p_delivery_slot_id: number }
+        Returns: undefined
+      }
+      is_admin: { Args: never; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      spend_wallet: {
+        Args: {
+          p_amount: number
+          p_note?: string
+          p_related_order_id?: number
+          p_user_id: string
+        }
+        Returns: number
+      }
       update_subrecipe_macros: {
         Args: { p_subrecipe_id: number }
         Returns: undefined

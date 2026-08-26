@@ -4,17 +4,26 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconUser, IconChevronDown,
-  IconPencil, IconCheck, IconBrandWhatsapp,
+  IconPencil, IconCheck, IconBrandWhatsapp, IconWallet,
 } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/client";
 import ProfileAddresses from "@/components/ProfileAddresses";
 import DietWizard from "@/components/DietWizard";
 import { COUNTRY_CODES } from "@/lib/theme";
+import { requestWalletTopup } from "@/app/profile/actions";
 import type { Database } from "@/lib/supabase/types";
 
 type UserRow    = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow   = Database["public"]["Tables"]["daily_macro_target"]["Row"];
 type AddressRow = Database["public"]["Tables"]["user_delivery_address"]["Row"];
+
+type WalletTopupRequestRow = {
+  id: number;
+  amount: number;
+  status: string;
+  payment_note: string | null;
+  created_at: string;
+};
 
 const C = {
   primary:  "#063330",
@@ -26,6 +35,12 @@ const C = {
   border:   "#e0dbd5",
   white:    "#ffffff",
   error:    "#c0392b",
+};
+
+const TOPUP_STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  pending:  { label: "Pending review", bg: "#fff8e6", color: "#b45309" },
+  approved: { label: "Approved",       bg: "#f0faf0", color: "#15803d" },
+  rejected: { label: "Rejected",       bg: "#fff0f0", color: C.error },
 };
 
 const DIET_LABELS: Record<string, string> = {
@@ -280,15 +295,123 @@ function DietSection({ userId, profile, macroHistory, onWizardSaved }: {
 
 // ─── Main ────────────────────────────────────────────────────────────────────────
 
-export default function Profile({ userId, profile, macroHistory, addresses }: {
+// ─── Wallet top-up request sheet ───────────────────────────────────────────
+
+function WalletTopupSheet({ onClose, onSubmitted }: { onClose: () => void; onSubmitted: () => void }) {
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [phase, setPhase] = useState<"form" | "done">("form");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const parsed = parseFloat(amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError("Enter an amount greater than $0.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await requestWalletTopup(parsed, note);
+      setPhase("done");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not submit this request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div onClick={phase === "done" ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px" }}>
+        {phase === "form" && (
+          <>
+            <h3 style={{ margin: "0 0 4px", fontSize: 18 }}>Request a top-up</h3>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 16px" }}>
+              Let us know how much you&apos;d like added to your wallet — we&apos;ll confirm once your payment comes
+              through (Whish, cash, or however works for you).
+            </p>
+
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Amount</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ fontSize: 14, color: C.muted }}>$</span>
+              <input
+                type="number" inputMode="decimal" min={0} step={1} placeholder="0.00"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                style={{ flex: 1 }}
+              />
+            </div>
+
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+              Note <span style={{ fontWeight: 400, color: C.light }}>(optional)</span>
+            </label>
+            <input
+              type="text" placeholder="e.g. paying via Whish today"
+              value={note} onChange={e => setNote(e.target.value)}
+              style={{ width: "100%", marginBottom: 16 }}
+            />
+
+            {error && (
+              <div style={{ background: "#fdf0ef", border: `1px solid ${C.error}`, borderRadius: 10, padding: "10px 14px", fontSize: 12.5, color: C.error, marginBottom: 14 }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={submit}
+              disabled={submitting}
+              style={{
+                width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
+                background: C.primary, color: C.white, fontSize: 14, fontWeight: 600,
+                cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
+              }}
+            >
+              {submitting ? "Sending…" : "Send request"}
+            </button>
+          </>
+        )}
+
+        {phase === "done" && (
+          <div style={{ textAlign: "center", padding: "12px 0 4px" }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: "50%", background: "#e6f7f0", margin: "0 auto 16px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <IconCheck size={26} color="#15803d" />
+            </div>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18 }}>Request sent</h3>
+            <p style={{ fontSize: 13, color: C.muted, margin: "0 0 20px", lineHeight: 1.6 }}>
+              We&apos;ll review it and add the funds to your wallet once your payment is confirmed.
+            </p>
+            <button
+              onClick={onSubmitted}
+              style={{
+                width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
+                background: C.primary, color: C.white, fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function Profile({ userId, profile, macroHistory, addresses, walletBalance = 0, walletTopupRequests = [] }: {
   userId: string;
   profile: UserRow | null;
   macroHistory: MacroRow[];
   addresses: AddressRow[];
+  walletBalance?: number;
+  walletTopupRequests?: WalletTopupRequestRow[];
 }) {
   const router = useRouter();
   const [macroHistoryState, setMacroHistoryState] = useState(macroHistory);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [topupSheet, setTopupSheet] = useState(false);
 
   async function signOut() {
     const supabase = createClient();
@@ -336,6 +459,64 @@ export default function Profile({ userId, profile, macroHistory, addresses }: {
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f0f7f7", border: `1px solid ${C.teal}`, borderRadius: 10, padding: "10px 14px", fontSize: 13, color: C.tealDark, marginBottom: 14 }}>
             <IconCheck size={16} /> Your diet has been updated.
           </div>
+        )}
+
+        {topupSheet && (
+          <WalletTopupSheet
+            onClose={() => setTopupSheet(false)}
+            onSubmitted={() => { setTopupSheet(false); router.refresh(); }}
+          />
+        )}
+
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
+          padding: "14px 16px", marginBottom: 14,
+        }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10, background: "#f0f7f7",
+            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <IconWallet size={19} color={C.tealDark} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: "0 0 1px", fontSize: 11.5, color: C.light, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Wallet balance
+            </p>
+            <p style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 500, color: C.primary }}>
+              ${walletBalance.toFixed(2)}
+            </p>
+          </div>
+          <button
+            onClick={() => setTopupSheet(true)}
+            style={{ background: "none", border: "none", padding: 0, fontSize: 12.5, fontWeight: 600, color: C.tealDark, cursor: "pointer", textDecoration: "underline" }}
+          >
+            Request top-up
+          </button>
+        </div>
+
+        {walletTopupRequests.length > 0 && (
+          <Section title="Wallet top-up requests" subtitle="Your recent requests">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {walletTopupRequests.map(r => {
+                const cfg = TOPUP_STATUS_CONFIG[r.status] ?? TOPUP_STATUS_CONFIG.pending;
+                return (
+                  <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" }}>
+                    <div>
+                      <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600 }}>${r.amount.toFixed(2)}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: C.light }}>{fmtDate(r.created_at.split("T")[0])}</p>
+                    </div>
+                    <span style={{
+                      fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em",
+                      padding: "2px 8px", borderRadius: 20, background: cfg.bg, color: cfg.color,
+                    }}>
+                      {cfg.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
         )}
 
         <Section title="Account" subtitle="Your personal details" defaultOpen>

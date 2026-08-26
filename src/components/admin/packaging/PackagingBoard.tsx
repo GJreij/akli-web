@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PackagingDay, PackagingClient } from "@/lib/flask";
 import { markPackaged } from "@/app/admin/packaging/actions";
+import { mealTypeRank } from "@/lib/mealOrder";
 import { C } from "../ui";
 
 function fmtSlot(slot: { start_time: string | null; end_time: string | null } | null) {
@@ -11,20 +12,20 @@ function fmtSlot(slot: { start_time: string | null; end_time: string | null } | 
   return `${slot.start_time?.slice(0, 5) ?? "?"}–${slot.end_time?.slice(0, 5) ?? "?"}`;
 }
 
-const MEAL_ORDER = ["breakfast", "lunch", "dinner", "snack"];
+function sortedRecipes(client: PackagingClient) {
+  return [...client.recipes].sort((a, b) =>
+    mealTypeRank(a.meal_type) - mealTypeRank(b.meal_type) || (a.recipe_name ?? "").localeCompare(b.recipe_name ?? "")
+  );
+}
 
 function groupByMealType(client: PackagingClient) {
   const groups = new Map<string, typeof client.recipes>();
-  for (const recipe of client.recipes) {
+  for (const recipe of sortedRecipes(client)) {
     const key = recipe.meal_type ?? "other";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(recipe);
   }
-  return [...groups.entries()].sort((a, b) => {
-    const ai = MEAL_ORDER.indexOf(a[0]);
-    const bi = MEAL_ORDER.indexOf(b[0]);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
+  return [...groups.entries()].sort((a, b) => mealTypeRank(a[0]) - mealTypeRank(b[0]));
 }
 
 function DayCombination({ client }: { client: PackagingClient }) {
@@ -62,9 +63,14 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
   function toggle(mpdrId: number, currentlyPackaged: boolean) {
     setMarking(mpdrId);
     startTransition(async () => {
-      await markPackaged(mpdrId, !currentlyPackaged);
-      setMarking(null);
-      router.refresh();
+      try {
+        await markPackaged(mpdrId, !currentlyPackaged);
+        router.refresh();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "Failed to update packaging status.");
+      } finally {
+        setMarking(null);
+      }
     });
   }
 
@@ -96,7 +102,9 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                 </p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {slot.clients.map((client, ci) => {
+                  {[...slot.clients]
+                    .sort((a, b) => `${a.name ?? ""} ${a.last_name ?? ""}`.trim().localeCompare(`${b.name ?? ""} ${b.last_name ?? ""}`.trim()))
+                    .map((client, ci) => {
                     const clientKey = `${day.delivery_date}-${slot.slot_id}-${ci}`;
                     const isExpanded = expandedClients.has(clientKey);
                     return (
@@ -119,7 +127,7 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                       {isExpanded && <DayCombination client={client} />}
 
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: isExpanded ? 8 : 0 }}>
-                        {client.recipes.map(recipe => {
+                        {sortedRecipes(client).map(recipe => {
                           const packaged = recipe.packaging_status === "completed";
                           return (
                             <div key={recipe.meal_plan_day_recipe_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -127,6 +135,14 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                                 <p style={{ margin: 0, fontSize: 12.5 }}>
                                   <strong>{recipe.recipe_name ?? "—"}</strong>
                                   {recipe.meal_type && <span style={{ color: C.light }}> · {recipe.meal_type}</span>}
+                                  {recipe.is_swapped && (
+                                    <span style={{
+                                      marginLeft: 6, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
+                                      padding: "1px 7px", borderRadius: 20, background: "#fff8e6", color: "#b45309",
+                                    }}>
+                                      Modified
+                                    </span>
+                                  )}
                                 </p>
                                 <p style={{ margin: "2px 0 0", fontSize: 11, color: C.light }}>
                                   {recipe.subrecipes.map(s => `${s.subrecipe_name ?? "?"} (${s.serving_size ?? "?"})`).join(" · ")}

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import OrderFlow from "@/components/OrderFlow";
 import type { Database } from "@/lib/supabase/types";
 import { parsePref, type PrefRating } from "@/lib/preferences";
+import { beirutISODate } from "@/lib/dates";
 
 type RecipeRow = {
   id: number; name: string | null; photo: string | null;
@@ -17,18 +18,6 @@ export type OrderableWeek = {
   weekdays: string[];
   recipes: RecipeRow[];
 };
-
-// Orders must be placed 48h ahead of the day needed (delivery happens the
-// evening before). Computed against Beirut local time, not server UTC —
-// using toISOString() here would shift the cutoff by a day overnight for
-// a UTC+3 server/client mismatch.
-function beirutISODate(daysFromNow: number): string {
-  const beirutNow = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Beirut" })
-  );
-  beirutNow.setDate(beirutNow.getDate() + daysFromNow);
-  return `${beirutNow.getFullYear()}-${String(beirutNow.getMonth() + 1).padStart(2, "0")}-${String(beirutNow.getDate()).padStart(2, "0")}`;
-}
 
 export default async function OrderNewPage() {
   const supabase = await createClient();
@@ -57,7 +46,7 @@ export default async function OrderNewPage() {
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false }),
     supabase.from("meal_plan_day")
-      .select("date, meal_plan!inner(user_id)")
+      .select("date, status, meal_plan!inner(user_id)")
       .eq("meal_plan.user_id", user.id)
       .gte("date", today),
     supabase.from("automatic_discount_rules")
@@ -80,7 +69,18 @@ export default async function OrderNewPage() {
     r => (!r.start_date || today >= r.start_date) && (!r.end_date || today <= r.end_date)
   );
 
-  const orderedDays = ((orderedDaysRes.data ?? []) as unknown as { date: string | null }[])
+  // A day only frees up once its cancellation is actually finalized
+  // ("cancelled") — while it's merely "cancellation_pending" (requested but
+  // not yet decided by an admin), the slot is still held, since a rejection
+  // would put the day right back to normal and a double-booking would
+  // otherwise be possible in the meantime.
+  const orderedDaysRaw = (orderedDaysRes.data ?? []) as unknown as { date: string | null; status: string | null }[];
+  const orderedDays = orderedDaysRaw
+    .filter(d => d.status !== "cancelled")
+    .map(d => d.date)
+    .filter((d): d is string => !!d);
+  const cancellationPendingDays = orderedDaysRaw
+    .filter(d => d.status === "cancellation_pending")
     .map(d => d.date)
     .filter((d): d is string => !!d);
 
@@ -128,6 +128,7 @@ export default async function OrderNewPage() {
       initialPrefs={initialPrefs}
       addresses={(addressesRes.data ?? []) as Database["public"]["Tables"]["user_delivery_address"]["Row"][]}
       orderedDays={orderedDays}
+      cancellationPendingDays={cancellationPendingDays}
       closureDays={closureDays}
       volumeDiscountRules={activeVolumeRules}
     />
