@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 function num(formData: FormData, key: string) {
   const v = formData.get(key);
@@ -29,7 +29,7 @@ function parseSubrecipeForm(formData: FormData) {
 }
 
 export async function createSubrecipe(formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const payload = parseSubrecipeForm(formData);
   const { data } = await (supabase.from("subrecipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .insert(payload).select("id").single();
@@ -38,7 +38,7 @@ export async function createSubrecipe(formData: FormData) {
 }
 
 export async function updateSubrecipe(id: number, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const payload = parseSubrecipeForm(formData);
   await (supabase.from("subrecipe") as any).update(payload).eq("id", id); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath("/admin/catalog/subrecipes");
@@ -46,14 +46,14 @@ export async function updateSubrecipe(id: number, formData: FormData) {
 }
 
 export async function deleteSubrecipe(id: number) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   await supabase.from("subrecipe").delete().eq("id", id);
   revalidatePath("/admin/catalog/subrecipes");
   redirect("/admin/catalog/subrecipes");
 }
 
 export async function addSubrecipeIngredient(subrecipeId: number, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const ingredient_id = Number(formData.get("ingredient_id"));
   const quantity = num(formData, "quantity");
   const optional = formData.get("optional") === "on";
@@ -64,7 +64,7 @@ export async function addSubrecipeIngredient(subrecipeId: number, formData: Form
 }
 
 export async function removeSubrecipeIngredient(subrecipeId: number, rowId: number) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   await supabase.from("subrec_ingred").delete().eq("id", rowId);
   await (supabase.rpc as any)("update_subrecipe_macros", { p_subrecipe_id: subrecipeId }); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath(`/admin/catalog/subrecipes/${subrecipeId}`);

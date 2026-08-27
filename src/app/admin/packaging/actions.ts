@@ -1,9 +1,9 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 export async function markPackaged(mealPlanDayRecipeId: number, packaged: boolean) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
 
   const { data, error } = await (supabase.from("meal_plan_day_recipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .update({ packaging_status: packaged ? "completed" : "pending" })

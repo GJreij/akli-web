@@ -1,21 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL ?? "https://aklilebapp-72376dbe3cc8.herokuapp.com";
 const INTERNAL_ADMIN_SECRET = process.env.INTERNAL_ADMIN_SECRET ?? "";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: actingProfile } = await supabase.from("user").select("role").eq("id", user.id).single();
-  if ((actingProfile as { role: string | null } | null)?.role !== "admin") throw new Error("Not authorized");
-
-  return { supabase, adminId: user.id };
-}
 
 type Decision = "approved_wallet" | "approved_refund" | "approved_no_refund" | "rejected";
 

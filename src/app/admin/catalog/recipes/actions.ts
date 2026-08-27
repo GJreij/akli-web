@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 import { validateMainAssignment, type MainRow } from "./main-validation";
 
 function num(formData: FormData, key: string) {
@@ -28,7 +28,7 @@ function parseRecipeForm(formData: FormData) {
 }
 
 export async function createRecipe(formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const payload = parseRecipeForm(formData);
   const { data } = await (supabase.from("recipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .insert(payload).select("id").single();
@@ -37,7 +37,7 @@ export async function createRecipe(formData: FormData) {
 }
 
 export async function updateRecipe(id: number, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const payload = parseRecipeForm(formData);
   await (supabase.from("recipe") as any).update(payload).eq("id", id); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath("/admin/catalog/recipes");
@@ -45,14 +45,14 @@ export async function updateRecipe(id: number, formData: FormData) {
 }
 
 export async function deleteRecipe(id: number) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   await supabase.from("recipe").delete().eq("id", id);
   revalidatePath("/admin/catalog/recipes");
   redirect("/admin/catalog/recipes");
 }
 
 export async function addRecipeSubrecipe(recipeId: number, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const subrecipe_id = Number(formData.get("subrecipe_id"));
   const subrecipe_label = String(formData.get("subrecipe_label") ?? "").trim() || null;
   const optional = formData.get("optional") === "on";
@@ -64,7 +64,7 @@ export async function addRecipeSubrecipe(recipeId: number, formData: FormData) {
 }
 
 export async function removeRecipeSubrecipe(recipeId: number, rowId: number) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   await supabase.from("recipe_subrecipe").delete().eq("id", rowId);
   revalidatePath(`/admin/catalog/recipes/${recipeId}`);
 }
@@ -74,7 +74,7 @@ export async function removeRecipeSubrecipe(recipeId: number, rowId: number) {
 // =============================================================================
 
 export async function updateRecipeSubrecipeSettings(recipeId: number, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const { data: composition } = await supabase
     .from("recipe_subrecipe")
     .select("id")

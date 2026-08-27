@@ -1,19 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 import type { Database } from "@/lib/supabase/types";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: actingProfile } = await supabase.from("user").select("role").eq("id", user.id).single();
-  if ((actingProfile as { role: string | null } | null)?.role !== "admin") throw new Error("Not authorized");
-
-  return supabase;
-}
 
 type AffiliateInsert = Database["public"]["Tables"]["affiliates"]["Insert"];
 type AffiliateUpdate = Database["public"]["Tables"]["affiliates"]["Update"];
@@ -30,7 +19,7 @@ type VolumeRuleUpdate = Database["public"]["Tables"]["automatic_discount_rules"]
  * resolution always filters by user_id first.
  */
 async function assertCodeNotAmbiguous(
-  supabase: Awaited<ReturnType<typeof requireAdmin>>,
+  supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"],
   code: string,
   userId: string | null | undefined,
   excludeId?: number,
@@ -62,7 +51,7 @@ export async function createAffiliate(input: {
   waives_delivery?: boolean;
   notes?: string | null;
 }) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const existingProfileRes = await supabase
     .from("affiliates")
@@ -130,7 +119,7 @@ export async function createAffiliate(input: {
 }
 
 export async function updateAffiliate(id: number, update: AffiliateUpdate) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   const { error } = await (supabase.from("affiliates") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .update(update)
     .eq("id", id);
@@ -192,7 +181,7 @@ export async function updateAffiliate(id: number, update: AffiliateUpdate) {
 }
 
 export async function endAffiliateProgram(id: number) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { error } = await (supabase.from("affiliates") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .update({ status: "ended" })
@@ -210,7 +199,7 @@ export async function endAffiliateProgram(id: number) {
 }
 
 export async function deleteAffiliate(id: number) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { count: paymentCount } = await supabase
     .from("payment")
@@ -249,14 +238,14 @@ export async function recordPayout(input: {
   period_end?: string | null;
   note?: string | null;
 }) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   const { error } = await (supabase.from("affiliate_payouts") as any).insert(input); // eslint-disable-line @typescript-eslint/no-explicit-any
   if (error) throw new Error(error.message);
   revalidatePath("/admin/commerce");
 }
 
 export async function createPromoCode(input: PromoCodeInsert) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   await assertCodeNotAmbiguous(supabase, input.code as string, input.user_id as string | null | undefined);
   assertDateOrder(input.start_date as string | null | undefined, input.end_date as string | null | undefined);
 
@@ -266,7 +255,7 @@ export async function createPromoCode(input: PromoCodeInsert) {
 }
 
 export async function updatePromoCode(id: number, update: PromoCodeUpdate) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   if (update.code) {
     await assertCodeNotAmbiguous(supabase, update.code as string, update.user_id as string | null | undefined, id);
   }
@@ -285,7 +274,7 @@ export async function updatePromoCode(id: number, update: PromoCodeUpdate) {
 }
 
 export async function deletePromoCode(id: number) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
 
   const { count } = await supabase
     .from("promo_code_usage")
@@ -301,7 +290,7 @@ export async function deletePromoCode(id: number) {
 }
 
 export async function createVolumeRule(input: VolumeRuleInsert) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   assertDateOrder(input.start_date as string | null | undefined, input.end_date as string | null | undefined);
   const { error } = await (supabase.from("automatic_discount_rules") as any).insert(input); // eslint-disable-line @typescript-eslint/no-explicit-any
   if (error) throw new Error(error.message);
@@ -309,7 +298,7 @@ export async function createVolumeRule(input: VolumeRuleInsert) {
 }
 
 export async function updateVolumeRule(id: number, update: VolumeRuleUpdate) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   if (update.start_date !== undefined || update.end_date !== undefined) {
     const currentRes = await supabase.from("automatic_discount_rules").select("start_date,end_date").eq("id", id).single();
     const current = currentRes.data as { start_date: string | null; end_date: string | null } | null;
@@ -325,7 +314,7 @@ export async function updateVolumeRule(id: number, update: VolumeRuleUpdate) {
 }
 
 export async function deleteVolumeRule(id: number) {
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase.from("automatic_discount_rules").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/commerce");

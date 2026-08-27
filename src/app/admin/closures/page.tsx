@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { addClosure, deleteClosure } from "./actions";
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -46,20 +47,21 @@ export default function AdminClosuresPage() {
     if (!newDate) { setAddErr("Please pick a date."); return; }
     setAddErr(null);
     startTransition(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase.from("kitchen_closure") as any)
-        .insert({ closure_date: newDate, reason: newReason.trim() || null });
-      if (error) { setAddErr(error.message); return; }
-      setNewDate("");
-      setNewReason("");
-      await fetchClosures();
+      try {
+        await addClosure(newDate, newReason.trim() || null);
+        setNewDate("");
+        setNewReason("");
+        await fetchClosures();
+      } catch (e) {
+        setAddErr(e instanceof Error ? e.message : "Could not add this closure date.");
+      }
     });
   }
 
   async function handleDelete(id: number) {
     if (!window.confirm("Remove this closure date?")) return;
     startTransition(async () => {
-      await supabase.from("kitchen_closure").delete().eq("id", id);
+      await deleteClosure(id);
       await fetchClosures();
     });
   }

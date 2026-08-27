@@ -1,18 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: actingProfile } = await supabase.from("user").select("role").eq("id", user.id).single();
-  if ((actingProfile as { role: string | null } | null)?.role !== "admin") throw new Error("Not authorized");
-
-  return { supabase, adminId: user.id };
-}
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 export async function approveWalletTopup(requestId: number, userId: string, amount: number, note: string) {
   if (amount <= 0) throw new Error("Credit amount must be positive");

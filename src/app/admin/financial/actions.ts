@@ -1,22 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: actingProfile } = await supabase.from("user").select("role").eq("id", user.id).single();
-  if ((actingProfile as { role: string | null } | null)?.role !== "admin") throw new Error("Not authorized");
-
-  return supabase;
-}
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 export async function setPaymentStatus(paymentIds: number[], status: "paid" | "pending", mealPlanId?: number | null) {
   if (paymentIds.length === 0) return;
-  const supabase = await requireAdmin();
+  const { supabase } = await requireAdmin();
   const { error } = await (supabase.from("payment") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .update({ status })
     .in("id", paymentIds);
@@ -35,7 +24,7 @@ export async function setPaymentStatus(paymentIds: number[], status: "paid" | "p
   revalidatePath("/admin", "layout");
 }
 
-async function creditCheckoutTopupIfFullyPaid(supabase: Awaited<ReturnType<typeof requireAdmin>>, mealPlanId: number) {
+async function creditCheckoutTopupIfFullyPaid(supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"], mealPlanId: number) {
   const { data: topups } = await (supabase as any)
     .from("wallet_checkout_topup")
     .select("id, user_id, amount")

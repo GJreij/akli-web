@@ -1,13 +1,13 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 export async function savePortioning(rows: { meal_plan_day_recipe_serving_id: number; weight_after_cooking: number }[]) {
   if (rows.length === 0) {
     throw new Error("Nothing to save — no rows had a valid weight entered.");
   }
 
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
 
   const results = await Promise.all(
     rows.map(r =>

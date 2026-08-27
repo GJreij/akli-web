@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
 const ALLERGENS = [
   "celery", "cereals_containing_gluten", "crustaceans", "eggs", "fish", "lupin",
@@ -32,7 +32,7 @@ function parseIngredientForm(formData: FormData) {
 }
 
 export async function createIngredient(formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const payload = parseIngredientForm(formData);
   await (supabase.from("ingredient") as any).insert(payload); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath("/admin/catalog/ingredients");
@@ -40,7 +40,7 @@ export async function createIngredient(formData: FormData) {
 }
 
 export async function updateIngredient(id: number, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   const payload = parseIngredientForm(formData);
   await (supabase.from("ingredient") as any).update(payload).eq("id", id); // eslint-disable-line @typescript-eslint/no-explicit-any
   revalidatePath("/admin/catalog/ingredients");
@@ -48,7 +48,7 @@ export async function updateIngredient(id: number, formData: FormData) {
 }
 
 export async function deleteIngredient(id: number) {
-  const supabase = await createClient();
+  const { supabase } = await requireAdmin();
   await supabase.from("ingredient").delete().eq("id", id);
   revalidatePath("/admin/catalog/ingredients");
   redirect("/admin/catalog/ingredients");
