@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { getPortioningSummary, type PortioningSummary } from "@/lib/flask";
 import { savePortioning } from "@/app/admin/cooking/actions";
 import { mealTypeRank } from "@/lib/mealOrder";
+import { ALLERGENS } from "@/lib/allergens";
 import { C } from "../ui";
 
 export interface PortionTarget {
@@ -79,6 +80,10 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
   type RowInfo = {
     key: string; name: string; date: string | null; mealType: string | null; mealLabel: string | null;
     perTarget: Record<number, ServingEntry[]>;
+    // Union across every subrecipe portioned into this one physical meal —
+    // e.g. a sandwich's bread + filling are portioned together but both
+    // could carry a different allergen, and the client needs to see both.
+    allergens: Set<string>;
   };
   const rowByKey = new Map<string, RowInfo>();
   const rows: RowInfo[] = [];
@@ -94,7 +99,7 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
       let row = rowByKey.get(key);
       if (!row) {
         const mealLabel = [c.meal_type ? capitalize(c.meal_type) : null, c.recipe_name].filter(Boolean).join(" · ") || null;
-        row = { key, name: displayName(c.client), date: c.delivery_date, mealType: c.meal_type ?? null, mealLabel, perTarget: {} };
+        row = { key, name: displayName(c.client), date: c.delivery_date, mealType: c.meal_type ?? null, mealLabel, perTarget: {}, allergens: new Set() };
         rowByKey.set(key, row);
         rows.push(row);
       }
@@ -103,6 +108,7 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
         demand: c.servings_for_client ?? 0,
         savedWeight: c.has_weight_after_cooking ? c.weight_after_cooking : null,
       });
+      for (const key of c.client_allergens ?? []) row.allergens.add(key);
     }
   }
   rows.sort((a, b) =>
@@ -268,7 +274,17 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
               <tbody>
                 {rows.map(row => (
                   <tr key={row.key} style={{ borderBottom: `1px solid ${C.offWhite}` }}>
-                    <td style={{ padding: "6px 6px", fontWeight: 600 }}>{row.name}</td>
+                    <td style={{ padding: "6px 6px", fontWeight: 600 }}>
+                      {row.name}
+                      {row.allergens.size > 0 && (
+                        <span
+                          title={`Allergic to ${ALLERGENS.filter(a => row.allergens.has(a.key)).map(a => a.label).join(", ")}`}
+                          style={{ marginLeft: 5, fontSize: 11, fontWeight: 600, color: "#c45f00" }}
+                        >
+                          ⚠️
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: "6px 6px", color: C.muted, whiteSpace: "nowrap" }}>{row.date ?? "—"}</td>
                     <td style={{ padding: "6px 6px", color: C.muted, whiteSpace: "nowrap" }}>{row.mealLabel ?? "—"}</td>
                     {targets.map(t => {

@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/supabase/types";
+import { emptyAllergenFlags } from "@/lib/allergens";
 
 export const runtime = "nodejs";
 
@@ -16,12 +17,16 @@ export async function POST(req: NextRequest) {
     const {
       userId, name, last_name, phone_number, email, dob,
       tenant_id, kcal_target, protein_g, carbs_g, fat_g, diet_type,
-      goal, sex, height_cm, weight_kg, activity_level, method,
+      goal, sex, height_cm, weight_kg, activity_level, method, allergens,
     } = body;
 
     if (!userId || !name || !email) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    // Onboarding's allergen picker is optional — fall back to all-false
+    // (never skip the columns entirely) rather than trust an untyped body.
+    const allergenFlags = { ...emptyAllergenFlags(), ...(allergens ?? {}) };
 
     // Insert or upsert profile — cast needed because supabase-js generic inference
     // narrows upsert input too aggressively on some versions
@@ -37,6 +42,7 @@ export async function POST(req: NextRequest) {
       onboarding: false,
       role: "client",
       status: "active",
+      ...allergenFlags,
     });
 
     if (profileError) {

@@ -4,6 +4,7 @@ import OrderFlow from "@/components/OrderFlow";
 import type { Database } from "@/lib/supabase/types";
 import { parsePref, type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
+import type { AllergenFlags } from "@/lib/allergens";
 
 type RecipeRow = {
   id: number; name: string | null; photo: string | null;
@@ -118,12 +119,26 @@ export default async function OrderNewPage() {
     if (p.recipe_id) initialPrefs[p.recipe_id] = parsePref(p);
   }
 
+  // Allergen rollup for every recipe on offer, so the review step can warn
+  // on a generated meal without needing ingredient detail from Flask's plan
+  // response (it only carries recipe_id, see src/lib/flask.ts).
+  const allRecipeIds = Array.from(new Set(weeks.flatMap(w => w.recipes.map(r => r.id))));
+  const recipeAllergens: Record<number, AllergenFlags> = {};
+  if (allRecipeIds.length > 0) {
+    const { data: allergenRows } = await supabase.from("recipe_allergen").select("*").in("recipe_id", allRecipeIds);
+    for (const row of allergenRows ?? []) {
+      const { recipe_id, ...flags } = row as { recipe_id: number } & AllergenFlags;
+      recipeAllergens[recipe_id] = flags;
+    }
+  }
+
   return (
     <OrderFlow
       userId={user.id}
       profile={profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null}
       macroTarget={macroRes.data as Database["public"]["Tables"]["daily_macro_target"]["Row"] | null}
       orderableWeeks={weeks}
+      recipeAllergens={recipeAllergens}
       deliverySlots={(slotsRes.data ?? []) as Database["public"]["Tables"]["delivery_slots"]["Row"][]}
       initialPrefs={initialPrefs}
       addresses={(addressesRes.data ?? []) as Database["public"]["Tables"]["user_delivery_address"]["Row"][]}

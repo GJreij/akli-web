@@ -4,7 +4,12 @@ import { useState } from "react";
 import type { CookingRecipe } from "@/lib/flask";
 import CopyListButton from "../CopyListButton";
 import PortioningPanel, { type PortionTarget } from "./PortioningPanel";
+import { ALLERGENS } from "@/lib/allergens";
 import { C } from "../ui";
+
+function allergenLabel(key: string) {
+  return ALLERGENS.find(a => a.key === key)?.label ?? key;
+}
 
 interface Occurrence {
   recipeId: number;
@@ -115,6 +120,9 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {recipes.map(r => {
           const isOpen = expanded.has(r.recipe_id);
+          // Defensive default — undefined until the backend deploy that adds
+          // this field to /cooking/overview has gone out.
+          const allergenConflicts = r.allergen_conflicts ?? [];
           return (
             <div key={r.recipe_id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
               <button
@@ -135,10 +143,26 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                         Modified
                       </span>
                     )}
+                    {allergenConflicts.length > 0 && (
+                      <span
+                        title={allergenConflicts.map(c => `${c.name}: ${c.allergens.map(allergenLabel).join(", ")}`).join(" · ")}
+                        style={{
+                          fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
+                          padding: "2px 8px", borderRadius: 20, background: "#fff3e8", color: "#c45f00",
+                        }}
+                      >
+                        ⚠️ Allergen
+                      </span>
+                    )}
                   </div>
                   <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light }}>
                     {r.earliest_date} · {r.subrecipes.length} subrecipe{r.subrecipes.length === 1 ? "" : "s"} · {r.comments.length} comment{r.comments.length === 1 ? "" : "s"}
                   </p>
+                  {allergenConflicts.length > 0 && (
+                    <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#c45f00", fontWeight: 600 }}>
+                      {allergenConflicts.map(c => `${c.name} — ${c.allergens.map(allergenLabel).join(", ")}`).join(" · ")}
+                    </p>
+                  )}
                 </div>
               </button>
 

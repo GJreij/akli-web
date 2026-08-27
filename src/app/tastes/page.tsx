@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import TastesManager from "@/components/TastesManager";
 import { parsePref, type PrefRating } from "@/lib/preferences";
+import { emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 
 type RecipeRow = {
   id: number; name: string | null; photo: string | null;
@@ -16,7 +17,7 @@ export default async function TastesPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [menusRes, prefsRes] = await Promise.all([
+  const [menusRes, prefsRes, userRes] = await Promise.all([
     supabase
       .from("weekly_menu")
       .select(`id, week_start_date, week_end_date,
@@ -28,7 +29,13 @@ export default async function TastesPage() {
       .from("user_recipe_preferences")
       .select("recipe_id, like, dislike, dont_include, comment")
       .eq("user_id", user.id),
+    supabase
+      .from("user")
+      .select("celery, cereals_containing_gluten, crustaceans, eggs, fish, lupin, milk, molluscs, sulphites, mustard, peanuts, sesame, soybeans, tree_nuts")
+      .eq("id", user.id)
+      .single(),
   ]);
+  const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...(userRes.data ?? {}) };
 
   // Build week groups with deduped recipes
   type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { recipe: RecipeRow | null }[] };
@@ -43,6 +50,23 @@ export default async function TastesPage() {
     }
     return { id: w.id, week_start_date: w.week_start_date!, week_end_date: w.week_end_date!, recipes };
   });
+
+  // One allergen-rollup lookup for every recipe on offer — cheap even at
+  // full catalog size, and lets My Tastes warn on a dish the same way the
+  // menu browser, order review, and kitchen panel do (single source of
+  // truth: the recipe_allergen view).
+  const recipeIds = Array.from(new Set(weeks.flatMap(w => w.recipes.map(r => r.id))));
+  const recipeAllergens: Record<number, AllergenFlags> = {};
+  if (recipeIds.length > 0) {
+    const { data: allergenRows } = await supabase
+      .from("recipe_allergen")
+      .select("*")
+      .in("recipe_id", recipeIds);
+    for (const row of allergenRows ?? []) {
+      const { recipe_id, ...flags } = row as { recipe_id: number } & AllergenFlags;
+      recipeAllergens[recipe_id] = flags;
+    }
+  }
 
   // Build prefs + comments maps: recipe_id → rating / note
   const initialPrefs: Record<number, PrefRating> = {};
@@ -60,6 +84,8 @@ export default async function TastesPage() {
       weeks={weeks}
       initialPrefs={initialPrefs}
       initialComments={initialComments}
+      userAllergens={userAllergens}
+      recipeAllergens={recipeAllergens}
     />
   );
 }

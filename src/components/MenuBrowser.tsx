@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { IconArrowLeft, IconLeaf, IconChevronDown } from "@tabler/icons-react";
+import { conflictingAllergens, type AllergenFlags } from "@/lib/allergens";
 
 type RecipeRow = {
   id: number; name: string | null; description: string | null; photo: string | null;
@@ -86,7 +87,16 @@ function FilterBar({ filter, setFilter }: { filter: Filter; setFilter: (f: Filte
 
 // ── Recipe modal ──────────────────────────────────────────────────────────────
 
-function RecipeModal({ recipe, onClose }: { recipe: RecipeRow; onClose: () => void }) {
+function AllergenWarning({ conflicts }: { conflicts: { key: string; label: string }[] }) {
+  if (conflicts.length === 0) return null;
+  return (
+    <p style={{ fontSize: 11, color: "#b45309", background: "#fff8e6", borderRadius: 6, padding: "3px 7px", margin: "0 0 7px", display: "inline-block" }}>
+      ⚠️ Contains {conflicts.map(c => c.label).join(", ")}
+    </p>
+  );
+}
+
+function RecipeModal({ recipe, conflicts, onClose }: { recipe: RecipeRow; conflicts: { key: string; label: string }[]; onClose: () => void }) {
   return (
     <div
       onClick={onClose}
@@ -115,6 +125,7 @@ function RecipeModal({ recipe, onClose }: { recipe: RecipeRow; onClose: () => vo
               {mealLabel(recipe)}
             </span>
           </div>
+          <AllergenWarning conflicts={conflicts} />
           {recipe.description && (
             <p style={{ fontSize: 13.5, color: C.muted, margin: 0, lineHeight: 1.65 }}>{recipe.description}</p>
           )}
@@ -126,7 +137,7 @@ function RecipeModal({ recipe, onClose }: { recipe: RecipeRow; onClose: () => vo
 
 // ── Recipe card ───────────────────────────────────────────────────────────────
 
-function RecipeCard({ recipe, onClick }: { recipe: RecipeRow; onClick: () => void }) {
+function RecipeCard({ recipe, conflicts, onClick }: { recipe: RecipeRow; conflicts: { key: string; label: string }[]; onClick: () => void }) {
   const [imgErr, setImgErr] = useState(false);
   return (
     <button
@@ -151,6 +162,11 @@ function RecipeCard({ recipe, onClick }: { recipe: RecipeRow; onClick: () => voi
           {recipe.name}
         </p>
         <p style={{ fontSize: 11.5, color: C.light, margin: 0 }}>{mealLabel(recipe)}</p>
+        {conflicts.length > 0 && (
+          <p style={{ fontSize: 11, color: "#b45309", fontWeight: 600, margin: "2px 0 0" }}>
+            Contains: {conflicts.map(c => c.label).join(", ")}
+          </p>
+        )}
       </div>
     </button>
   );
@@ -159,12 +175,14 @@ function RecipeCard({ recipe, onClick }: { recipe: RecipeRow; onClick: () => voi
 // ── Collapsible week section ──────────────────────────────────────────────────
 
 function WeekSection({
-  week, filter, onRecipeClick, defaultOpen,
+  week, filter, onRecipeClick, defaultOpen, userAllergens, recipeAllergens,
 }: {
   week: WeekMenu;
   filter: Filter;
   onRecipeClick: (r: RecipeRow) => void;
   defaultOpen: boolean;
+  userAllergens: AllergenFlags;
+  recipeAllergens: Record<number, AllergenFlags>;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const visible = week.recipes.filter(r => matchesFilter(r, filter));
@@ -214,7 +232,7 @@ function WeekSection({
         }}>
           {visible.map((r, i) => (
             <div key={r.id} style={{ borderBottom: i < visible.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <RecipeCard recipe={r} onClick={() => onRecipeClick(r)} />
+              <RecipeCard recipe={r} conflicts={conflictingAllergens(userAllergens, recipeAllergens[r.id])} onClick={() => onRecipeClick(r)} />
             </div>
           ))}
         </div>
@@ -225,7 +243,11 @@ function WeekSection({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function MenuBrowser({ menus }: { menus: WeekMenu[] }) {
+export default function MenuBrowser({ menus, userAllergens, recipeAllergens }: {
+  menus: WeekMenu[];
+  userAllergens: AllergenFlags;
+  recipeAllergens: Record<number, AllergenFlags>;
+}) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
@@ -274,11 +296,19 @@ export default function MenuBrowser({ menus }: { menus: WeekMenu[] }) {
             filter={filter}
             onRecipeClick={setActiveRecipe}
             defaultOpen={i === 0}
+            userAllergens={userAllergens}
+            recipeAllergens={recipeAllergens}
           />
         ))}
       </div>
 
-      {activeRecipe && <RecipeModal recipe={activeRecipe} onClose={() => setActiveRecipe(null)} />}
+      {activeRecipe && (
+        <RecipeModal
+          recipe={activeRecipe}
+          conflicts={conflictingAllergens(userAllergens, recipeAllergens[activeRecipe.id])}
+          onClose={() => setActiveRecipe(null)}
+        />
+      )}
 
       {/* Order now FAB */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>

@@ -1615,45 +1615,87 @@ export type Database = {
       }
       user: {
         Row: {
+          celery: boolean
+          cereals_containing_gluten: boolean
           created_at: string
+          crustaceans: boolean
           DoB: string | null
+          eggs: boolean
           email: string | null
+          fish: boolean
           id: string
           last_name: string | null
+          lupin: boolean
+          milk: boolean
+          molluscs: boolean
+          mustard: boolean
           name: string | null
           onboarding: boolean | null
+          peanuts: boolean
           phone_number: string | null
           role: string | null
+          sesame: boolean
+          soybeans: boolean
           status: string | null
+          sulphites: boolean
           tenant_id: number | null
+          tree_nuts: boolean
           updated_at: string | null
         }
         Insert: {
+          celery?: boolean
+          cereals_containing_gluten?: boolean
           created_at?: string
+          crustaceans?: boolean
           DoB?: string | null
+          eggs?: boolean
           email?: string | null
+          fish?: boolean
           id: string
           last_name?: string | null
+          lupin?: boolean
+          milk?: boolean
+          molluscs?: boolean
+          mustard?: boolean
           name?: string | null
           onboarding?: boolean | null
+          peanuts?: boolean
           phone_number?: string | null
           role?: string | null
+          sesame?: boolean
+          soybeans?: boolean
           status?: string | null
+          sulphites?: boolean
           tenant_id?: number | null
+          tree_nuts?: boolean
           updated_at?: string | null
         }
         Update: {
+          celery?: boolean
+          cereals_containing_gluten?: boolean
           created_at?: string
+          crustaceans?: boolean
           DoB?: string | null
+          eggs?: boolean
           email?: string | null
+          fish?: boolean
           id?: string
           last_name?: string | null
+          lupin?: boolean
+          milk?: boolean
+          molluscs?: boolean
+          mustard?: boolean
           name?: string | null
           onboarding?: boolean | null
+          peanuts?: boolean
           phone_number?: string | null
           role?: string | null
+          sesame?: boolean
+          soybeans?: boolean
           status?: string | null
+          sulphites?: boolean
           tenant_id?: number | null
+          tree_nuts?: boolean
           updated_at?: string | null
         }
         Relationships: [
@@ -2068,7 +2110,62 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      recipe_allergen: {
+        Row: {
+          celery: boolean | null
+          cereals_containing_gluten: boolean | null
+          crustaceans: boolean | null
+          eggs: boolean | null
+          fish: boolean | null
+          lupin: boolean | null
+          milk: boolean | null
+          molluscs: boolean | null
+          mustard: boolean | null
+          peanuts: boolean | null
+          recipe_id: number | null
+          sesame: boolean | null
+          soybeans: boolean | null
+          sulphites: boolean | null
+          tree_nuts: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_subrecipe_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subrecipe_allergen: {
+        Row: {
+          celery: boolean | null
+          cereals_containing_gluten: boolean | null
+          crustaceans: boolean | null
+          eggs: boolean | null
+          fish: boolean | null
+          lupin: boolean | null
+          milk: boolean | null
+          molluscs: boolean | null
+          mustard: boolean | null
+          peanuts: boolean | null
+          sesame: boolean | null
+          soybeans: boolean | null
+          subrecipe_id: number | null
+          sulphites: boolean | null
+          tree_nuts: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subrec_ingred_subrecipe_id_fkey"
+            columns: ["subrecipe_id"]
+            isOneToOne: false
+            referencedRelation: "subrecipe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       apply_meal_swap_wallet_delta: {

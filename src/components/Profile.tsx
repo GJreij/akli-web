@@ -12,6 +12,7 @@ import DietWizard from "@/components/DietWizard";
 import { COUNTRY_CODES } from "@/lib/theme";
 import { requestWalletTopup } from "@/app/profile/actions";
 import type { Database } from "@/lib/supabase/types";
+import { ALLERGENS, type AllergenKey } from "@/lib/allergens";
 
 type UserRow    = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow   = Database["public"]["Tables"]["daily_macro_target"]["Row"];
@@ -86,6 +87,86 @@ function Section({ title, subtitle, children, defaultOpen = false }: {
         <IconChevronDown size={16} color={C.light} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
       </button>
       {open && <div style={{ padding: "0 16px 16px" }}>{children}</div>}
+    </div>
+  );
+}
+
+// ─── Allergens ───────────────────────────────────────────────────────────────────
+
+function AllergensSection({ profile }: { profile: UserRow | null }) {
+  const [editing, setEditing] = useState(false);
+  const [flags, setFlags] = useState<Record<AllergenKey, boolean>>(() =>
+    Object.fromEntries(ALLERGENS.map(a => [a.key, !!profile?.[a.key]])) as Record<AllergenKey, boolean>
+  );
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const selectedLabels = ALLERGENS.filter(a => flags[a.key]).map(a => a.label);
+
+  async function save() {
+    if (!profile) return;
+    setSaving(true); setErr(null);
+    try {
+      const supabase = createClient();
+      const { error } = await (supabase.from("user") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .update({ ...flags }).eq("id", profile.id);
+      if (error) throw new Error(error.message);
+      setEditing(false);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not save changes.");
+    } finally { setSaving(false); }
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: selectedLabels.length ? "#1a1a1a" : C.light }}>
+            {selectedLabels.length ? selectedLabels.join(", ") : "None set"}
+          </p>
+          <button onClick={() => setEditing(true)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, background: "none", border: "none", padding: 0, color: C.tealDark, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            <IconPencil size={13} /> Edit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 10px" }}>
+        We&apos;ll warn you if a meal contains one of these — optional, doesn&apos;t block ordering.
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 12 }}>
+        {ALLERGENS.map(a => {
+          const selected = flags[a.key];
+          return (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => setFlags(f => ({ ...f, [a.key]: !f[a.key] }))}
+              style={{
+                padding: "6px 12px", borderRadius: 16,
+                border: `1.5px solid ${selected ? C.tealDark : C.border}`,
+                background: selected ? "#f0f7f7" : C.white,
+                color: selected ? C.tealDark : "#1a1a1a",
+                fontSize: 12.5, fontWeight: selected ? 600 : 500,
+              }}
+            >
+              {a.label}
+            </button>
+          );
+        })}
+      </div>
+      {err && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{err}</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={save} disabled={saving} style={{ flex: 1, padding: "9px 0", fontSize: 13 }}>
+          {saving ? "Saving…" : "Save changes"}
+        </button>
+        <button onClick={() => setEditing(false)} style={{ padding: "9px 14px", fontSize: 13, background: "none", border: `1px solid ${C.border}` }}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
@@ -521,6 +602,10 @@ export default function Profile({ userId, profile, macroHistory, addresses, wall
 
         <Section title="Account" subtitle="Your personal details" defaultOpen>
           <AccountInfo profile={profile} />
+        </Section>
+
+        <Section title="Allergens" subtitle="Optional — we'll warn you before you order">
+          <AllergensSection profile={profile} />
         </Section>
 
         <Section title="Your diet" subtitle="Current target, history, and updates" defaultOpen>

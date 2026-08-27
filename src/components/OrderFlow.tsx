@@ -17,6 +17,7 @@ import {
 } from "@/lib/flask";
 import { type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
+import { conflictingAllergens, emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 import AddressForm from "@/components/AddressForm";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -720,8 +721,9 @@ function ConfirmingScreen() {
 
 // ─── Meal row ─────────────────────────────────────────────────────────────────
 
-function MealRow({ meal, onRemove, onReplace, expanded }: {
+function MealRow({ meal, onRemove, onReplace, expanded, conflicts }: {
   meal: Meal; onRemove: () => void; onReplace: () => void; expanded?: boolean;
+  conflicts?: { key: string; label: string }[];
 }) {
   const [imgErr, setImgErr] = useState(false);
   return (
@@ -747,6 +749,11 @@ function MealRow({ meal, onRemove, onReplace, expanded }: {
               {expanded && ` · ${Math.round(meal.macros.carbs)}g carbs · ${Math.round(meal.macros.fat)}g fat`}
             </span>
           </div>
+          {conflicts && conflicts.length > 0 && (
+            <p style={{ fontSize: 10.5, color: "#b45309", background: "#fff8e6", borderRadius: 6, padding: "2px 6px", margin: "5px 0 0", display: "inline-block" }}>
+              ⚠️ Contains {conflicts.map(c => c.label).join(", ")}
+            </p>
+          )}
         </div>
         <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
           <button onClick={onReplace} title="Replace" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
@@ -990,7 +997,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
   );
 }
 
-function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onAddMeal, isOnlyDay }: {
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onAddMeal, isOnlyDay, userAllergens, recipeAllergens }: {
   day: PlanDay;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -999,6 +1006,8 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
   onReplaceMeal: (meal: Meal) => void;
   onAddMeal: (mealType: MealType) => void;
   isOnlyDay: boolean;
+  userAllergens: AllergenFlags;
+  recipeAllergens: Record<number, AllergenFlags>;
 }) {
   const presentTypes = new Set(day.meals.map(m => m.meal_type));
   const missingTypes = (["breakfast", "lunch", "snack", "dinner"] as MealType[]).filter(t => !presentTypes.has(t));
@@ -1032,6 +1041,7 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
             onRemove={() => onRemoveMeal(meal)}
             onReplace={() => onReplaceMeal(meal)}
             expanded={expanded}
+            conflicts={conflictingAllergens(userAllergens, recipeAllergens[meal.recipe_id])}
           />
         ))}
         {missingTypes.length > 0 && (
@@ -1498,7 +1508,7 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
 
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
-  cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [],
+  cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [], recipeAllergens = {},
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1511,9 +1521,13 @@ export default function OrderFlow({
   cancellationPendingDays?: string[];
   closureDays?: { date: string; reason: string | null }[];
   volumeDiscountRules?: VolumeDiscountRule[];
+  recipeAllergens?: Record<number, AllergenFlags>;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
+  // profile carries the same 14 allergen columns as `user` — alert-only,
+  // review-step warning, never used to filter what the solver generates.
+  const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...(profile ?? {}) };
 
   // ── Step 1 state ──────────────────────────────────────────────────────────────
 
@@ -2305,6 +2319,8 @@ export default function OrderFlow({
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
               onReplaceMeal={meal => setReplaceTarget({ date: day.date, meal })}
               onAddMeal={mealType => setAddTarget({ date: day.date, mealType })}
+              userAllergens={userAllergens}
+              recipeAllergens={recipeAllergens}
             />
           ))}
         </div>

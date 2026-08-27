@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import MenuBrowser from "@/components/MenuBrowser";
+import { emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 
 export default async function MenuPage() {
   const supabase = await createClient();
@@ -47,5 +48,25 @@ export default async function MenuPage() {
     return { id: w.id, week_start_date: w.week_start_date!, week_end_date: w.week_end_date!, recipes };
   });
 
-  return <MenuBrowser menus={menus} />;
+  const [userRes, allergenRows] = await Promise.all([
+    supabase
+      .from("user")
+      .select("celery, cereals_containing_gluten, crustaceans, eggs, fish, lupin, milk, molluscs, sulphites, mustard, peanuts, sesame, soybeans, tree_nuts")
+      .eq("id", user.id)
+      .single(),
+    (async () => {
+      const recipeIds = Array.from(new Set(menus.flatMap(m => m.recipes.map(r => r.id))));
+      if (recipeIds.length === 0) return [];
+      const { data } = await supabase.from("recipe_allergen").select("*").in("recipe_id", recipeIds);
+      return data ?? [];
+    })(),
+  ]);
+  const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...(userRes.data ?? {}) };
+  const recipeAllergens: Record<number, AllergenFlags> = {};
+  for (const row of allergenRows) {
+    const { recipe_id, ...flags } = row as { recipe_id: number } & AllergenFlags;
+    recipeAllergens[recipe_id] = flags;
+  }
+
+  return <MenuBrowser menus={menus} userAllergens={userAllergens} recipeAllergens={recipeAllergens} />;
 }

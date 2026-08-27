@@ -528,6 +528,12 @@ export interface CookingSubrecipe {
   ingredients_needed: CookingIngredient[];
 }
 
+export interface CookingAllergenConflict {
+  user_id: string;
+  name: string;
+  allergens: string[];
+}
+
 export interface CookingRecipe {
   recipe_id: number;
   name: string;
@@ -542,6 +548,11 @@ export interface CookingRecipe {
   // feature) on any of the underlying days grouped into this card — a
   // pre-swap printed label may show the wrong macros.
   any_swapped?: boolean;
+  // Which clients on this recipe declared an allergen it actually contains —
+  // alert-only, computed server-side from the same recipe_allergen view every
+  // customer-facing surface uses. Optional: undefined until the Flask deploy
+  // that adds this field to /cooking/overview has gone out.
+  allergen_conflicts?: CookingAllergenConflict[];
 }
 
 export interface CookingOverviewFilters {
@@ -576,6 +587,10 @@ export interface PortioningClient {
   delivery_date: string | null;
   delivery_slot: { id: number; start_time: string; end_time: string } | null;
   client: { id: string; name: string | null; last_name: string | null } | null;
+  // Which of this client's own declared allergens this subrecipe contains —
+  // alert-only, computed server-side from the same allergen data the client
+  // saw when ordering. Empty when the client has none set or none match.
+  client_allergens: string[];
   servings_for_client: number | null;
   portioning_status: string | null;
   weight_after_cooking: number;

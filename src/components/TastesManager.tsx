@@ -6,6 +6,7 @@ import { IconArrowLeft, IconLeaf, IconChevronDown, IconInfoCircle } from "@table
 import RecipeRater from "@/components/RecipeRater";
 import RecipeComment from "@/components/RecipeComment";
 import { type PrefRating } from "@/lib/preferences";
+import { conflictingAllergens, type AllergenFlags } from "@/lib/allergens";
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack";
 
@@ -60,7 +61,7 @@ function mealLabel(r: RecipeRow) {
 }
 
 function RecipeItem({
-  recipe, userId, rating, comment, isLast, onRatingChange, onCommentChange,
+  recipe, userId, rating, comment, isLast, onRatingChange, onCommentChange, userAllergens, recipeAllergens,
 }: {
   recipe: RecipeRow;
   userId: string;
@@ -69,8 +70,11 @@ function RecipeItem({
   isLast: boolean;
   onRatingChange: (recipeId: number, rating: PrefRating) => void;
   onCommentChange: (recipeId: number, comment: string) => void;
+  userAllergens: AllergenFlags;
+  recipeAllergens: Record<number, AllergenFlags>;
 }) {
   const [imgErr, setImgErr] = useState(false);
+  const conflicts = conflictingAllergens(userAllergens, recipeAllergens[recipe.id]);
 
   return (
     <div style={{
@@ -90,6 +94,11 @@ function RecipeItem({
           {recipe.name}
         </p>
         <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 7px" }}>{mealLabel(recipe)}</p>
+        {conflicts.length > 0 && (
+          <p style={{ fontSize: 11, color: "#b45309", background: "#fff8e6", borderRadius: 6, padding: "3px 7px", margin: "0 0 7px", display: "inline-block" }}>
+            ⚠️ Contains {conflicts.map(c => c.label).join(", ")}
+          </p>
+        )}
         <RecipeRater userId={userId} recipeId={recipe.id} rating={rating} onRatingChange={onRatingChange} />
         <RecipeComment userId={userId} recipeId={recipe.id} comment={comment} onCommentChange={onCommentChange} />
       </div>
@@ -98,7 +107,7 @@ function RecipeItem({
 }
 
 function WeekSection({
-  week, userId, prefs, comments, activeFilter, defaultOpen, onRatingChange, onCommentChange,
+  week, userId, prefs, comments, activeFilter, defaultOpen, onRatingChange, onCommentChange, userAllergens, recipeAllergens,
 }: {
   week: WeekGroup;
   userId: string;
@@ -108,6 +117,8 @@ function WeekSection({
   defaultOpen: boolean;
   onRatingChange: (recipeId: number, rating: PrefRating) => void;
   onCommentChange: (recipeId: number, comment: string) => void;
+  userAllergens: AllergenFlags;
+  recipeAllergens: Record<number, AllergenFlags>;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -162,6 +173,8 @@ function WeekSection({
               isLast={i === filteredRecipes.length - 1}
               onRatingChange={onRatingChange}
               onCommentChange={onCommentChange}
+              userAllergens={userAllergens}
+              recipeAllergens={recipeAllergens}
             />
           ))}
         </div>
@@ -175,11 +188,15 @@ export default function TastesManager({
   weeks,
   initialPrefs,
   initialComments,
+  userAllergens,
+  recipeAllergens,
 }: {
   userId: string;
   weeks: WeekGroup[];
   initialPrefs: Record<number, PrefRating>;
   initialComments: Record<number, string>;
+  userAllergens: AllergenFlags;
+  recipeAllergens: Record<number, AllergenFlags>;
 }) {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<MealType | null>(null);
@@ -316,6 +333,8 @@ export default function TastesManager({
                 defaultOpen={i === 0}
                 onRatingChange={handleRatingChange}
                 onCommentChange={handleCommentChange}
+                userAllergens={userAllergens}
+                recipeAllergens={recipeAllergens}
               />
             ))}
             {activeFilter && weeks.every(w => w.recipes.every(r => !r[`could_be_${activeFilter}` as keyof RecipeRow])) && (

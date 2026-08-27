@@ -8,6 +8,7 @@ import { COUNTRY_CODES } from "@/lib/theme";
 import { ageFromDob, daysInMonth, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 import type { DietType } from "@/lib/macros";
 import type { Database } from "@/lib/supabase/types";
+import { ALLERGENS, emptyAllergenFlags } from "@/lib/allergens";
 import {
   IconTrendingDown, IconScale, IconTrendingUp, IconHeart,
   IconMinus, IconPlus, IconBrandWhatsapp, IconChevronDown,
@@ -107,6 +108,45 @@ function Header({
   );
 }
 
+// ─── Allergen picker (optional, shown on "basics" and "manual" steps) ────────
+
+function AllergenPicker({
+  value, onChange,
+}: {
+  value: Record<string, boolean>;
+  onChange: (key: (typeof ALLERGENS)[number]["key"]) => void;
+}) {
+  return (
+    <div style={{ marginTop: 20 }}>
+      <p style={{ fontSize: 12.5, color: "#5c5c5c", margin: "0 0 4px", fontWeight: 600 }}>Allergens (optional)</p>
+      <p style={{ fontSize: 11.5, color: "#9a9a9a", margin: "0 0 10px" }}>
+        We&apos;ll warn you if a meal contains one of these.
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+        {ALLERGENS.map(a => {
+          const selected = !!value[a.key];
+          return (
+            <button
+              key={a.key}
+              type="button"
+              onClick={() => onChange(a.key)}
+              style={{
+                padding: "6px 12px", borderRadius: 16,
+                border: `1.5px solid ${selected ? "#437b7b" : "#e0dbd5"}`,
+                background: selected ? "#f0f7f7" : "#ffffff",
+                color: selected ? "#437b7b" : "#1a1a1a",
+                fontSize: 12.5, fontWeight: selected ? 600 : 500,
+              }}
+            >
+              {a.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AkliApp({
@@ -182,6 +222,9 @@ export default function AkliApp({
   const [kcalFixed, setKcalFixed]   = useState(2100);
   const [kcalDefault, setKcalDefault] = useState(2100);
   const [weightKnown, setWeightKnown] = useState(false);
+  // Optional, shown on "basics" (auto path) and "manual" (skip path) — same
+  // state either way, since only one of those two steps ever renders per run.
+  const [allergens, setAllergens] = useState(emptyAllergenFlags());
   const [lastMacros, setLastMacros]     = useState({ p: 126, c: 220, f: 62 });
   const [showUpdated, setShowUpdated]   = useState(false);
   const [finetuneNote, setFinetuneNote] = useState("");
@@ -467,6 +510,7 @@ export default function AkliApp({
         weight_kg: weightKnown ? weight : null,
         activity_level: weightKnown ? activity : null,
         method: weightKnown ? "guided" : "manual",
+        allergens,
       }),
     });
 
@@ -963,6 +1007,11 @@ export default function AkliApp({
                     </button>
                   </div>
                 </div>
+
+                <AllergenPicker
+                  value={allergens}
+                  onChange={key => setAllergens(a => ({ ...a, [key]: !a[key] }))}
+                />
               </div>
             )}
 
@@ -1074,7 +1123,12 @@ export default function AkliApp({
                     </div>
                   </div>
 
-                  <p style={{ fontSize: 12, color: C.light, textAlign: "center", margin: 0, lineHeight: 1.5 }}>
+                  <AllergenPicker
+                    value={allergens}
+                    onChange={key => setAllergens(a => ({ ...a, [key]: !a[key] }))}
+                  />
+
+                  <p style={{ fontSize: 12, color: C.light, textAlign: "center", margin: "18px 0 0", lineHeight: 1.5 }}>
                     Need something more tailored? An Akli team member will reach out on WhatsApp.
                   </p>
                 </div>
