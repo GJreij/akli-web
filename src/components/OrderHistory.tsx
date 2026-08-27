@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconChevronDown, IconLeaf, IconReceipt2,
   IconTruck, IconCheck, IconClock, IconBrandWhatsapp, IconX, IconBan,
+  IconToolsKitchen2, IconCalendar, IconChevronRight,
 } from "@tabler/icons-react";
 import { beirutISODate } from "@/lib/dates";
 import {
@@ -129,7 +130,11 @@ function getDelivery(day: PlanDay): Delivery | null {
 // "Upcoming"/"Active" the moment it's requested. Only a fully finalized
 // cancellation should relocate the card.
 function dateStatus(plan: MealPlan): "upcoming" | "active" | "completed" {
-  const today = new Date().toISOString().split("T")[0];
+  // Beirut "today", not UTC — matches every cutoff check elsewhere in this
+  // file. Using toISOString() here shifts by a day for the ~2-3 hours after
+  // midnight in Beirut but before midnight UTC, so a plan whose end_date
+  // was actually yesterday-in-Beirut would still read as active/upcoming.
+  const today = beirutISODate(0);
   if (!plan.start_date || !plan.end_date) return "upcoming";
   if (plan.end_date < today) return "completed";
   if (plan.start_date <= today && plan.end_date >= today) return "active";
@@ -202,6 +207,22 @@ function modifiableDays(plan: MealPlan): PlanDay[] {
   return plan.meal_plan_day.filter(isDayModifiable);
 }
 
+// Separate from date/status eligibility on purpose: a day can be otherwise
+// modifiable but not yet paid. Swapping/editing settles a price difference
+// through the wallet immediately, which is confusing before the client has
+// actually paid for the order — someone who orders and changes their mind a
+// second later could otherwise get an instant wallet credit for a meal they
+// haven't paid for yet. Gated separately (rather than folded into
+// isDayModifiable) so the "Change order" button can still show and explain
+// itself, instead of silently disappearing like the date/status gate does.
+function isDayPaid(day: PlanDay): boolean {
+  return getPayment(day)?.status === "paid";
+}
+
+function payableDays(plan: MealPlan): PlanDay[] {
+  return modifiableDays(plan).filter(isDayPaid);
+}
+
 type ModifyButtonState = { show: boolean; disabled: boolean; label: string; reason?: string };
 
 function modifyButtonState(plan: MealPlan): ModifyButtonState {
@@ -211,13 +232,13 @@ function modifyButtonState(plan: MealPlan): ModifyButtonState {
   const hasPendingRequest = plan.meal_plan_day.some(d => d.status === "cancellation_pending");
   if (hasPendingRequest) {
     return {
-      show: true, disabled: true, label: "Modify",
-      reason: "You can't modify meals while a cancellation is pending on this order.",
+      show: true, disabled: true, label: "Change order",
+      reason: "You can't change meals while a cancellation is pending on this order.",
     };
   }
 
   if (modifiableDays(plan).length === 0) return { show: false, disabled: true, label: "" };
-  return { show: true, disabled: false, label: "Modify" };
+  return { show: true, disabled: false, label: "Change order" };
 }
 
 // Excludes cancelled days — a partially-cancelled order's total should read
@@ -864,6 +885,117 @@ function swapOptionsMatch(a: MealSwapOption, b: MealSwapOption) {
     && Math.abs(a.price_delta - b.price_delta) < 0.01;
 }
 
+// ─── Change order — single entry point, then asks scope ──────────────────────
+// Replaces two separate same-weight "Modify" / "Edit day" buttons (which read
+// as near-synonyms with no clue which does what) with one button that opens
+// a short chooser explaining the difference before committing to either flow.
+// Also the payment gate lives here: swapping/editing settles a price
+// difference through the wallet immediately, which is confusing before the
+// client has actually paid — someone who orders and changes their mind a
+// second later could otherwise get an instant wallet credit for a meal
+// they haven't paid for yet. The button itself stays visible either way
+// (an unpaid order isn't "nothing to do here", just "not yet") — this is
+// where that distinction actually gets explained.
+function ChangeOrderSheet({ plan, userId, onClose, onSubmitted }: {
+  plan: MealPlan; userId: string; onClose: () => void; onSubmitted: () => void;
+}) {
+  type Mode = "choose" | "swap" | "edit_day";
+  const [mode, setMode] = useState<Mode>("choose");
+
+  if (mode === "swap") {
+    return <ModifyMealSheet plan={plan} userId={userId} onClose={onClose} onSubmitted={onSubmitted} />;
+  }
+  if (mode === "edit_day") {
+    return <DayEditSheet plan={plan} userId={userId} onClose={onClose} onSubmitted={onSubmitted} />;
+  }
+
+  // Nothing to pick from yet, but modifiableDays(plan).length > 0 is what
+  // put the button on screen at all — so there IS something coming, it's
+  // just gated on payment rather than genuinely unavailable.
+  if (payableDays(plan).length === 0) {
+    return (
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+            <h3 style={{ margin: 0, fontSize: 18 }}>Change this order</h3>
+            <button onClick={onClose} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
+              <IconX size={18} />
+            </button>
+          </div>
+          <div style={{ textAlign: "center", padding: "20px 0 4px" }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: "50%", background: C.offWhite, margin: "0 auto 14px",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <IconClock size={22} color={C.tealDark} />
+            </div>
+            <p style={{ fontSize: 13, color: C.muted, margin: "0 0 20px", lineHeight: 1.6 }}>
+              You&apos;ll be able to change this once your payment is confirmed — that usually happens within 24
+              hours of paying. If you&apos;re paying day-by-day, it&apos;s simpler to cancel this day and place a
+              new order instead.
+            </p>
+            <button
+              onClick={onClose}
+              style={{
+                width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
+                background: C.primary, color: C.white, fontSize: 14, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 18 }}>Change this order</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
+            <IconX size={18} />
+          </button>
+        </div>
+        <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 16px" }}>
+          What would you like to change?
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            onClick={() => setMode("swap")}
+            style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "14px", borderRadius: 14,
+              border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <IconToolsKitchen2 size={22} color={C.tealDark} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>Swap one meal</span>
+              <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>Keep the rest of the day as is</span>
+            </span>
+            <IconChevronRight size={16} color={C.light} style={{ flexShrink: 0 }} />
+          </button>
+          <button
+            onClick={() => setMode("edit_day")}
+            style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "14px", borderRadius: 14,
+              border: `1px solid ${C.border}`, background: C.white, cursor: "pointer", textAlign: "left",
+            }}
+          >
+            <IconCalendar size={22} color={C.tealDark} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "#1a1a1a" }}>Edit the whole day</span>
+              <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>Exclude, replace, or add meals</span>
+            </span>
+            <IconChevronRight size={16} color={C.light} style={{ flexShrink: 0 }} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
   plan: MealPlan; userId: string; onClose: () => void; onSubmitted: () => void;
 }) {
@@ -874,6 +1006,11 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
   const [pickedRecipeId, setPickedRecipeId] = useState<number | null>(null);
   const [recipes, setRecipes] = useState<SwapCandidateRecipe[] | null>(null);
   const [availableRecipeIds, setAvailableRecipeIds] = useState<number[] | null>(null);
+  // Distinct from availableRecipeIds being null/empty because there's
+  // genuinely no weekly menu configured — this means the check itself
+  // couldn't run, so the recipe list below is unfiltered and may include
+  // something not actually available for this date.
+  const [menuLoadFailed, setMenuLoadFailed] = useState(false);
   const [preview, setPreview] = useState<MealSwapResponse | null>(null);
   const [chosenMode, setChosenMode] = useState<MealSwapMode | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -882,13 +1019,23 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
   const [errorSuggestion, setErrorSuggestion] = useState<string | undefined>(undefined);
 
   const days = [...plan.meal_plan_day].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
-  const eligibleDays = days.filter(isDayModifiable);
+  // Payment-gated on top of the date/status check: reachable only through
+  // ChangeOrderSheet, which already confirmed at least one day qualifies —
+  // this just keeps any still-unpaid day (a mixed, pay-day-by-day order)
+  // out of the picker rather than letting it be picked and then failing.
+  const eligibleDays = days.filter(isDayModifiable).filter(isDayPaid);
 
   function pickDay(day: PlanDay) {
     setSelectedDay(day);
     setStep("pick_meal");
     setAvailableRecipeIds(null);
-    if (day.date) getAvailableRecipeIdsForDate(day.date).then(setAvailableRecipeIds).catch(() => setAvailableRecipeIds([]));
+    setMenuLoadFailed(false);
+    if (day.date) {
+      getAvailableRecipeIdsForDate(day.date).then(ids => {
+        setAvailableRecipeIds(ids);
+        setMenuLoadFailed(ids === null);
+      });
+    }
     else setAvailableRecipeIds([]);
   }
 
@@ -958,6 +1105,14 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
         setError(res.error.error);
         setErrorSuggestion(res.error.suggestion);
         return;
+      }
+      // The confirm response is the server's authoritative post-confirm
+      // state (real wallet.balance_after included) — replace the earlier
+      // preview with it rather than letting the "done" screen keep showing
+      // numbers from before the wallet was actually settled.
+      if (res.data) {
+        setPreview(res.data);
+        if (res.data.confirmed_mode) setChosenMode(res.data.confirmed_mode);
       }
       setStep("done");
     } catch {
@@ -1082,6 +1237,11 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
             <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 12px" }}>
               Currently <strong>{selectedMeal.recipe?.name ?? "—"}</strong>. Pick a replacement.
             </p>
+            {menuLoadFailed && (
+              <p style={{ fontSize: 11.5, color: "#b45309", background: "#fff8e6", borderRadius: 7, padding: "7px 10px", margin: "0 0 12px" }}>
+                Couldn&apos;t check this date&apos;s menu — showing everything valid for {selectedMeal.meal_type}, which may include something not actually on the menu that day.
+              </p>
+            )}
 
             {recipes === null ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>Loading recipes…</p>
@@ -1349,13 +1509,20 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
   const [pickingFor, setPickingFor] = useState<PickTarget | null>(null);
   const [recipes, setRecipes] = useState<SwapCandidateRecipe[] | null>(null);
   const [availableRecipeIds, setAvailableRecipeIds] = useState<number[] | null>(null);
+  // See ModifyMealSheet's identical flag — distinguishes "couldn't check
+  // the menu" from "no menu configured," which otherwise look the same.
+  const [menuLoadFailed, setMenuLoadFailed] = useState(false);
   const [preview, setPreview] = useState<DayEditResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const days = [...plan.meal_plan_day].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
-  const eligibleDays = days.filter(isDayModifiable);
+  // Payment-gated on top of the date/status check: reachable only through
+  // ChangeOrderSheet, which already confirmed at least one day qualifies —
+  // this just keeps any still-unpaid day (a mixed, pay-day-by-day order)
+  // out of the picker rather than letting it be picked and then failing.
+  const eligibleDays = days.filter(isDayModifiable).filter(isDayPaid);
 
   async function pickDay(day: PlanDay) {
     setSelectedDay(day);
@@ -1363,8 +1530,15 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
     setAddedMeals([]);
     setStep("edit");
     setAvailableRecipeIds(null);
-    if (day.date) getAvailableRecipeIdsForDate(day.date).then(setAvailableRecipeIds).catch(() => setAvailableRecipeIds([]));
-    else setAvailableRecipeIds([]);
+    setMenuLoadFailed(false);
+    if (day.date) {
+      getAvailableRecipeIdsForDate(day.date).then(ids => {
+        setAvailableRecipeIds(ids);
+        setMenuLoadFailed(ids === null);
+      });
+    } else {
+      setAvailableRecipeIds([]);
+    }
     if (!recipes) {
       const supabase = createClient();
       const { data } = await supabase
@@ -1457,6 +1631,10 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
         setError(res.error.error);
         return;
       }
+      // Same as meal-swap confirm: replace the pre-confirm preview with the
+      // server's authoritative post-confirm response so the "done" screen
+      // shows the real settled wallet balance, not the earlier preview's.
+      if (res.data) setPreview(res.data);
       setStep("done");
     } catch {
       setError("Could not confirm these changes. Please try again or contact us on WhatsApp.");
@@ -1645,6 +1823,11 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
                 <IconX size={18} />
               </button>
             </div>
+            {menuLoadFailed && (
+              <p style={{ fontSize: 11.5, color: "#b45309", background: "#fff8e6", borderRadius: 7, padding: "7px 10px", margin: "0 0 12px" }}>
+                Couldn&apos;t check this date&apos;s menu — showing everything valid for {pickingFor.mealType}, which may include something not actually on the menu that day.
+              </p>
+            )}
 
             {recipes === null ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>Loading recipes…</p>
@@ -1845,8 +2028,7 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
   const [open, setOpen]         = useState(false);
   const [receipt, setReceipt]   = useState(false);
   const [cancelSheet, setCancelSheet] = useState(false);
-  const [modifySheet, setModifySheet] = useState(false);
-  const [dayEditSheet, setDayEditSheet] = useState(false);
+  const [changeSheet, setChangeSheet] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
   const status   = planStatus(plan);
@@ -1875,20 +2057,12 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
           onSubmitted={() => { setCancelSheet(false); router.refresh(); }}
         />
       )}
-      {modifySheet && (
-        <ModifyMealSheet
+      {changeSheet && (
+        <ChangeOrderSheet
           plan={plan}
           userId={userId}
-          onClose={() => setModifySheet(false)}
-          onSubmitted={() => { setModifySheet(false); router.refresh(); }}
-        />
-      )}
-      {dayEditSheet && (
-        <DayEditSheet
-          plan={plan}
-          userId={userId}
-          onClose={() => setDayEditSheet(false)}
-          onSubmitted={() => { setDayEditSheet(false); router.refresh(); }}
+          onClose={() => setChangeSheet(false)}
+          onSubmitted={() => { setChangeSheet(false); router.refresh(); }}
         />
       )}
 
@@ -1979,7 +2153,7 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
             )}
             {modifyState.show && (
               <button
-                onClick={() => !modifyState.disabled && setModifySheet(true)}
+                onClick={() => !modifyState.disabled && setChangeSheet(true)}
                 disabled={modifyState.disabled}
                 title={modifyState.reason}
                 style={{
@@ -1993,18 +2167,6 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
                 }}
               >
                 {modifyState.label}
-              </button>
-            )}
-            {modifyState.show && !modifyState.disabled && (
-              <button
-                onClick={() => setDayEditSheet(true)}
-                style={{
-                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  padding: "9px 0", borderRadius: 10, border: `1px solid ${C.border}`,
-                  background: C.white, fontSize: 12.5, fontWeight: 500, color: C.muted, cursor: "pointer",
-                }}
-              >
-                Edit day
               </button>
             )}
           </div>

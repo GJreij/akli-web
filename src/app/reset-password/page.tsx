@@ -22,19 +22,42 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     async function init() {
-      // 1. Already have a valid session?
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) { setReady(true); return; }
+      try {
+        // 1. Already have a valid session?
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) { setReady(true); return; }
 
-      // 2. Try to exchange the ?code= from the URL
-      const code = new URLSearchParams(window.location.search).get("code");
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (!error) { setReady(true); return; }
+        const params = new URLSearchParams(window.location.search);
+
+        // 2. Preferred: a token_hash link (Supabase's OTP-style recovery
+        // format). Verified purely server-side against the token itself —
+        // unlike a PKCE ?code=, it carries no local browser state, so it
+        // works when the reset email is opened on a different device than
+        // the one that requested it (the overwhelmingly common case for a
+        // password reset — you're not always locked out and reset-requesting
+        // from the same device you can still receive email on).
+        const tokenHash = params.get("token_hash");
+        if (tokenHash) {
+          const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "recovery" });
+          if (!error) { setReady(true); return; }
+        }
+
+        // 3. Fall back to a ?code= PKCE link, in case the email template
+        // still uses that format — same-device only.
+        const code = params.get("code");
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) { setReady(true); return; }
+        }
+
+        // 4. Nothing worked — link expired or already used
+        setLinkError(true);
+      } catch {
+        // A thrown network error (not a resolved {error}) must still leave
+        // the user with something actionable instead of an infinite
+        // "Verifying your link…" spinner.
+        setLinkError(true);
       }
-
-      // 3. Nothing worked — link expired or already used
-      setLinkError(true);
     }
     init();
   // eslint-disable-next-line react-hooks/exhaustive-deps

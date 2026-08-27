@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { track, linkAnonToUser } from "@/lib/analytics";
 import { simplePriceSimulator } from "@/lib/flask";
 import { COUNTRY_CODES } from "@/lib/theme";
-import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+import { ageFromDob, daysInMonth, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 import type { DietType } from "@/lib/macros";
 import type { Database } from "@/lib/supabase/types";
 import {
@@ -844,7 +844,7 @@ export default function AkliApp({
                       style={{ fontSize: 16, minHeight: 48, color: dobDay ? "#1a1a1a" : C.light, borderColor: saveErrors.dob ? C.error : undefined }}
                     >
                       <option value="">Day</option>
-                      {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
+                      {Array.from({ length: daysInMonth(dobMonth, dobYear) }, (_, i) => i + 1).map(d => (
                         <option key={d} value={String(d)}>{d}</option>
                       ))}
                     </select>
@@ -854,8 +854,13 @@ export default function AkliApp({
                       onChange={e => {
                         const m = e.target.value;
                         setDobMonth(m);
-                        if (dobDay && m && dobYear) {
-                          const built = `${dobYear}-${m.padStart(2,"0")}-${dobDay.padStart(2,"0")}`;
+                        // Clamp an already-picked day that the new month can't
+                        // hold (e.g. day=31, switching to February).
+                        const maxDay = daysInMonth(m, dobYear);
+                        const day = dobDay && Number(dobDay) > maxDay ? String(maxDay) : dobDay;
+                        if (day !== dobDay) setDobDay(day);
+                        if (day && m && dobYear) {
+                          const built = `${dobYear}-${m.padStart(2,"0")}-${day.padStart(2,"0")}`;
                           setDob(built);
                           setSaveErrors(p => ({ ...p, dob: "" }));
                         }
@@ -873,8 +878,12 @@ export default function AkliApp({
                       onChange={e => {
                         const y = e.target.value;
                         setDobYear(y);
-                        if (dobDay && dobMonth && y) {
-                          const built = `${y}-${dobMonth.padStart(2,"0")}-${dobDay.padStart(2,"0")}`;
+                        // Clamp e.g. Feb 29 when switching off a leap year.
+                        const maxDay = daysInMonth(dobMonth, y);
+                        const day = dobDay && Number(dobDay) > maxDay ? String(maxDay) : dobDay;
+                        if (day !== dobDay) setDobDay(day);
+                        if (day && dobMonth && y) {
+                          const built = `${y}-${dobMonth.padStart(2,"0")}-${day.padStart(2,"0")}`;
                           setDob(built);
                           setSaveErrors(p => ({ ...p, dob: "" }));
                         }

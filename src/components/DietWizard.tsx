@@ -9,7 +9,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { simplePriceSimulator } from "@/lib/flask";
 import type { Database } from "@/lib/supabase/types";
-import { ageFromDob, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
+import { ageFromDob, daysInMonth, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 import type { DietType } from "@/lib/macros";
 
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
@@ -367,11 +367,14 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
                   if (d && dobMonth && dobYear) { setDob(`${dobYear}-${dobMonth.padStart(2,"0")}-${d.padStart(2,"0")}`); setDobErr(null); }
                 }} style={{ fontSize: 16, minHeight: 48, color: dobDay ? "#1a1a1a" : C.light, borderColor: dobErr ? C.error : undefined }}>
                   <option value="">Day</option>
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={String(d)}>{d}</option>)}
+                  {Array.from({ length: daysInMonth(dobMonth, dobYear) }, (_, i) => i + 1).map(d => <option key={d} value={String(d)}>{d}</option>)}
                 </select>
                 <select value={dobMonth} onChange={e => {
                   const m = e.target.value; setDobMonth(m);
-                  if (dobDay && m && dobYear) { setDob(`${dobYear}-${m.padStart(2,"0")}-${dobDay.padStart(2,"0")}`); setDobErr(null); }
+                  const maxDay = daysInMonth(m, dobYear);
+                  const day = dobDay && Number(dobDay) > maxDay ? String(maxDay) : dobDay;
+                  if (day !== dobDay) setDobDay(day);
+                  if (day && m && dobYear) { setDob(`${dobYear}-${m.padStart(2,"0")}-${day.padStart(2,"0")}`); setDobErr(null); }
                 }} style={{ fontSize: 16, minHeight: 48, color: dobMonth ? "#1a1a1a" : C.light, borderColor: dobErr ? C.error : undefined }}>
                   <option value="">Month</option>
                   {["January","February","March","April","May","June","July","August","September","October","November","December"].map((name, i) => (
@@ -380,7 +383,10 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
                 </select>
                 <select value={dobYear} onChange={e => {
                   const y = e.target.value; setDobYear(y);
-                  if (dobDay && dobMonth && y) { setDob(`${y}-${dobMonth.padStart(2,"0")}-${dobDay.padStart(2,"0")}`); setDobErr(null); }
+                  const maxDay = daysInMonth(dobMonth, y);
+                  const day = dobDay && Number(dobDay) > maxDay ? String(maxDay) : dobDay;
+                  if (day !== dobDay) setDobDay(day);
+                  if (day && dobMonth && y) { setDob(`${y}-${dobMonth.padStart(2,"0")}-${day.padStart(2,"0")}`); setDobErr(null); }
                 }} style={{ fontSize: 16, minHeight: 48, color: dobYear ? "#1a1a1a" : C.light, borderColor: dobErr ? C.error : undefined }}>
                   <option value="">Year</option>
                   {Array.from({ length: 80 }, (_, i) => new Date().getFullYear() - 10 - i).map(y => <option key={y} value={String(y)}>{y}</option>)}

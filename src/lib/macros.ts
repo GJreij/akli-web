@@ -30,6 +30,18 @@ const PER_KG: Record<DietType, { pk: number; fk: number }> = {
   "balanced":     { pk: 1.6, fk: 1.0 },
 };
 
+// Used to cap a DOB "Day" dropdown to whatever the selected month/year
+// actually has — without this, a calendar-invalid date (e.g. Feb 30) passes
+// client-side validation and only fails later at the DB insert.
+export function daysInMonth(month: string, year: string): number {
+  const m = Number(month);
+  if (!m) return 31;
+  // Day 0 of the next month = the last day of this one. Default to a
+  // non-leap year when year isn't picked yet, so Feb still caps at 28.
+  const y = Number(year) || 2001;
+  return new Date(y, m, 0).getDate();
+}
+
 export function ageFromDob(dob: string): number {
   const today = new Date();
   const birth = new Date(dob);
