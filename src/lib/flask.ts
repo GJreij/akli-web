@@ -1,5 +1,19 @@
 const FLASK_URL = process.env.NEXT_PUBLIC_FLASK_URL ?? "https://aklilebapp-72376dbe3cc8.herokuapp.com";
 
+// A dyno that's asleep, restarting, or has crashed can return a non-JSON
+// body (an HTML error page, or nothing at all) on a non-2xx — or even a 2xx
+// from a proxy in front of it. Calling res.json() directly in that case
+// throws a raw SyntaxError before the caller's own `if (!res.ok)` handling
+// ever runs, losing whatever specific error/suggestion fields it was meant
+// to surface. Parse defensively instead and fall back to null.
+async function safeJson(res: Response): Promise<any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 // ─── /simple_price_simulator ────────────────────────────────────────────────
 
 export interface PriceSimulatorRequest {
@@ -232,8 +246,9 @@ export async function requestCancellation(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id, meal_plan_id, meal_plan_day_ids: meal_plan_day_ids ?? null }),
   });
-  const json = await res.json();
-  if (!res.ok) return { success: false, error: json.error ?? `request_cancellation error ${res.status}` };
+  const json = await safeJson(res);
+  if (!res.ok) return { success: false, error: json?.error ?? `request_cancellation error ${res.status}` };
+  if (!json) return { success: false, error: "Unexpected response from server" };
   return json;
 }
 
@@ -252,23 +267,34 @@ export async function previewCancellationDiscountImpact(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_id, meal_plan_id, meal_plan_day_ids }),
   });
-  const json = await res.json();
-  if (!res.ok) return { discount_impact: null, error: json.error ?? `preview error ${res.status}` };
+  const json = await safeJson(res);
+  if (!res.ok) return { discount_impact: null, error: json?.error ?? `preview error ${res.status}` };
+  if (!json) return { discount_impact: null, error: "Unexpected response from server" };
   return json;
 }
 
 // ─── /available_recipes_for_date ────────────────────────────────────────────
 
-export async function getAvailableRecipeIdsForDate(date: string): Promise<number[]> {
-  const res = await fetch(`${FLASK_URL}/available_recipes_for_date`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ date }),
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  const json = await res.json();
-  return Array.isArray(json?.recipe_ids) ? json.recipe_ids : [];
+// Returns null specifically on failure (network error, non-2xx, unparseable
+// body) — distinct from a successful call returning an empty array, which
+// legitimately means "no weekly menu configured, don't filter." Collapsing
+// both into `[]` (as this used to do) makes a genuine backend outage
+// indistinguishable from "no restriction," silently showing every could-be-X
+// recipe as available instead of surfacing that the check couldn't run.
+export async function getAvailableRecipeIdsForDate(date: string): Promise<number[] | null> {
+  try {
+    const res = await fetch(`${FLASK_URL}/available_recipes_for_date`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const json = await safeJson(res);
+    return Array.isArray(json?.recipe_ids) ? json.recipe_ids : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── /modify_meal/preview & /modify_meal/confirm ────────────────────────────
@@ -352,8 +378,9 @@ async function postMealSwap(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
-  const json = await res.json();
-  if (!res.ok) return { error: json as MealSwapErrorResponse };
+  const json = await safeJson(res);
+  if (!res.ok) return { error: (json as MealSwapErrorResponse) ?? { error: `modify_meal/${path} error ${res.status}` } };
+  if (!json) return { error: { error: "Unexpected response from server" } };
   return { data: json as MealSwapResponse };
 }
 
@@ -409,8 +436,9 @@ async function postDayEdit(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
   });
-  const json = await res.json();
-  if (!res.ok) return { error: json as MealSwapErrorResponse };
+  const json = await safeJson(res);
+  if (!res.ok) return { error: (json as MealSwapErrorResponse) ?? { error: `edit_day/${path} error ${res.status}` } };
+  if (!json) return { error: { error: "Unexpected response from server" } };
   return { data: json as DayEditResponse };
 }
 
@@ -677,7 +705,8 @@ export async function getPortioningSummary(
     body: JSON.stringify({ subrecipe_id, meal_plan_day_recipe_ids }),
     cache: "no-store",
   });
-  const json = await res.json();
-  if (!res.ok) return { error: json.error ?? `portioning_summary error ${res.status}` };
+  const json = await safeJson(res);
+  if (!res.ok) return { error: json?.error ?? `portioning_summary error ${res.status}` };
+  if (!json) return { error: "Unexpected response from server" };
   return { data: json };
 }

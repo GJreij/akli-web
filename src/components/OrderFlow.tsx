@@ -1204,6 +1204,34 @@ function PreferencesSection({
   );
 }
 
+// ─── Checkout amount-due (single source of truth) ─────────────────────────────
+// Computed once here and used both by the checkout screen's own display AND
+// by handleConfirm() right before it's actually charged — a future change to
+// this formula (a fee, a rounding rule) must land in one place, or the
+// number the client sees just before confirming can silently disagree with
+// what's actually sent to confirmOrder().
+
+function computeAmountDue({
+  checkoutData, useWalletCredit, walletTopupInput, estDayPrice, dayCount,
+}: {
+  checkoutData: CheckoutSummaryResponse | null;
+  useWalletCredit: boolean;
+  walletTopupInput: string;
+  estDayPrice: number | null;
+  dayCount: number;
+}) {
+  const bd = checkoutData?.price_breakdown;
+  // Falls back to the pre-checkout estimate only while checkoutData hasn't
+  // loaded yet — handleConfirm never hits this branch since it only ever
+  // runs once checkoutData is already present.
+  const totalPrice = bd?.final_price ?? (estDayPrice !== null ? estDayPrice * dayCount : null);
+  const walletMaxApplicable = bd?.wallet_max_applicable ?? 0;
+  const walletApplied = useWalletCredit ? walletMaxApplicable : 0;
+  const walletTopupAmount = parseFloat(walletTopupInput) || 0;
+  const amountDue = totalPrice !== null ? Math.max(totalPrice - walletApplied, 0) + walletTopupAmount : null;
+  return { totalPrice, walletApplied, walletTopupAmount, amountDue };
+}
+
 // ─── Daily breakdown (collapsible, in checkout) ───────────────────────────────
 
 function DailyBreakdown({ breakdown }: {
@@ -1832,9 +1860,10 @@ export default function OrderFlow({
 
   async function handleConfirm() {
     if (!plan || !checkoutData || !slotId || !addressId) return;
-    const walletAmountApplied = useWalletCredit ? (checkoutData.price_breakdown.wallet_max_applicable ?? 0) : 0;
-    const walletTopupAmount = parseFloat(walletTopupInput) || 0;
-    const amountDue = Math.max((checkoutData.price_breakdown.final_price ?? 0) - walletAmountApplied, 0) + walletTopupAmount;
+    const { walletApplied: walletAmountApplied, walletTopupAmount, amountDue: computedAmountDue } = computeAmountDue({
+      checkoutData, useWalletCredit, walletTopupInput, estDayPrice, dayCount: plan.days.length,
+    });
+    const amountDue = computedAmountDue ?? 0;
     // A payment method only matters when there's actually something to pay
     // outside the wallet — when it's fully covered, don't make the client
     // pick cash/whish/neo for $0. Adding a top-up always counts as "something
@@ -2311,13 +2340,12 @@ export default function OrderFlow({
 
   if (step === "checkout") {
     const bd         = checkoutData?.price_breakdown;
-    const totalPrice = bd?.final_price ?? (estDayPrice !== null ? estDayPrice * (plan?.days.length ?? 1) : null);
     const dayCount   = plan?.days.length ?? 0;
     const freeThreshold = bd?.delivery?.minimum_per_day_for_free_delivery ?? 25;
     const walletMaxApplicable = bd?.wallet_max_applicable ?? 0;
-    const walletApplied = useWalletCredit ? walletMaxApplicable : 0;
-    const walletTopupAmount = parseFloat(walletTopupInput) || 0;
-    const amountDue = totalPrice !== null ? Math.max(totalPrice - walletApplied, 0) + walletTopupAmount : null;
+    const { totalPrice, walletApplied, walletTopupAmount, amountDue } = computeAmountDue({
+      checkoutData, useWalletCredit, walletTopupInput, estDayPrice, dayCount: dayCount || 1,
+    });
     const paymentRequired = amountDue === null || amountDue > 0.005;
 
     return (

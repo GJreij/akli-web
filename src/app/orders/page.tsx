@@ -26,12 +26,11 @@ export default async function OrdersPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
 
-  const walletRes = await supabase
-    .from("wallet_transactions")
-    .select("amount")
-    .eq("user_id", user.id);
-  const walletTransactions = (walletRes.data ?? []) as { amount: number | null }[];
-  const walletBalance = walletTransactions.reduce((sum, t) => sum + (t.amount ?? 0), 0);
+  // Server-side SUM via get_wallet_balance() — a plain `.select("amount")`
+  // here is capped at PostgREST's default row limit and silently truncates
+  // the sum once a user's wallet_transactions history grows past it.
+  const walletBalanceRes = await (supabase as any).rpc("get_wallet_balance", { p_user_id: user.id }); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const walletBalance = Number(walletBalanceRes.data ?? 0);
 
   // History is scoped to the last 3 months (matches the "last 3 months" copy
   // in OrderHistory) — the row limit below is just a safety cap for very

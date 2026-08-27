@@ -483,6 +483,61 @@ export type Database = {
           },
         ]
       }
+      day_edit_log: {
+        Row: {
+          changes: Json
+          created_at: string
+          id: number
+          meal_plan_day_id: number
+          meal_plan_id: number | null
+          price_delta: number
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          changes: Json
+          created_at?: string
+          id?: never
+          meal_plan_day_id: number
+          meal_plan_id?: number | null
+          price_delta: number
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          changes?: Json
+          created_at?: string
+          id?: never
+          meal_plan_day_id?: number
+          meal_plan_id?: number | null
+          price_delta?: number
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "day_edit_log_meal_plan_day_id_fkey"
+            columns: ["meal_plan_day_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan_day"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_edit_log_meal_plan_id_fkey"
+            columns: ["meal_plan_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "day_edit_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deliveries: {
         Row: {
           created_at: string
@@ -734,11 +789,13 @@ export type Database = {
           created_at: string
           day_packaging_price: number | null
           delivery_price: number | null
+          edit_fee_price: number | null
           fat_g_price: number | null
           id: number
           proteing_g_price: number | null
           recipe_packaging_price: number | null
           subrecipe_packaging_price: number | null
+          swap_fee_price: number | null
           updated_at: string | null
         }
         Insert: {
@@ -746,11 +803,13 @@ export type Database = {
           created_at?: string
           day_packaging_price?: number | null
           delivery_price?: number | null
+          edit_fee_price?: number | null
           fat_g_price?: number | null
           id?: number
           proteing_g_price?: number | null
           recipe_packaging_price?: number | null
           subrecipe_packaging_price?: number | null
+          swap_fee_price?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -758,11 +817,13 @@ export type Database = {
           created_at?: string
           day_packaging_price?: number | null
           delivery_price?: number | null
+          edit_fee_price?: number | null
           fat_g_price?: number | null
           id?: number
           proteing_g_price?: number | null
           recipe_packaging_price?: number | null
           subrecipe_packaging_price?: number | null
+          swap_fee_price?: number | null
           updated_at?: string | null
         }
         Relationships: []
@@ -862,9 +923,11 @@ export type Database = {
           cooking_status: string | null
           created_at: string
           id: number
+          is_swapped: boolean
           label: string | null
           meal_plan_day_id: number | null
           meal_type: string | null
+          original_recipe_id: number | null
           packaging_status: string | null
           recipe_id: number | null
           tenant_id: number | null
@@ -874,9 +937,11 @@ export type Database = {
           cooking_status?: string | null
           created_at?: string
           id?: number
+          is_swapped?: boolean
           label?: string | null
           meal_plan_day_id?: number | null
           meal_type?: string | null
+          original_recipe_id?: number | null
           packaging_status?: string | null
           recipe_id?: number | null
           tenant_id?: number | null
@@ -886,9 +951,11 @@ export type Database = {
           cooking_status?: string | null
           created_at?: string
           id?: number
+          is_swapped?: boolean
           label?: string | null
           meal_plan_day_id?: number | null
           meal_type?: string | null
+          original_recipe_id?: number | null
           packaging_status?: string | null
           recipe_id?: number | null
           tenant_id?: number | null
@@ -900,6 +967,13 @@ export type Database = {
             columns: ["meal_plan_day_id"]
             isOneToOne: false
             referencedRelation: "meal_plan_day"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_plan_day_recipe_original_recipe_id_fkey"
+            columns: ["original_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
             referencedColumns: ["id"]
           },
           {
@@ -990,6 +1064,78 @@ export type Database = {
           },
         ]
       }
+      meal_swap_log: {
+        Row: {
+          created_at: string
+          id: number
+          meal_plan_day_recipe_id: number
+          meal_plan_id: number | null
+          new_recipe_id: number
+          old_recipe_id: number
+          price_delta: number
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          meal_plan_day_recipe_id: number
+          meal_plan_id?: number | null
+          new_recipe_id: number
+          old_recipe_id: number
+          price_delta: number
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          meal_plan_day_recipe_id?: number
+          meal_plan_id?: number | null
+          new_recipe_id?: number
+          old_recipe_id?: number
+          price_delta?: number
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meal_swap_log_meal_plan_day_recipe_id_fkey"
+            columns: ["meal_plan_day_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan_day_recipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_swap_log_meal_plan_id_fkey"
+            columns: ["meal_plan_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_swap_log_new_recipe_id_fkey"
+            columns: ["new_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_swap_log_old_recipe_id_fkey"
+            columns: ["old_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meal_swap_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment: {
         Row: {
           affiliate_id: number | null
@@ -998,9 +1144,12 @@ export type Database = {
           commission_rate: number | null
           created_at: string
           currency: string | null
+          delivery_fee_amount: number | null
+          discount_amount: number | null
           id: number
           meal_plan_day_id: number | null
           ordered_user_id: string | null
+          original_amount: number | null
           partner_at_order: string | null
           provider: string | null
           provider_payment_id: string | null
@@ -1016,9 +1165,12 @@ export type Database = {
           commission_rate?: number | null
           created_at?: string
           currency?: string | null
+          delivery_fee_amount?: number | null
+          discount_amount?: number | null
           id?: number
           meal_plan_day_id?: number | null
           ordered_user_id?: string | null
+          original_amount?: number | null
           partner_at_order?: string | null
           provider?: string | null
           provider_payment_id?: string | null
@@ -1034,9 +1186,12 @@ export type Database = {
           commission_rate?: number | null
           created_at?: string
           currency?: string | null
+          delivery_fee_amount?: number | null
+          discount_amount?: number | null
           id?: number
           meal_plan_day_id?: number | null
           ordered_user_id?: string | null
+          original_amount?: number | null
           partner_at_order?: string | null
           provider?: string | null
           provider_payment_id?: string | null
@@ -1645,6 +1800,111 @@ export type Database = {
           },
         ]
       }
+      wallet_checkout_topup: {
+        Row: {
+          amount: number
+          created_at: string
+          credited: boolean
+          credited_at: string | null
+          id: number
+          meal_plan_id: number
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          credited?: boolean
+          credited_at?: string | null
+          id?: never
+          meal_plan_id: number
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          credited?: boolean
+          credited_at?: string | null
+          id?: never
+          meal_plan_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_checkout_topup_meal_plan_id_fkey"
+            columns: ["meal_plan_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_checkout_topup_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_topup_request: {
+        Row: {
+          amount: number
+          created_at: string
+          credited_amount: number | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: number
+          payment_note: string | null
+          requested_at: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          credited_amount?: number | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: never
+          payment_note?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          credited_amount?: number | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: never
+          payment_note?: string | null
+          requested_at?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_topup_request_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_topup_request_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wallet_transactions: {
         Row: {
           amount: number
@@ -1654,6 +1914,7 @@ export type Database = {
           note: string | null
           related_cancellation_request_id: number | null
           related_order_id: number | null
+          related_wallet_topup_request_id: number | null
           type: string
           user_id: string
         }
@@ -1665,6 +1926,7 @@ export type Database = {
           note?: string | null
           related_cancellation_request_id?: number | null
           related_order_id?: number | null
+          related_wallet_topup_request_id?: number | null
           type: string
           user_id: string
         }
@@ -1676,6 +1938,7 @@ export type Database = {
           note?: string | null
           related_cancellation_request_id?: number | null
           related_order_id?: number | null
+          related_wallet_topup_request_id?: number | null
           type?: string
           user_id?: string
         }
@@ -1699,6 +1962,13 @@ export type Database = {
             columns: ["related_order_id"]
             isOneToOne: false
             referencedRelation: "meal_plan"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wallet_transactions_related_wallet_topup_request_id_fkey"
+            columns: ["related_wallet_topup_request_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_topup_request"
             referencedColumns: ["id"]
           },
           {
@@ -1801,12 +2071,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_meal_swap_wallet_delta: {
+        Args: {
+          p_note?: string
+          p_price_delta: number
+          p_related_order_id: number
+          p_type?: string
+          p_user_id: string
+        }
+        Returns: number
+      }
       credit_wallet: {
         Args: {
           p_amount: number
           p_note?: string
           p_related_cancellation_request_id?: number
           p_related_order_id?: number
+          p_related_wallet_topup_request_id?: number
           p_type: string
           p_user_id: string
         }
@@ -1816,6 +2097,7 @@ export type Database = {
         Args: { p_delivery_date: string; p_delivery_slot_id: number }
         Returns: undefined
       }
+      get_wallet_balance: { Args: { p_user_id: string }; Returns: number }
       is_admin: { Args: never; Returns: boolean }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

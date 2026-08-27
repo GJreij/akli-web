@@ -102,7 +102,9 @@ export default function CancellationRow({ req }: { req: PendingCancellation }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 10, background: C.offWhite, borderRadius: 8, padding: 10 }}>
           {mode === "noRefund" && (
             <p style={{ margin: 0, fontSize: 12.5, color: C.error, fontWeight: 600 }}>
-              This forfeits the full ${req.totalValue.toFixed(2)} — nothing will be refunded or credited to the wallet.
+              This forfeits the full ${req.totalValue.toFixed(2)} for the cancelled day(s) — no refund or wallet
+              credit for those days. If this drops the remaining days below their current volume-discount tier, a
+              separate wallet adjustment for the price difference on those remaining days may still apply.
             </p>
           )}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>

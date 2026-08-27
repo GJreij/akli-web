@@ -79,6 +79,25 @@ const PRESETS: { key: string; label: string }[] = [
   { key: "all_time", label: "All time" },
 ];
 
+// Post-order wallet adjustments — swap/edit price deltas and the volume-
+// discount correction that can fire when a cancellation changes a remaining
+// order's discount tier. These are real money moving through the wallet
+// after checkout and must count toward revenue, or "Revenue" silently stays
+// frozen at original-checkout price forever even as clients pay more (or
+// less) for what they actually end up eating.
+const ADJUSTMENT_TYPES = [
+  "meal_swap_debit", "meal_swap_credit",
+  "day_edit_debit", "day_edit_credit",
+  "volume_discount_adjustment_debit", "volume_discount_adjustment_credit",
+] as const;
+
+function adjustmentLabel(type: string): string {
+  if (type.startsWith("meal_swap")) return "Meal swap";
+  if (type.startsWith("day_edit")) return "Day edit";
+  if (type.startsWith("volume_discount_adjustment")) return "Volume discount correction";
+  return type;
+}
+
 const STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
   { value: "paid", label: "Paid" },
@@ -137,12 +156,26 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
     topupsQuery = topupsQuery.lt("created_at", endExclusive.toISOString());
   }
 
-  const [rangeRes, owedRes, usersRes, topupsRes, pendingTopupRequestsRes] = await Promise.all([
+  let adjustmentsQuery = supabase
+    .from("wallet_transactions")
+    .select("id, user_id, amount, type, note, related_order_id, created_at")
+    .in("type", ADJUSTMENT_TYPES)
+    .order("created_at", { ascending: false });
+  if (start) adjustmentsQuery = adjustmentsQuery.gte("created_at", `${start}T00:00:00Z`);
+  if (end) {
+    const endExclusive = new Date(`${end}T00:00:00Z`);
+    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+    adjustmentsQuery = adjustmentsQuery.lt("created_at", endExclusive.toISOString());
+  }
+  if (userId !== "all") adjustmentsQuery = adjustmentsQuery.eq("user_id", userId);
+
+  const [rangeRes, owedRes, usersRes, topupsRes, pendingTopupRequestsRes, adjustmentsRes] = await Promise.all([
     rangeQuery,
     owedQuery,
     supabase.from("user").select("id,name,last_name,phone_number"),
     topupsQuery,
     supabase.from("wallet_topup_request").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    adjustmentsQuery,
   ]);
 
   const rangeRows = (rangeRes.data ?? []) as PaymentRow[];
@@ -153,6 +186,14 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
   const topupsInRange = topupRows.reduce((s, t) => s + (t.amount ?? 0), 0);
   const pendingTopupRequestCount = pendingTopupRequestsRes.count ?? 0;
   const userMap = new Map(users.map(u => [u.id, u]));
+
+  // wallet_transactions.amount is negative for a debit (money leaving the
+  // client's wallet — the business collected more) and positive for a
+  // credit (money returned — the business collected less), so revenue's
+  // contribution is the sign-flipped total.
+  type AdjustmentRow = { id: number; user_id: string | null; amount: number | null; type: string; note: string | null; related_order_id: number | null; created_at: string };
+  const adjustmentRows = (adjustmentsRes.data ?? []) as AdjustmentRow[];
+  const adjustmentsRevenue = adjustmentRows.reduce((s, a) => s - (a.amount ?? 0), 0);
 
   // A cancelled day's payment row is left untouched for audit history, but it
   // no longer represents real revenue or a real debt — without this, a
@@ -216,7 +257,12 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
 
   const paidInRange = activeRangeRows.filter(p => p.status === "paid");
   const pendingInRange = activeRangeRows.filter(p => p.status === "pending");
-  const revenueInRange = paidInRange.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const revenueFromPayments = paidInRange.reduce((s, p) => s + (p.amount ?? 0), 0);
+  // Original checkout revenue plus every post-order price change actually
+  // settled through the wallet (swaps, day edits, volume-discount
+  // corrections) — without this, "Revenue" stays frozen at what was charged
+  // at checkout even after a client pays more (or less) via later changes.
+  const revenueInRange = revenueFromPayments + adjustmentsRevenue;
   const pendingInRangeTotal = pendingInRange.reduce((s, p) => s + (p.amount ?? 0), 0);
   const totalOwed = activeOwedRows.reduce((s, p) => s + (p.amount ?? 0), 0);
 
@@ -293,7 +339,11 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
   return (
     <>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        <Card label={`Revenue ${rangeLabel}`} value={fmtMoney(revenueInRange)} sub={`${paidInRange.length} day${paidInRange.length === 1 ? "" : "s"} paid`} />
+        <Card
+          label={`Revenue ${rangeLabel}`}
+          value={fmtMoney(revenueInRange)}
+          sub={`${paidInRange.length} day${paidInRange.length === 1 ? "" : "s"} paid${adjustmentsRevenue !== 0 ? ` · ${adjustmentsRevenue > 0 ? "+" : "-"}${fmtMoney(Math.abs(adjustmentsRevenue))} from swaps/edits` : ""}`}
+        />
         <Card label={`Pending ${rangeLabel}`} value={fmtMoney(pendingInRangeTotal)} sub={`${pendingInRange.length} day${pendingInRange.length === 1 ? "" : "s"} unpaid`} />
         <Card label="Total owed (all time)" value={fmtMoney(totalOwed)} sub={`${activeOwedRows.length} day${activeOwedRows.length === 1 ? "" : "s"} unpaid across ${owedList.length} client${owedList.length === 1 ? "" : "s"}`} />
         <Card label={`Wallet top-ups ${rangeLabel}`} value={fmtMoney(topupsInRange)} sub="Checkout + profile requests, credited" />
@@ -327,6 +377,46 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
                   <td style={{ ...td, color: C.muted }}>{new Date(t.created_at).toLocaleDateString("en-GB", { timeZone: "Asia/Beirut" })}</td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        )}
+      </Section>
+
+      <Section title={`Post-order adjustments ${rangeLabel} (${adjustmentRows.length})`}>
+        {adjustmentRows.length === 0 ? (
+          <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No meal swaps, day edits, or discount corrections in this range.</p>
+        ) : (
+          <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th style={th}>Client</th>
+                <th style={th}>Type</th>
+                <th style={th}>Amount</th>
+                <th style={th}>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adjustmentRows.map(a => {
+                // amount is negative for a debit (client charged, revenue up)
+                // and positive for a credit (client refunded, revenue down).
+                const isDebit = (a.amount ?? 0) < 0;
+                return (
+                  <tr key={a.id}>
+                    <td style={td}>
+                      {a.user_id ? (
+                        <Link href={`/admin/users/${a.user_id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
+                          {nameFor(a.user_id)}
+                        </Link>
+                      ) : nameFor(null)}
+                    </td>
+                    <td style={{ ...td, color: C.muted }}>{adjustmentLabel(a.type)} {isDebit ? "(charged)" : "(credited)"}</td>
+                    <td style={{ ...td, fontWeight: 700, color: isDebit ? C.primary : C.error }}>
+                      {isDebit ? "+" : "-"}{fmtMoney(Math.abs(a.amount ?? 0))}
+                    </td>
+                    <td style={{ ...td, color: C.muted }}>{new Date(a.created_at).toLocaleDateString("en-GB", { timeZone: "Asia/Beirut" })}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
