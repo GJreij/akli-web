@@ -16,6 +16,7 @@ import {
   type PlanSummaryPeriod,
 } from "@/lib/flask";
 import { type PrefRating } from "@/lib/preferences";
+import { beirutISODate } from "@/lib/dates";
 import AddressForm from "@/components/AddressForm";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -146,7 +147,14 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
   onRemoveDay: (iso: string) => void;
 }) {
   const today        = localISO(new Date());
-  const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
+  // Recomputed on every render (not trusted from orderableWeeks alone) — the server
+  // filtered by this same cutoff when the page first loaded, but a session left open
+  // across the 48h boundary (backgrounded tab/PWA) would otherwise keep treating a
+  // now-too-soon day as available forever.
+  const minOrderable = beirutISODate(2);
+  const availableSet = new Set(
+    orderableWeeks.flatMap(w => w.weekdays).filter(iso => iso >= minOrderable)
+  );
 
   // Derive all ISOs in the selected range (available weekdays minus removed minus already-ordered days —
   // you can't have two orders covering the same day, so those are auto-skipped rather than blocking the whole range)
@@ -1192,7 +1200,7 @@ function PreferencesSection({
         <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{subtitle}</p>
       </div>
       <button
-        onClick={() => router.push("/tastes")}
+        onClick={() => { markTastesTrip(); router.push("/tastes"); }}
         style={{
           flexShrink: 0, padding: "8px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600,
           border: `1px solid ${C.teal}`, background: C.white, color: C.teal, cursor: "pointer",
@@ -1418,6 +1426,26 @@ function clearDraft() {
   try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* storage unavailable */ }
 }
 
+// Set right before the deliberate router.push("/tastes") so OrderFlow's unmount
+// effect can tell "left for /tastes, keep the draft" apart from "left the flow
+// some other way (back button, browser back, closing the tab mid-step) — reset
+// it" without prop-drilling a ref into PreferencesSection.
+const KEEP_DRAFT_KEY = "akli-order-draft-keep-v1";
+
+function markTastesTrip() {
+  if (typeof window === "undefined") return;
+  try { sessionStorage.setItem(KEEP_DRAFT_KEY, "1"); } catch { /* storage unavailable */ }
+}
+
+function consumeTastesTripMark(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const kept = sessionStorage.getItem(KEEP_DRAFT_KEY) === "1";
+    sessionStorage.removeItem(KEEP_DRAFT_KEY);
+    return kept;
+  } catch { return false; }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 type VolumeDiscountRule = {
@@ -1489,7 +1517,13 @@ export default function OrderFlow({
 
   // ── Step 1 state ──────────────────────────────────────────────────────────────
 
-  const availableSet = new Set(orderableWeeks.flatMap(w => w.weekdays));
+  // Recomputed on every render, same reasoning as RangePicker below — orderableWeeks
+  // was filtered to this cutoff when the page loaded, but a stale/backgrounded session
+  // must not keep offering (or silently keep selected) a day that's now inside 48h.
+  const minOrderable = beirutISODate(2);
+  const availableSet = new Set(
+    orderableWeeks.flatMap(w => w.weekdays).filter(iso => iso >= minOrderable)
+  );
   const orderedDaysSet = new Set(orderedDays);
   const cancellationPendingSet = new Set(cancellationPendingDays);
   const closureDaysMap = new Map(closureDays.map(c => [c.date, c.reason]));
@@ -1531,6 +1565,15 @@ export default function OrderFlow({
   useEffect(() => {
     writeDraft({ rangeStart, rangeEnd, removed: Array.from(removed), excludedMeals: Array.from(excludedMeals), mealEatingOut, kcalAdjustment });
   }, [rangeStart, rangeEnd, removed, excludedMeals, mealEatingOut, kcalAdjustment]);
+
+  // Leaving the order flow any other way — the in-app back button, the browser's
+  // native back/forward, a link elsewhere — unmounts this component, which should
+  // reset the draft so returning starts fresh. The /tastes trip is the one
+  // deliberate exception, marked via markTastesTrip() right before that push, so
+  // its round trip still keeps the selection.
+  useEffect(() => {
+    return () => { if (!consumeTastesTripMark()) clearDraft(); };
+  }, []);
 
   // ── Derived kcal target ───────────────────────────────────────────────────────
 
