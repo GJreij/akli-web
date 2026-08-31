@@ -53,7 +53,7 @@ function datesInRange(startDate: string, endDate: string): string[] {
   return dates;
 }
 
-type MealPlanDayRow = { id: number; date: string | null; meal_plan_id: number | null };
+type MealPlanDayRow = { id: number; date: string | null; meal_plan_id: number | null; status: string | null };
 
 async function fetchMealPlanDaysInRange(
   supabase: SupabaseServerClient,
@@ -63,9 +63,11 @@ async function fetchMealPlanDaysInRange(
   const dates = datesInRange(startDate, endDate);
 
   const mpdRes = await (supabase.from("meal_plan_day") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-    .select("id, date, meal_plan_id")
+    .select("id, date, meal_plan_id, status")
     .in("date", dates);
-  const mpdRows = (mpdRes.data ?? []) as MealPlanDayRow[];
+  const mpdRows = ((mpdRes.data ?? []) as MealPlanDayRow[]).filter(
+    (row) => !["cancelled", "cancellation_pending"].includes(row.status ?? "")
+  );
   if (mpdRows.length === 0) return [];
 
   const mealPlanIds = [...new Set(mpdRows.map((r) => r.meal_plan_id).filter((id): id is number => id != null))];
