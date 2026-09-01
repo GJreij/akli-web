@@ -69,8 +69,21 @@ export default function ResetPasswordPage() {
     if (password !== confirm) { setError("Passwords don't match."); return; }
     setError(null); setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
+    if (error) { setLoading(false); setError(error.message); return; }
+
+    // If this was an admin-created guest profile, setting a password here IS
+    // the claim — flip it so future signups know this email is now taken by
+    // a real, authenticated account. A no-op for a normal forgot-password
+    // reset, since is_guest is already false there.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase.from("user") as any)
+        .update({ is_guest: false, claimed_at: new Date().toISOString() })
+        .eq("id", user.id);
+    }
+
     setLoading(false);
-    if (error) { setError(error.message); return; }
     setDone(true);
     setTimeout(() => { window.location.href = "/home"; }, 2000);
   }

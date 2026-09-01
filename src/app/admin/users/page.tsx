@@ -2,8 +2,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import NewGuestUserForm from "@/components/NewGuestUserForm";
 
-type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name" | "email" | "phone_number" | "role" | "created_at">;
+type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name" | "email" | "phone_number" | "role" | "created_at" | "is_guest">;
 
 const C = {
   primary: "#063330", teal: "#67b1b0", tealDark: "#437b7b",
@@ -33,7 +34,7 @@ function TableFallback() {
 async function UsersTable({ q }: { q?: string }) {
   const supabase = await createClient();
 
-  let query = supabase.from("user").select("id,name,last_name,email,phone_number,role,created_at").order("created_at", { ascending: false }).limit(200);
+  let query = supabase.from("user").select("id,name,last_name,email,phone_number,role,created_at,is_guest").order("created_at", { ascending: false }).limit(200);
   if (q) {
     query = query.or(`name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,phone_number.ilike.%${q}%`);
   }
@@ -72,7 +73,19 @@ async function UsersTable({ q }: { q?: string }) {
                 </td>
                 <td style={{ padding: "10px 14px", color: C.muted }}>{u.email ?? "—"}</td>
                 <td style={{ padding: "10px 14px", color: C.muted }}>{u.phone_number ?? "—"}</td>
-                <td style={{ padding: "10px 14px" }}><RolePill role={u.role} /></td>
+                <td style={{ padding: "10px 14px" }}>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    <RolePill role={u.role} />
+                    {u.is_guest && (
+                      <span style={{
+                        fontSize: 10.5, fontWeight: 600, color: C.warn, background: `${C.warn}1a`,
+                        borderRadius: 6, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.03em",
+                      }}>
+                        Unclaimed
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td style={{ padding: "10px 14px", color: C.light, whiteSpace: "nowrap" }}>
                   {new Date(u.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
                 </td>
@@ -91,10 +104,11 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   return (
     <div style={{ padding: "24px 20px 60px" }}>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", rowGap: 12 }}>
           <h1 style={{ fontFamily: "'Playfair Display', serif", fontSize: 26, fontWeight: 500, color: C.primary, margin: 0 }}>
             Users
           </h1>
+          <NewGuestUserForm />
         </div>
 
         <form style={{ marginBottom: 16 }}>

@@ -1617,6 +1617,7 @@ export type Database = {
         Row: {
           celery: boolean
           cereals_containing_gluten: boolean
+          claimed_at: string | null
           created_at: string
           crustaceans: boolean
           DoB: string | null
@@ -1624,6 +1625,7 @@ export type Database = {
           email: string | null
           fish: boolean
           id: string
+          is_guest: boolean
           last_name: string | null
           lupin: boolean
           milk: boolean
@@ -1645,6 +1647,7 @@ export type Database = {
         Insert: {
           celery?: boolean
           cereals_containing_gluten?: boolean
+          claimed_at?: string | null
           created_at?: string
           crustaceans?: boolean
           DoB?: string | null
@@ -1652,6 +1655,7 @@ export type Database = {
           email?: string | null
           fish?: boolean
           id: string
+          is_guest?: boolean
           last_name?: string | null
           lupin?: boolean
           milk?: boolean
@@ -1673,6 +1677,7 @@ export type Database = {
         Update: {
           celery?: boolean
           cereals_containing_gluten?: boolean
+          claimed_at?: string | null
           created_at?: string
           crustaceans?: boolean
           DoB?: string | null
@@ -1680,6 +1685,7 @@ export type Database = {
           email?: string | null
           fish?: boolean
           id?: string
+          is_guest?: boolean
           last_name?: string | null
           lupin?: boolean
           milk?: boolean

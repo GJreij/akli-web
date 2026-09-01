@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { track, linkAnonToUser } from "@/lib/analytics";
 import { simplePriceSimulator } from "@/lib/flask";
+import { checkGuestEmail } from "@/app/actions";
 import { COUNTRY_CODES } from "@/lib/theme";
 import { ageFromDob, daysInMonth, byWeight, byPercent, macrosFromDiet, formatPrice, formatPricePerMeal, priceComparison, DIET_OPTIONS, KCAL_FLOOR, KCAL_CEIL, KCAL_STEP } from "@/lib/macros";
 import type { DietType } from "@/lib/macros";
@@ -245,6 +246,9 @@ export default function AkliApp({
   const [saveError, setSaveError]   = useState<string | null>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  // Set when this email already belongs to an admin-created guest profile —
+  // routes into "claim your account" instead of creating a duplicate one.
+  const [guestClaimSent, setGuestClaimSent] = useState(false);
 
   // ── Home ──
   const [homeName, setHomeName] = useState(profile?.name ?? "");
@@ -477,6 +481,24 @@ export default function AkliApp({
     if (Object.keys(errs).length) { setSaveErrors(errs); return; }
 
     setSaveLoading(true); setSaveError(null);
+
+    // 0. This email might already belong to a profile an admin created for a
+    // WhatsApp/phone order — a "guest" account with no password set yet.
+    // Route into claiming that account instead of creating a duplicate one.
+    // Checked via a server action (not a direct client query) because this
+    // visitor has no Supabase session yet — anonymous auth is disabled on
+    // this project, so there's no RLS-visible identity to query under here.
+    const isGuestEmail = await checkGuestEmail(email.trim());
+    if (isGuestEmail) {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      setSaveLoading(false);
+      if (resetError) { setSaveError(resetError.message); return; }
+      track("guest_claim_link_sent", {}, "auth");
+      setGuestClaimSent(true);
+      return;
+    }
 
     // 1. Create auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
@@ -1254,7 +1276,18 @@ export default function AkliApp({
             )}
 
             {/* SAVE */}
-            {step === "save" && (
+            {step === "save" && guestClaimSent && (
+              <div>
+                <h3 style={{ margin: "0 0 4px", fontSize: 20 }}>Check your email</h3>
+                <p style={{ fontSize: 13, color: C.muted, margin: "0 0 4px", lineHeight: 1.6 }}>
+                  We found an existing account for <strong>{email.trim()}</strong> — looks like Akli already has
+                  order history under this email. We&apos;ve sent a link to set your password. Once you&apos;re
+                  signed in, everything will already be there.
+                </p>
+              </div>
+            )}
+
+            {step === "save" && !guestClaimSent && (
               <div>
                 <h3 style={{ margin: "0 0 4px", fontSize: 20 }}>Save this plan</h3>
                 <p style={{ fontSize: 13, color: C.muted, margin: "0 0 18px" }}>Create an account to keep it and start ordering.</p>
@@ -1457,12 +1490,20 @@ export default function AkliApp({
           display: "flex", gap: 10, padding: "14px 20px",
           borderTop: `1px solid ${C.border}`, background: C.white, flexShrink: 0,
         }}>
-          {idx > 0 && (
-            <button style={{ flex: "0 0 76px" }} onClick={handleBack}>Back</button>
+          {step === "save" && guestClaimSent ? (
+            <button className="btn-primary" style={{ flex: 1 }} onClick={() => transition("signin")}>
+              Back to sign in
+            </button>
+          ) : (
+            <>
+              {idx > 0 && (
+                <button style={{ flex: "0 0 76px" }} onClick={handleBack}>Back</button>
+              )}
+              <button className="btn-primary" style={{ flex: 1 }} onClick={handleNext} disabled={saveLoading}>
+                {nextLabel()}
+              </button>
+            </>
           )}
-          <button className="btn-primary" style={{ flex: 1 }} onClick={handleNext} disabled={saveLoading}>
-            {nextLabel()}
-          </button>
         </div>
       )}
     </div>
