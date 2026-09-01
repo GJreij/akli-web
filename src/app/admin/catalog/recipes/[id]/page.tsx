@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, primaryButton, dangerButton, subtleButton, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import {
   updateRecipe, deleteRecipe, addRecipeSubrecipe, removeRecipeSubrecipe,
   updateRecipeSubrecipeSettings,
@@ -82,7 +83,7 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
             </div>
           </Section>
 
-          <button type="submit" style={primaryButton}>Save changes</button>
+          <SubmitButton style={primaryButton} pendingText="Saving…">Save changes</SubmitButton>
         </form>
 
         <Section title={`Subrecipes (${composition.length})`}>
@@ -139,7 +140,7 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
                         </td>
                         <td style={td}>
                           <form action={removeAction}>
-                            <button type="submit" style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }}>Remove</button>
+                            <SubmitButton style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }} pendingText="…">Remove</SubmitButton>
                           </form>
                         </td>
                       </tr>
@@ -172,13 +173,13 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
             <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
               <input type="checkbox" name="is_main" /> Main
             </label>
-            <button type="submit" style={subtleButton}>Add subrecipe</button>
+            <SubmitButton style={subtleButton} pendingText="Adding…">Add subrecipe</SubmitButton>
           </form>
         </Section>
 
         <div style={{ marginTop: 8 }}>
           <form action={deleteAction}>
-            <button type="submit" style={dangerButton}>Delete recipe</button>
+            <SubmitButton style={dangerButton} pendingText="Deleting…">Delete recipe</SubmitButton>
           </form>
         </div>
       </div>

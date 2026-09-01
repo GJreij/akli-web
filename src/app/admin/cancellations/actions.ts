@@ -30,8 +30,13 @@ async function finalizeInFlask(cancellationRequestId: number, decision: Decision
 
 type DiscountCorrection = { amount: number; note: string } | null;
 
-export async function approveAsWalletCredit(cancellationRequestId: number, userId: string, mealPlanId: number, amount: number, note: string): Promise<DiscountCorrection> {
-  const { supabase, adminId } = await requireAdmin();
+// Callers that already hold a requireAdmin() result from earlier in the same
+// request (e.g. adminCancelOrder) pass it through as `ctx` so this doesn't
+// redo the auth.getUser() + role-lookup round trip a second time.
+type AdminCtx = Awaited<ReturnType<typeof requireAdmin>>;
+
+export async function approveAsWalletCredit(cancellationRequestId: number, userId: string, mealPlanId: number, amount: number, note: string, ctx?: AdminCtx): Promise<DiscountCorrection> {
+  const { supabase, adminId } = ctx ?? await requireAdmin();
   if (amount <= 0) throw new Error("Credit amount must be positive");
 
   // Idempotency guard: if Flask's finalize call fails after the credit
@@ -70,8 +75,8 @@ export async function approveAsWalletCredit(cancellationRequestId: number, userI
   return (result?.discount_correction ?? null) as DiscountCorrection;
 }
 
-export async function approveAsRealRefund(cancellationRequestId: number, refundAmount: number, note: string): Promise<DiscountCorrection> {
-  const { adminId } = await requireAdmin();
+export async function approveAsRealRefund(cancellationRequestId: number, refundAmount: number, note: string, ctx?: AdminCtx): Promise<DiscountCorrection> {
+  const { adminId } = ctx ?? await requireAdmin();
   if (refundAmount <= 0) throw new Error("Refund amount must be positive");
 
   const result = await finalizeInFlask(cancellationRequestId, "approved_refund", adminId, note, refundAmount);
@@ -79,8 +84,8 @@ export async function approveAsRealRefund(cancellationRequestId: number, refundA
   return (result?.discount_correction ?? null) as DiscountCorrection;
 }
 
-export async function cancelWithNoRefund(cancellationRequestId: number, note: string): Promise<DiscountCorrection> {
-  const { adminId } = await requireAdmin();
+export async function cancelWithNoRefund(cancellationRequestId: number, note: string, ctx?: AdminCtx): Promise<DiscountCorrection> {
+  const { adminId } = ctx ?? await requireAdmin();
   if (!note.trim()) throw new Error("A reason is required when cancelling with no refund");
 
   // Deliberately no wallet/refund call — the order finalizes as cancelled

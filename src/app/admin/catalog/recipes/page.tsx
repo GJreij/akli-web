@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import { createRecipe } from "./actions";
 
 type Recipe = Pick<Database["public"]["Tables"]["recipe"]["Row"], "id" | "name" | "could_be_breakfast" | "could_be_lunch" | "could_be_dinner" | "could_be_snack" | "prep_time" | "cook_time" | "always_available">;
@@ -69,9 +70,12 @@ export default async function RecipesPage({ searchParams }: { searchParams: Prom
         <Section title="Add recipe">
           <form action={createRecipe} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <input name="name" placeholder="Name" required style={{ ...inputStyle, flex: "1 1 200px" }} />
-            <button type="submit" style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            <SubmitButton
+              pendingText="Creating…"
+              style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+            >
               Create & open
-            </button>
+            </SubmitButton>
           </form>
           <p style={{ margin: "8px 0 0", fontSize: 11.5, color: C.light }}>Opens the new recipe so you can add subrecipes and details.</p>
         </Section>

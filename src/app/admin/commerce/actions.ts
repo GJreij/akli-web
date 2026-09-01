@@ -68,8 +68,12 @@ export async function createAffiliate(input: {
   const audienceCodeText = (input.audience_code?.trim() || null);
   const personalCodeText = (input.personal_code?.trim() || null);
 
-  if (audienceCodeText) await assertCodeNotAmbiguous(supabase, audienceCodeText, null);
-  if (personalCodeText) await assertCodeNotAmbiguous(supabase, personalCodeText, input.user_id);
+  // Independent checks against different code texts — run concurrently
+  // instead of round-tripping to Supabase twice in serial.
+  await Promise.all([
+    audienceCodeText ? assertCodeNotAmbiguous(supabase, audienceCodeText, null) : Promise.resolve(),
+    personalCodeText ? assertCodeNotAmbiguous(supabase, personalCodeText, input.user_id) : Promise.resolve(),
+  ]);
 
   const affiliateRow: AffiliateInsert = {
     user_id: input.user_id,
@@ -95,25 +99,32 @@ export async function createAffiliate(input: {
     discount_value: input.audience_discount_rate ?? 10,
     is_active: true,
   };
-  const { error: audienceError } = await (supabase.from("promo_codes") as any).insert(audienceCode); // eslint-disable-line @typescript-eslint/no-explicit-any
-  if (audienceError) throw new Error(`Affiliate created, but the audience code failed: ${audienceError.message}`);
 
   // Private personal-discount code for their own orders, if a rate was set.
   // personal_discount_rate on affiliates is a FRACTION (0.40 = 40%), but
   // discount_value here must be the raw percentage — convert it.
-  if (input.personal_discount_rate) {
-    const personalCode: PromoCodeInsert = {
-      code: personalCodeText || `AKLI-SELF-${affiliate.id}`,
-      affiliate_id: affiliate.id,
-      user_id: input.user_id,
-      discount_type: "percentage",
-      discount_value: Math.round(input.personal_discount_rate * 1000) / 10,
-      waives_delivery: input.waives_delivery ?? false,
-      is_active: true,
-    };
-    const { error: personalError } = await (supabase.from("promo_codes") as any).insert(personalCode); // eslint-disable-line @typescript-eslint/no-explicit-any
-    if (personalError) throw new Error(`Affiliate created, but the personal code failed: ${personalError.message}`);
-  }
+  const personalCode: PromoCodeInsert | null = input.personal_discount_rate ? {
+    code: personalCodeText || `AKLI-SELF-${affiliate.id}`,
+    affiliate_id: affiliate.id,
+    user_id: input.user_id,
+    discount_type: "percentage",
+    discount_value: Math.round(input.personal_discount_rate * 1000) / 10,
+    waives_delivery: input.waives_delivery ?? false,
+    is_active: true,
+  } : null;
+
+  // Independent inserts (different code rows, same affiliate) — run
+  // concurrently rather than round-tripping in serial.
+  await Promise.all([
+    (supabase.from("promo_codes") as any).insert(audienceCode).then(({ error }: { error: { message: string } | null }) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+      if (error) throw new Error(`Affiliate created, but the audience code failed: ${error.message}`);
+    }),
+    personalCode
+      ? (supabase.from("promo_codes") as any).insert(personalCode).then(({ error }: { error: { message: string } | null }) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+          if (error) throw new Error(`Affiliate created, but the personal code failed: ${error.message}`);
+        })
+      : Promise.resolve(),
+  ]);
 
   revalidatePath("/admin/commerce");
 }
@@ -201,20 +212,16 @@ export async function endAffiliateProgram(id: number) {
 export async function deleteAffiliate(id: number) {
   const { supabase } = await requireAdmin();
 
-  const { count: paymentCount } = await supabase
-    .from("payment")
-    .select("id", { count: "exact", head: true })
-    .eq("affiliate_id", id);
+  // Independent existence checks against different tables — run concurrently.
+  const [{ count: paymentCount }, { count: payoutCount }] = await Promise.all([
+    supabase.from("payment").select("id", { count: "exact", head: true }).eq("affiliate_id", id),
+    supabase.from("affiliate_payouts").select("id", { count: "exact", head: true }).eq("affiliate_id", id),
+  ]);
   if ((paymentCount ?? 0) > 0) {
     throw new Error(
       "This affiliate has commission history on real orders — set status to \"ended\" instead of deleting, to keep the financial record intact."
     );
   }
-
-  const { count: payoutCount } = await supabase
-    .from("affiliate_payouts")
-    .select("id", { count: "exact", head: true })
-    .eq("affiliate_id", id);
   if ((payoutCount ?? 0) > 0) {
     throw new Error(
       "This affiliate has recorded payouts — set status to \"ended\" instead of deleting, to keep that financial record intact."

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import { createWeeklyMenu } from "./actions";
 
 type WeeklyMenu = Pick<Database["public"]["Tables"]["weekly_menu"]["Row"], "id" | "name" | "week_start_date" | "week_end_date">;
@@ -29,9 +30,12 @@ export default async function WeeklyMenusPage() {
             <label style={{ ...labelStyle, flex: "0 1 150px" }}>Week end
               <input name="week_end_date" type="date" required style={inputStyle} />
             </label>
-            <button type="submit" style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", alignSelf: "flex-end" }}>
+            <SubmitButton
+              pendingText="Creating…"
+              style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", alignSelf: "flex-end" }}
+            >
               Create & open
-            </button>
+            </SubmitButton>
           </form>
         </Section>
 

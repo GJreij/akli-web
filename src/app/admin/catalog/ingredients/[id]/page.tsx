@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, primaryButton, dangerButton, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import { updateIngredient, deleteIngredient } from "../actions";
 
 type Ingredient = Database["public"]["Tables"]["ingredient"]["Row"];
@@ -88,13 +89,13 @@ export default async function IngredientDetailPage({ params }: { params: Promise
           </Section>
 
           <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <button type="submit" style={primaryButton}>Save changes</button>
+            <SubmitButton style={primaryButton} pendingText="Saving…">Save changes</SubmitButton>
           </div>
         </form>
 
         <div style={{ marginTop: 24, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
           <form action={deleteAction}>
-            <button type="submit" style={dangerButton}>Delete ingredient</button>
+            <SubmitButton style={dangerButton} pendingText="Deleting…">Delete ingredient</SubmitButton>
           </form>
         </div>
       </div>

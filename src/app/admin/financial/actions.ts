@@ -25,17 +25,20 @@ export async function setPaymentStatus(paymentIds: number[], status: "paid" | "p
 }
 
 async function creditCheckoutTopupIfFullyPaid(supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"], mealPlanId: number) {
-  const { data: topups } = await (supabase as any)
-    .from("wallet_checkout_topup")
-    .select("id, user_id, amount")
-    .eq("meal_plan_id", mealPlanId)
-    .eq("credited", false);
+  // Independent reads keyed only off mealPlanId — run concurrently.
+  const [{ data: topups }, { data: days }] = await Promise.all([
+    (supabase as any)
+      .from("wallet_checkout_topup")
+      .select("id, user_id, amount")
+      .eq("meal_plan_id", mealPlanId)
+      .eq("credited", false),
+    (supabase as any)
+      .from("meal_plan_day")
+      .select("id")
+      .eq("meal_plan_id", mealPlanId),
+  ]);
   if (!topups || topups.length === 0) return;
 
-  const { data: days } = await (supabase as any)
-    .from("meal_plan_day")
-    .select("id")
-    .eq("meal_plan_id", mealPlanId);
   const dayIds = (days ?? []).map((d: { id: number }) => d.id);
   if (dayIds.length === 0) return;
 

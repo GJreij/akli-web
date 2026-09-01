@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { PageHeader, Section, inputStyle, labelStyle, C } from "@/components/admin/ui";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
-import { getCookingOverview } from "@/lib/flask";
+import { getCookingOverview, type CookingRecipe } from "@/lib/flask";
 import CookingBoard from "@/components/admin/cooking/CookingBoard";
 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name">;
@@ -17,8 +17,12 @@ function BoardFallback() {
   );
 }
 
-async function CookingResults({ start, end, subrecipe_id, client_id, recipe_id }: { start: string; end: string; subrecipe_id?: string; client_id?: string; recipe_id?: string }) {
-  const recipes = await getCookingOverview(start, end, {
+async function CookingResults({ start, end, subrecipe_id, client_id, recipe_id, preFetched }: { start: string; end: string; subrecipe_id?: string; client_id?: string; recipe_id?: string; preFetched?: CookingRecipe[] }) {
+  // When no filter is active, this would be an identical call to the
+  // unfiltered fetch the page already made (for the filter dropdown
+  // options) — reuse that instead of hitting the Flask backend twice for
+  // the same data on every single page load.
+  const recipes = preFetched ?? await getCookingOverview(start, end, {
     subrecipe_id: subrecipe_id || undefined,
     client_id: client_id || undefined,
     recipe_id: recipe_id || undefined,
@@ -31,6 +35,8 @@ export default async function CookingPage({ searchParams }: { searchParams: Prom
   const today = new Date().toISOString().slice(0, 10);
   const rangeStart = start ?? today;
   const rangeEnd = end ?? today;
+
+  const hasFilter = Boolean(subrecipe_id || client_id || recipe_id);
 
   const supabase = await createClient();
   const [unfilteredOverview, deliveriesRes] = await Promise.all([
@@ -91,7 +97,14 @@ export default async function CookingPage({ searchParams }: { searchParams: Prom
         </Section>
 
         <Suspense fallback={<BoardFallback />} key={`${rangeStart}-${rangeEnd}-${subrecipe_id}-${client_id}-${recipe_id}`}>
-          <CookingResults start={rangeStart} end={rangeEnd} subrecipe_id={subrecipe_id} client_id={client_id} recipe_id={recipe_id} />
+          <CookingResults
+            start={rangeStart}
+            end={rangeEnd}
+            subrecipe_id={subrecipe_id}
+            client_id={client_id}
+            recipe_id={recipe_id}
+            preFetched={hasFilter ? undefined : unfilteredOverview}
+          />
         </Suspense>
       </div>
     </div>

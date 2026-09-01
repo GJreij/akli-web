@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import { createSubrecipe } from "./actions";
 
 type Subrecipe = Pick<Database["public"]["Tables"]["subrecipe"]["Row"], "id" | "name" | "prep_time" | "kcal" | "freezable" | "max_serving">;
@@ -28,9 +29,12 @@ export default async function SubrecipesPage({ searchParams }: { searchParams: P
           <form action={createSubrecipe} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <input name="name" placeholder="Name" required style={{ ...inputStyle, flex: "1 1 200px" }} />
             <input name="prep_time" placeholder="Prep time" style={{ ...inputStyle, flex: "0 1 120px" }} />
-            <button type="submit" style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            <SubmitButton
+              pendingText="Creating…"
+              style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+            >
               Create & open
-            </button>
+            </SubmitButton>
           </form>
           <p style={{ margin: "8px 0 0", fontSize: 11.5, color: C.light }}>Opens the new subrecipe so you can add ingredients and macros.</p>
         </Section>

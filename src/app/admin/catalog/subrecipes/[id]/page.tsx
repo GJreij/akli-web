@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, primaryButton, dangerButton, subtleButton, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import {
   updateSubrecipe, deleteSubrecipe, addSubrecipeIngredient, removeSubrecipeIngredient,
 } from "../actions";
@@ -87,7 +88,7 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
             </div>
           </Section>
 
-          <button type="submit" style={primaryButton}>Save changes</button>
+          <SubmitButton style={primaryButton} pendingText="Saving…">Save changes</SubmitButton>
         </form>
 
         <Section title={`Ingredients (${composition.length})`}>
@@ -114,7 +115,7 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
                       <td style={{ ...td, color: C.muted }}>{row.optional ? "Yes" : "No"}</td>
                       <td style={td}>
                         <form action={removeAction}>
-                          <button type="submit" style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }}>Remove</button>
+                          <SubmitButton style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }} pendingText="…">Remove</SubmitButton>
                         </form>
                       </td>
                     </tr>
@@ -133,13 +134,13 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
             <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
               <input type="checkbox" name="optional" /> Optional
             </label>
-            <button type="submit" style={subtleButton}>Add ingredient</button>
+            <SubmitButton style={subtleButton} pendingText="Adding…">Add ingredient</SubmitButton>
           </form>
         </Section>
 
         <div style={{ marginTop: 8 }}>
           <form action={deleteAction}>
-            <button type="submit" style={dangerButton}>Delete subrecipe</button>
+            <SubmitButton style={dangerButton} pendingText="Deleting…">Delete subrecipe</SubmitButton>
           </form>
         </div>
       </div>

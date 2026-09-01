@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, dangerButton, subtleButton, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import { deleteWeeklyMenu, addWeeklyMenuRecipe, removeWeeklyMenuRecipe } from "../actions";
 
 type WeeklyMenu = Database["public"]["Tables"]["weekly_menu"]["Row"];
@@ -65,7 +66,7 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
                       <td style={{ ...td, color: C.muted }}>{row.always_available ? "Yes" : "No"}</td>
                       <td style={td}>
                         <form action={removeAction}>
-                          <button type="submit" style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }}>Remove</button>
+                          <SubmitButton style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }} pendingText="…">Remove</SubmitButton>
                         </form>
                       </td>
                     </tr>
@@ -85,13 +86,13 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
             <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
               <input type="checkbox" name="always_available" /> Always available
             </label>
-            <button type="submit" style={subtleButton}>Add recipe</button>
+            <SubmitButton style={subtleButton} pendingText="Adding…">Add recipe</SubmitButton>
           </form>
         </Section>
 
         <div style={{ marginTop: 8 }}>
           <form action={deleteAction}>
-            <button type="submit" style={dangerButton}>Delete weekly menu</button>
+            <SubmitButton style={dangerButton} pendingText="Deleting…">Delete weekly menu</SubmitButton>
           </form>
         </div>
       </div>

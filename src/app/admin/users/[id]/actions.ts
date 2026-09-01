@@ -32,7 +32,10 @@ export async function adminCancelOrder(input: {
   amount?: number;
   note: string;
 }) {
-  await requireAdmin();
+  // Captured once and threaded through to the calls below — they'd otherwise
+  // each redo their own requireAdmin() (auth.getUser() + role lookup) even
+  // though this request already proved the caller is an admin.
+  const adminCtx = await requireAdmin();
 
   const reqRes = await requestCancellation(input.userId, input.mealPlanId);
   if (!reqRes.success || !reqRes.cancellation_request_id) {
@@ -42,13 +45,13 @@ export async function adminCancelOrder(input: {
 
   if (input.mode === "noRefund") {
     if (!input.note.trim()) throw new Error("A reason is required when cancelling with no refund.");
-    await cancelWithNoRefund(cancellationRequestId, input.note);
+    await cancelWithNoRefund(cancellationRequestId, input.note, adminCtx);
   } else if (input.mode === "wallet") {
     if (!input.amount || input.amount <= 0) throw new Error("Enter a credit amount.");
-    await approveAsWalletCredit(cancellationRequestId, input.userId, input.mealPlanId, input.amount, input.note);
+    await approveAsWalletCredit(cancellationRequestId, input.userId, input.mealPlanId, input.amount, input.note, adminCtx);
   } else {
     if (!input.amount || input.amount <= 0) throw new Error("Enter a refund amount.");
-    await approveAsRealRefund(cancellationRequestId, input.amount, input.note);
+    await approveAsRealRefund(cancellationRequestId, input.amount, input.note, adminCtx);
   }
 
   revalidatePath(`/admin/users/${input.userId}`);

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, th, td, C } from "@/components/admin/ui";
+import SubmitButton from "@/components/admin/SubmitButton";
 import { createIngredient } from "./actions";
 
 type Ingredient = Pick<Database["public"]["Tables"]["ingredient"]["Row"], "id" | "name" | "unit" | "kcal" | "protein" | "carbs" | "fat">;
@@ -34,9 +35,12 @@ export default async function IngredientsPage({ searchParams }: { searchParams: 
             <input name="protein" type="number" step="any" placeholder="Protein g" style={{ flex: "0 1 90px", padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }} />
             <input name="carbs" type="number" step="any" placeholder="Carbs g" style={{ flex: "0 1 90px", padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }} />
             <input name="fat" type="number" step="any" placeholder="Fat g" style={{ flex: "0 1 90px", padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 }} />
-            <button type="submit" style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            <SubmitButton
+              pendingText="Adding…"
+              style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+            >
               Add
-            </button>
+            </SubmitButton>
           </form>
           <p style={{ margin: "8px 0 0", fontSize: 11.5, color: C.light }}>Allergens and remaining macros can be set after creating — open the row to edit.</p>
         </Section>
