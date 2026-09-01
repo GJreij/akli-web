@@ -135,9 +135,11 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
     const start = new Date(w.week_start_date + "T12:00:00");
     const end   = new Date(w.week_end_date   + "T12:00:00");
     for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dow = d.getDay();
       const iso = d.toISOString().split("T")[0];
-      if (dow !== 0 && dow !== 6 && iso >= minOrderable) weekdays.push(iso);
+      // Weekends are included here (unlike the client-facing order page) —
+      // OrderFlow's own "include weekends" toggle (admin-only) decides
+      // whether they're actually selectable, not this fetch.
+      if (iso >= minOrderable) weekdays.push(iso);
     }
 
     const recipes: RecipeRow[] = [];
@@ -191,6 +193,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
         cancellationPendingDays={cancellationPendingDays}
         closureDays={closureDays}
         volumeDiscountRules={activeVolumeRules}
+        allowWeekendToggle
       />
     </div>
   );

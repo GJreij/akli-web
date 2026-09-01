@@ -116,6 +116,11 @@ function localISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function isoIsWeekend(iso: string): boolean {
+  const dow = new Date(iso + "T12:00:00").getDay();
+  return dow === 0 || dow === 6;
+}
+
 const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const WALLET_TOPUP_MAX = 100;
@@ -136,7 +141,7 @@ function sanitizeTopupInput(raw: string): string {
   return v;
 }
 
-function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, cancellationPendingDays, closureDays, onPick, onRemoveDay }: {
+function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, cancellationPendingDays, closureDays, weekendsSelectable, onPick, onRemoveDay }: {
   orderableWeeks: OrderableWeek[];
   rangeStart: string | null;
   rangeEnd:   string | null;
@@ -144,6 +149,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
   orderedDays:  Set<string>;
   cancellationPendingDays: Set<string>;
   closureDays:  Map<string, string | null>;
+  // Admin-only: lets weekend days be tapped directly as a start/end point
+  // instead of only ever being swept into a range between two weekdays.
+  weekendsSelectable?: boolean;
   onPick:      (iso: string) => void;
   onRemoveDay: (iso: string) => void;
 }) {
@@ -154,7 +162,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
   // now-too-soon day as available forever.
   const minOrderable = beirutISODate(2);
   const availableSet = new Set(
-    orderableWeeks.flatMap(w => w.weekdays).filter(iso => iso >= minOrderable)
+    orderableWeeks.flatMap(w => w.weekdays)
+      .filter(iso => iso >= minOrderable)
+      .filter(iso => weekendsSelectable || !isoIsWeekend(iso))
   );
 
   // Derive all ISOs in the selected range (available weekdays minus removed minus already-ordered days —
@@ -258,7 +268,9 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   // Already-ordered days (including ones with a cancellation still awaiting
                   // admin review) can't be picked as a start/end point — but they're still
                   // allowed to fall *inside* a chosen range, where they just get auto-skipped.
-                  const disabled    = isWeekend || isPast || !isAvail || isOrdered || isClosed;
+                  // weekendsSelectable (admin-only) lifts the weekend block entirely.
+                  const weekendBlocked = isWeekend && !weekendsSelectable;
+                  const disabled    = weekendBlocked || isPast || !isAvail || isOrdered || isClosed;
                   const isStart     = iso === rangeStart;
                   const isEnd       = iso === rangeEnd;
                   const inRange     = rangeStart && rangeEnd && iso >= rangeStart && iso <= rangeEnd && isAvail;
@@ -267,11 +279,11 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                   const dayNum      = parseInt(iso.split("-")[2], 10);
 
                   // Too-soon = within the 48h notice window (not yet orderable, but not "past" either)
-                  const isTooSoon  = !isPast && !isWeekend && !isAvail && !isOrdered && !isClosed;
+                  const isTooSoon  = !isPast && !weekendBlocked && !isAvail && !isOrdered && !isClosed;
 
                   // Visual state
                   let bg = "transparent";
-                  let color = isWeekend || isPast || isTooSoon ? "#d0cbc5" : "#1a1a1a";
+                  let color = weekendBlocked || isPast || isTooSoon ? "#d0cbc5" : "#1a1a1a";
                   let fontWeight: number = 400;
                   let border = "none";
                   let opacity = 1;
@@ -1508,7 +1520,7 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
 
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
-  cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [], recipeAllergens = {},
+  cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [], recipeAllergens = {}, allowWeekendToggle = false,
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1522,6 +1534,12 @@ export default function OrderFlow({
   closureDays?: { date: string; reason: string | null }[];
   volumeDiscountRules?: VolumeDiscountRule[];
   recipeAllergens?: Record<number, AllergenFlags>;
+  // Admin-only: shows a "include weekends" toggle above the calendar and,
+  // when on, lets Sat/Sun be picked as real order days. Regular client
+  // ordering never sets this, so weekends stay unavailable there exactly as
+  // before — orderableWeeks itself simply never contains weekend dates for
+  // that page.
+  allowWeekendToggle?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
@@ -1535,8 +1553,12 @@ export default function OrderFlow({
   // was filtered to this cutoff when the page loaded, but a stale/backgrounded session
   // must not keep offering (or silently keep selected) a day that's now inside 48h.
   const minOrderable = beirutISODate(2);
+  const [includeWeekends, setIncludeWeekends] = useState(false);
+  const weekendsOn = allowWeekendToggle && includeWeekends;
   const availableSet = new Set(
-    orderableWeeks.flatMap(w => w.weekdays).filter(iso => iso >= minOrderable)
+    orderableWeeks.flatMap(w => w.weekdays)
+      .filter(iso => iso >= minOrderable)
+      .filter(iso => weekendsOn || !isoIsWeekend(iso))
   );
   const orderedDaysSet = new Set(orderedDays);
   const cancellationPendingSet = new Set(cancellationPendingDays);
@@ -1736,7 +1758,7 @@ export default function OrderFlow({
         user_id: userId,
         start_date: sorted[0],
         end_date:   sorted[sorted.length - 1],
-        include_weekends: false,
+        include_weekends: weekendsOn,
         meals: mealsParam,
         kcal_override: finalKcalOverride,
       });
@@ -2032,6 +2054,41 @@ export default function OrderFlow({
 
         <div style={{ flex: 1, padding: "22px 20px 200px" }}>
 
+          {/* ── Admin-only: include weekends toggle ── */}
+          {allowWeekendToggle && (
+            <button
+              onClick={() => {
+                // Flipping this can change which days are even available, so
+                // clear any in-progress selection rather than risk leaving a
+                // day picked as start/end that's no longer selectable.
+                setIncludeWeekends(v => !v);
+                setRangeStart(null);
+                setRangeEnd(null);
+                setRemoved(new Set());
+              }}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                background: includeWeekends ? "#e8f4f4" : C.white,
+                border: `1px solid ${includeWeekends ? C.tealDark : C.border}`,
+                borderRadius: 12, padding: "12px 14px", marginBottom: 14, cursor: "pointer",
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: includeWeekends ? C.tealDark : "#1a1a1a" }}>
+                Include weekends
+              </span>
+              <span style={{
+                position: "relative", width: 38, height: 22, borderRadius: 11, flexShrink: 0,
+                background: includeWeekends ? C.tealDark : C.border, transition: "background 0.15s",
+              }}>
+                <span style={{
+                  position: "absolute", top: 2, left: includeWeekends ? 18 : 2,
+                  width: 18, height: 18, borderRadius: "50%", background: C.white,
+                  transition: "left 0.15s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+                }} />
+              </span>
+            </button>
+          )}
+
           {/* ── Range picker ── */}
           {orderableWeeks.length === 0 ? (
             <p style={{ fontSize: 13.5, color: C.muted, marginBottom: 24 }}>No upcoming weeks available yet.</p>
@@ -2044,6 +2101,7 @@ export default function OrderFlow({
               orderedDays={orderedDaysSet}
               cancellationPendingDays={cancellationPendingSet}
               closureDays={closureDaysMap}
+              weekendsSelectable={weekendsOn}
               onPick={handlePickDay}
               onRemoveDay={handleRemoveDay}
             />
