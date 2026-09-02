@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconChevronLeft, IconChevronRight, IconPlus, IconX,
@@ -717,6 +717,18 @@ function SearchTab({ query, setQuery, results, setResults, onPick }: {
   onPick: (item: FoodCatalogItem) => void;
 }) {
   const [loading, setLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Was autoFocus — that fires the instant this mounts, so the keyboard's
+  // own slide-up animation ran at the same time as the sheet's own
+  // slideUp 0.22s entrance animation. Two competing viewport-resizing
+  // animations at once produced the jumpy "goes up and down" motion (and a
+  // blurred intermediate frame) reported on a phone. Deferring focus past
+  // the sheet's animation lets them happen one after the other instead.
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 260);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (query.trim().length < 2) { setResults([]); return; }
@@ -741,13 +753,12 @@ function SearchTab({ query, setQuery, results, setResults, onPick }: {
       <div style={{ position: "relative", marginBottom: 10 }}>
         <IconSearch size={15} color={C.light} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
         <input
-          autoFocus
+          ref={inputRef}
           placeholder="Search foods — chicken breast, olive oil…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           // 16px is the line iOS Safari uses to decide whether to auto-zoom
-          // a focused input — this one is autoFocus, so at 14px the page
-          // visibly zoomed in the instant the sheet opened on a phone.
+          // a focused input.
           style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 16 }}
         />
       </div>
