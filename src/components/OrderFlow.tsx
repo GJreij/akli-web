@@ -947,7 +947,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
         <div ref={panelRef} style={{
           position: "fixed", top: 126, right: 16, left: 16, margin: "0 auto", maxWidth: 420, zIndex: 40,
           background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
-          boxShadow: "0 10px 28px rgba(6,51,48,0.18)", maxHeight: "65vh", overflowY: "auto",
+          boxShadow: "0 10px 28px rgba(6,51,48,0.18)", maxHeight: "65dvh", overflowY: "auto",
           transform: `translateX(${dragX}px)`,
           opacity: Math.max(1 - Math.abs(dragX) / 200, 0.3),
           transition: draggingRef.current ? "none" : "transform 0.2s, opacity 0.2s",
@@ -1141,7 +1141,7 @@ function ReplaceMealSheet({ meal, recipes, onClose, onSelect, mode = "replace" }
   });
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.white, borderRadius: "18px 18px 0 0", maxHeight: "72vh", display: "flex", flexDirection: "column", animation: "slideUp 0.22s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.white, borderRadius: "18px 18px 0 0", maxHeight: "72dvh", display: "flex", flexDirection: "column", animation: "slideUp 0.22s ease" }}>
         <div style={{ padding: "20px 20px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
           <h3 style={{ margin: "0 0 3px", fontSize: 18 }}>{mode === "add" ? `Add ${meal.meal_type}` : `Replace ${meal.meal_type}`}</h3>
           <p style={{ margin: 0, fontSize: 12.5, color: C.muted }}>Pick something from this week&apos;s menu</p>

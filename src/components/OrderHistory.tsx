@@ -339,7 +339,7 @@ function ReceiptModal({ plan, onClose }: { plan: MealPlan; onClose: () => void }
         onClick={e => e.stopPropagation()}
         style={{
           background: C.white, borderRadius: "20px 20px 0 0",
-          width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto",
+          width: "100%", maxWidth: 480, maxHeight: "90dvh", overflowY: "auto",
           animation: "slideUp 0.3s ease",
         }}
       >
@@ -635,7 +635,7 @@ function CancelOrderSheet({ plan, userId, onClose, onSubmitted }: {
 
   return (
     <div onClick={phase === "done" ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85dvh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
 
         {phase === "select" && (
           <>
@@ -915,7 +915,7 @@ function ChangeOrderSheet({ plan, userId, onClose, onSubmitted }: {
   if (payableDays(plan).length === 0) {
     return (
       <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-        <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85dvh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
             <h3 style={{ margin: 0, fontSize: 18 }}>Change this order</h3>
             <button onClick={onClose} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
@@ -951,7 +951,7 @@ function ChangeOrderSheet({ plan, userId, onClose, onSubmitted }: {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85dvh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
           <h3 style={{ margin: 0, fontSize: 18 }}>Change this order</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
@@ -1139,7 +1139,7 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
 
   return (
     <div onClick={step === "done" ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85dvh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
 
         {step === "pick_day" && (
           <>
@@ -1248,7 +1248,7 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
             ) : compatibleRecipes.length === 0 ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
             ) : (
-              <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
+              <div style={{ maxHeight: "55dvh", overflowY: "auto" }}>
                 {compatibleRecipes.map(r => (
                   <button
                     key={r.id}
@@ -1657,7 +1657,7 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
 
   return (
     <div onClick={step === "done" ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, maxHeight: "85dvh", overflowY: "auto", background: C.white, borderRadius: "18px 18px 0 0", padding: "22px 20px 32px", animation: "slideUp 0.22s ease" }}>
 
         {step === "pick_day" && (
           <>
@@ -1834,7 +1834,7 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
             ) : compatibleRecipes.length === 0 ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
             ) : (
-              <div style={{ maxHeight: "55vh", overflowY: "auto" }}>
+              <div style={{ maxHeight: "55dvh", overflowY: "auto" }}>
                 {compatibleRecipes.map(r => (
                   <button
                     key={r.id}

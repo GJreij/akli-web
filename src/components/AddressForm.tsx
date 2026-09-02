@@ -216,7 +216,8 @@ export default function AddressForm({ userId, existingCount, onSaved, onCancel }
             <input type="text" placeholder="Search for a place (e.g. Dekwaneh, Sin el Fil)" value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === "Enter" && (e.preventDefault(), searchAddress())}
-              style={{ flex: 1, fontSize: 12.5, padding: "8px 10px" }} />
+              // 16px minimum — below it iOS Safari auto-zooms on focus.
+              style={{ flex: 1, fontSize: 16, padding: "8px 10px" }} />
             <button type="button" onClick={searchAddress} disabled={searching || !searchQuery.trim()}
               style={{ padding: "8px 12px", fontSize: 12.5, flexShrink: 0 }}>
               {searching ? "…" : "Search"}

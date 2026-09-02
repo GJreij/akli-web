@@ -68,8 +68,10 @@ export default function RecipeComment({
       onChange={e => setDraft(e.target.value)}
       onBlur={handleBlur}
       placeholder="e.g. no onions"
+      // 16px minimum — this is autoFocus, so at 12px iOS Safari zoomed the
+      // whole page in the instant this input appeared.
       style={{
-        width: "100%", marginTop: 6, fontSize: 12, padding: "6px 9px",
+        width: "100%", marginTop: 6, fontSize: 16, padding: "6px 9px",
         border: "1px solid #e0dbd5", borderRadius: 8, background: "#fff",
         opacity: saving ? 0.7 : 1, transition: "opacity 0.15s",
       }}

@@ -202,7 +202,7 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 16 }}>
-      <div style={{ background: C.white, borderRadius: 16, padding: 22, width: "100%", maxWidth: 680, maxHeight: "85vh", overflowY: "auto" }}>
+      <div style={{ background: C.white, borderRadius: 16, padding: 22, width: "100%", maxWidth: 680, maxHeight: "85dvh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
           <h3 style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 19, color: C.primary }}>
             Portion {targets.map(t => t.name).join(" + ")}

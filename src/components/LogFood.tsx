@@ -372,7 +372,7 @@ function QuantityStep({ item, presetMealType, onAdd, onBack }: {
               type="number"
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value) || 0)}
-              style={{ width: "100%", marginTop: 4, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 15 }}
+              style={{ width: "100%", marginTop: 4, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 16 }}
             />
           </div>
         )}
@@ -384,7 +384,7 @@ function QuantityStep({ item, presetMealType, onAdd, onBack }: {
             type="number"
             value={count}
             onChange={(e) => setCount(Number(e.target.value) || 0)}
-            style={{ width: selectedUnit.key === "serving" ? "100%" : 80, marginTop: 4, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 15 }}
+            style={{ width: selectedUnit.key === "serving" ? "100%" : 80, marginTop: 4, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 16 }}
           />
         </div>
       </div>
@@ -474,7 +474,7 @@ function SubmitUnknownForm({ barcode, onSubmitted, onBack }: {
     }
   }
 
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${C.border}`, fontSize: 13.5 };
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${C.border}`, fontSize: 16 };
 
   return (
     <div>
@@ -568,7 +568,7 @@ function QuickAddForm({ presetMealType, onAdd }: {
   const [eatenAmount, setEatenAmount] = useState("");
   const [mealType, setMealType] = useState<MealType>(presetMealType ?? defaultMealType());
 
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${C.border}`, fontSize: 13.5 };
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "9px 11px", borderRadius: 9, border: `1px solid ${C.border}`, fontSize: 16 };
 
   const scale = (Number(eatenAmount) || 0) / (Number(refAmount) || 1);
   const scaledMacros = {
@@ -745,7 +745,10 @@ function SearchTab({ query, setQuery, results, setResults, onPick }: {
           placeholder="Search foods — chicken breast, olive oil…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14 }}
+          // 16px is the line iOS Safari uses to decide whether to auto-zoom
+          // a focused input — this one is autoFocus, so at 14px the page
+          // visibly zoomed in the instant the sheet opened on a phone.
+          style={{ width: "100%", padding: "10px 12px 10px 34px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 16 }}
         />
       </div>
       {loading && <p style={{ fontSize: 12, color: C.light, textAlign: "center", padding: "10px 0" }}>Searching…</p>}
@@ -887,7 +890,7 @@ function AddFoodSheet({ userId, date, presetMealType, onClose, onAdded }: {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto",
+          width: "100%", maxWidth: 480, maxHeight: "88dvh", overflowY: "auto",
           background: C.white, borderRadius: "18px 18px 0 0", padding: "20px 20px 32px",
         }}
       >

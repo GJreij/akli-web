@@ -357,7 +357,8 @@ function DiaryTargetSection({ userId, current, onSaved }: {
     });
   }
 
-  const inputStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 };
+  // 16px minimum — below it iOS Safari auto-zooms the page on focus.
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 16 };
 
   return (
     <div style={{ background: C.offWhite, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
