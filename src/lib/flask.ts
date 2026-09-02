@@ -577,6 +577,102 @@ export async function getCookingOverview(
   return res.json();
 }
 
+function dedupeByKey<T>(items: T[], keyFn: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = keyFn(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function mergeIngredients(target: CookingIngredient[], source: CookingIngredient[]) {
+  const byId = new Map(target.map(i => [i.ingredient_id, i]));
+  for (const ing of source) {
+    const existing = byId.get(ing.ingredient_id);
+    if (!existing) {
+      const copy = { ...ing };
+      target.push(copy);
+      byId.set(ing.ingredient_id, copy);
+      continue;
+    }
+    const existingQty = existing.total_quantity ?? existing.quantity ?? 0;
+    const addQty = ing.total_quantity ?? ing.quantity ?? 0;
+    if (existing.total_quantity !== undefined || ing.total_quantity !== undefined) {
+      existing.total_quantity = existingQty + addQty;
+    } else {
+      existing.quantity = existingQty + addQty;
+    }
+  }
+}
+
+// The backend only filters /cooking/overview by a single client_id (an array
+// is silently treated as "no match"), so a multi-client filter is built here
+// instead: fetch once per selected client and sum the per-client totals —
+// each client's own numbers are already correctly aggregated across the date
+// range, and the totals are purely additive across clients.
+export function mergeCookingOverviews(results: CookingRecipe[][]): CookingRecipe[] {
+  const byRecipe = new Map<number, CookingRecipe>();
+
+  for (const recipes of results) {
+    for (const r of recipes) {
+      const existing = byRecipe.get(r.recipe_id);
+      if (!existing) {
+        byRecipe.set(r.recipe_id, {
+          ...r,
+          meal_plan_day_recipe_ids: [...r.meal_plan_day_recipe_ids],
+          ingredients_needed: r.ingredients_needed.map(i => ({ ...i })),
+          subrecipes: r.subrecipes.map(s => ({
+            ...s,
+            selected_meal_plan_day_recipe_serving_id: [...s.selected_meal_plan_day_recipe_serving_id],
+            ingredients_needed: s.ingredients_needed.map(i => ({ ...i })),
+          })),
+          comments: [...r.comments],
+          allergen_conflicts: r.allergen_conflicts ? [...r.allergen_conflicts] : r.allergen_conflicts,
+        });
+        continue;
+      }
+
+      existing.meal_plan_day_recipe_ids = [...new Set([...existing.meal_plan_day_recipe_ids, ...r.meal_plan_day_recipe_ids])];
+      existing.any_swapped = existing.any_swapped || r.any_swapped;
+      if (r.earliest_date < existing.earliest_date) existing.earliest_date = r.earliest_date;
+      existing.comments = dedupeByKey([...existing.comments, ...r.comments], c => `${c.user_id}|${c.created_at}|${c.comment}`);
+      if (r.allergen_conflicts?.length) {
+        existing.allergen_conflicts = dedupeByKey(
+          [...(existing.allergen_conflicts ?? []), ...r.allergen_conflicts],
+          c => `${c.user_id}|${c.name}`
+        );
+      }
+      mergeIngredients(existing.ingredients_needed, r.ingredients_needed);
+
+      const subById = new Map(existing.subrecipes.map(s => [s.subrecipe_id, s]));
+      for (const s of r.subrecipes) {
+        const existingSub = subById.get(s.subrecipe_id);
+        if (!existingSub) {
+          const copy = {
+            ...s,
+            selected_meal_plan_day_recipe_serving_id: [...s.selected_meal_plan_day_recipe_serving_id],
+            ingredients_needed: s.ingredients_needed.map(i => ({ ...i })),
+          };
+          existing.subrecipes.push(copy);
+          subById.set(copy.subrecipe_id, copy);
+          continue;
+        }
+        existingSub.total_servings += s.total_servings;
+        existingSub.selected_meal_plan_day_recipe_serving_id = [
+          ...new Set([...existingSub.selected_meal_plan_day_recipe_serving_id, ...s.selected_meal_plan_day_recipe_serving_id]),
+        ];
+        mergeIngredients(existingSub.ingredients_needed, s.ingredients_needed);
+      }
+    }
+  }
+
+  return [...byRecipe.values()];
+}
+
 // ─── /portioning/summary ─────────────────────────────────────────────────────
 
 export interface PortioningClient {
