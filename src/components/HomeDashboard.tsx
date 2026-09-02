@@ -10,6 +10,7 @@ import {
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import DietWizard from "@/components/DietWizard";
+import ViewToggle from "@/components/ViewToggle";
 
 type UserRow  = Database["public"]["Tables"]["user"]["Row"];
 type MacroRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
@@ -427,6 +428,8 @@ export default function HomeDashboard({
           {name ? `${greeting}, ${name}.` : greeting + "."}
         </h2>
 
+        <ViewToggle active="home" userId={profile?.id ?? null} />
+
         {affiliateInfo && <AffiliateBadge tier={affiliateInfo.tier} codes={affiliateInfo.codes} />}
 
         {/* Macro card inside hero — edit icon opens the diet wizard */}
@@ -488,11 +491,11 @@ export default function HomeDashboard({
         {/* Primary CTA — the one action that matters most, full-width and unmistakable */}
         <button
           className="btn-primary"
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, padding: "14px 0", marginBottom: 14, lineHeight: 1 }}
+          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, padding: "14px 0", marginBottom: 28, lineHeight: 1 }}
           onClick={() => router.push("/order/new")}
         >
           <IconShoppingBag size={17} style={{ flexShrink: 0, display: "block" }} />
-          <span style={{ lineHeight: 1 }}>Order this week</span>
+          <span style={{ lineHeight: 1 }}>Start a new order</span>
         </button>
 
         {/* Secondary actions — clearly tappable cards, but visually a step down from the CTA above */}

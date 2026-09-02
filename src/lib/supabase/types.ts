@@ -372,6 +372,10 @@ export type Database = {
           activity_level: number | null
           carbs_g: number | null
           created_at: string
+          diary_carbs_g: number | null
+          diary_fat_g: number | null
+          diary_kcal_target: number | null
+          diary_protein_g: number | null
           diet_type: string | null
           fat_g: number | null
           fiber_g: number | null
@@ -394,6 +398,10 @@ export type Database = {
           activity_level?: number | null
           carbs_g?: number | null
           created_at?: string
+          diary_carbs_g?: number | null
+          diary_fat_g?: number | null
+          diary_kcal_target?: number | null
+          diary_protein_g?: number | null
           diet_type?: string | null
           fat_g?: number | null
           fiber_g?: number | null
@@ -416,6 +424,10 @@ export type Database = {
           activity_level?: number | null
           carbs_g?: number | null
           created_at?: string
+          diary_carbs_g?: number | null
+          diary_fat_g?: number | null
+          diary_kcal_target?: number | null
+          diary_protein_g?: number | null
           diet_type?: string | null
           fat_g?: number | null
           fiber_g?: number | null
@@ -654,6 +666,202 @@ export type Database = {
             columns: ["delivery_slot_id"]
             isOneToOne: false
             referencedRelation: "delivery_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      food_catalog_item: {
+        Row: {
+          barcode: string | null
+          brand: string | null
+          carbs_per_100: number | null
+          created_at: string
+          default_serving_label: string | null
+          default_serving_qty: number | null
+          default_serving_unit: string | null
+          external_id: string | null
+          fat_per_100: number | null
+          fiber_per_100: number | null
+          id: number
+          kcal_per_100: number | null
+          name: string
+          protein_per_100: number | null
+          rejection_note: string | null
+          saturated_fat_per_100: number | null
+          sodium_mg_per_100: number | null
+          source: string
+          status: string
+          submitted_by: string | null
+          sugar_per_100: number | null
+          updated_at: string | null
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          brand?: string | null
+          carbs_per_100?: number | null
+          created_at?: string
+          default_serving_label?: string | null
+          default_serving_qty?: number | null
+          default_serving_unit?: string | null
+          external_id?: string | null
+          fat_per_100?: number | null
+          fiber_per_100?: number | null
+          id?: never
+          kcal_per_100?: number | null
+          name: string
+          protein_per_100?: number | null
+          rejection_note?: string | null
+          saturated_fat_per_100?: number | null
+          sodium_mg_per_100?: number | null
+          source: string
+          status?: string
+          submitted_by?: string | null
+          sugar_per_100?: number | null
+          updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          brand?: string | null
+          carbs_per_100?: number | null
+          created_at?: string
+          default_serving_label?: string | null
+          default_serving_qty?: number | null
+          default_serving_unit?: string | null
+          external_id?: string | null
+          fat_per_100?: number | null
+          fiber_per_100?: number | null
+          id?: never
+          kcal_per_100?: number | null
+          name?: string
+          protein_per_100?: number | null
+          rejection_note?: string | null
+          saturated_fat_per_100?: number | null
+          sodium_mg_per_100?: number | null
+          source?: string
+          status?: string
+          submitted_by?: string | null
+          sugar_per_100?: number | null
+          updated_at?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_catalog_item_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_catalog_item_verified_by_fkey"
+            columns: ["verified_by"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      food_log_entry: {
+        Row: {
+          brand_snapshot: string | null
+          carbs_g: number
+          created_at: string
+          entry_source: string
+          fat_g: number
+          fiber_g: number | null
+          food_catalog_item_id: number | null
+          hidden_by_user: boolean
+          id: number
+          kcal: number
+          log_date: string
+          meal_plan_day_recipe_id: number | null
+          meal_type: string
+          name_snapshot: string
+          protein_g: number
+          quantity: number
+          quantity_unit: string
+          saturated_fat_g: number | null
+          sodium_mg: number | null
+          sugar_g: number | null
+          tenant_id: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brand_snapshot?: string | null
+          carbs_g: number
+          created_at?: string
+          entry_source: string
+          fat_g: number
+          fiber_g?: number | null
+          food_catalog_item_id?: number | null
+          hidden_by_user?: boolean
+          id?: never
+          kcal: number
+          log_date: string
+          meal_plan_day_recipe_id?: number | null
+          meal_type: string
+          name_snapshot: string
+          protein_g: number
+          quantity: number
+          quantity_unit?: string
+          saturated_fat_g?: number | null
+          sodium_mg?: number | null
+          sugar_g?: number | null
+          tenant_id?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          brand_snapshot?: string | null
+          carbs_g?: number
+          created_at?: string
+          entry_source?: string
+          fat_g?: number
+          fiber_g?: number | null
+          food_catalog_item_id?: number | null
+          hidden_by_user?: boolean
+          id?: never
+          kcal?: number
+          log_date?: string
+          meal_plan_day_recipe_id?: number | null
+          meal_type?: string
+          name_snapshot?: string
+          protein_g?: number
+          quantity?: number
+          quantity_unit?: string
+          saturated_fat_g?: number | null
+          sodium_mg?: number | null
+          sugar_g?: number | null
+          tenant_id?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_log_entry_food_catalog_item_id_fkey"
+            columns: ["food_catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "food_catalog_item"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_log_entry_meal_plan_day_recipe_id_fkey"
+            columns: ["meal_plan_day_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "meal_plan_day_recipe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_log_entry_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user"
             referencedColumns: ["id"]
           },
         ]
@@ -1624,6 +1832,7 @@ export type Database = {
           eggs: boolean
           email: string | null
           fish: boolean
+          home_screen_default: string
           id: string
           is_guest: boolean
           last_name: string | null
@@ -1654,6 +1863,7 @@ export type Database = {
           eggs?: boolean
           email?: string | null
           fish?: boolean
+          home_screen_default?: string
           id: string
           is_guest?: boolean
           last_name?: string | null
@@ -1684,6 +1894,7 @@ export type Database = {
           eggs?: boolean
           email?: string | null
           fish?: boolean
+          home_screen_default?: string
           id?: string
           is_guest?: boolean
           last_name?: string | null

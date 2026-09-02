@@ -13,6 +13,8 @@
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.0",
     "@tabler/icons-react": "^3.34.0",
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "0.23.0",
     "leaflet": "^1.9.4",
     "next": "^15.5.19",
     "next-pwa": "^5.6.0",

@@ -55,3 +55,17 @@ export const subtleButton: React.CSSProperties = {
 
 export const th: React.CSSProperties = { padding: "8px 10px", textAlign: "left", color: C.light, fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.03em" };
 export const td: React.CSSProperties = { padding: "8px 10px", fontSize: 13, borderTop: `1px solid ${C.offWhite}` };
+
+// Generalizes the STATUS_CONFIG/pill pattern duplicated inline in
+// OrderHistory.tsx and Profile.tsx — first admin page needing a status
+// badge, so it lives here to be reused going forward.
+export function StatusPill({ label, bg, color }: { label: string; bg: string; color: string }) {
+  return (
+    <span style={{
+      fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
+      padding: "2px 8px", borderRadius: 20, background: bg, color,
+    }}>
+      {label}
+    </span>
+  );
+}

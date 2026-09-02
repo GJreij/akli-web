@@ -6,9 +6,9 @@ import HomeDashboard from "@/components/HomeDashboard";
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ admin?: string }>;
+  searchParams: Promise<{ admin?: string; dashboard?: string }>;
 }) {
-  const { admin: adminOverride } = await searchParams;
+  const { admin: adminOverride, dashboard: dashboardOverride } = await searchParams;
   const supabase = await createClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -44,6 +44,11 @@ export default async function HomePage({
 
   const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
   if (profile?.role === "admin" && adminOverride !== "1") redirect("/admin");
+  // A user can set Log Food as their default landing screen (below in
+  // /profile) — this is the corresponding bypass, mirroring the admin
+  // override above, so links back to "/home" (e.g. from /log-food) don't
+  // loop straight back out.
+  if (profile?.home_screen_default === "log_food" && dashboardOverride !== "1") redirect("/log-food");
 
   // Affiliate/ambassador/athlete badge, if this user is an active member of the program.
   const affiliateRowRes = await supabase

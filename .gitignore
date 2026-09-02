@@ -13,3 +13,5 @@ out/
 .DS_Store
 *.pem
 npm-debug.log*
+
+certificates

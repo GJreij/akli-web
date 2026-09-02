@@ -25,6 +25,7 @@ const TABS = [
   { href: "/admin/financial", label: "Financial" },
   { href: "/admin/cancellations", label: "Cancellations" },
   { href: "/admin/wallet-topups", label: "Wallet top-ups" },
+  { href: "/admin/food-review", label: "Food review" },
   { href: "/admin/analytics", label: "Analytics" },
 ];
 

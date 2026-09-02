@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconUser, IconChevronDown,
-  IconPencil, IconCheck, IconBrandWhatsapp, IconWallet,
+  IconPencil, IconCheck, IconBrandWhatsapp, IconWallet, IconInfoCircle,
 } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/client";
+import { track } from "@/lib/analytics";
 import ProfileAddresses from "@/components/ProfileAddresses";
 import DietWizard from "@/components/DietWizard";
 import { COUNTRY_CODES } from "@/lib/theme";
@@ -279,13 +280,165 @@ function AccountInfo({ profile }: { profile: UserRow | null }) {
   );
 }
 
+// ─── Diary tracking target ──────────────────────────────────────────────────
+// A second, optional target — what the Food Diary tracks against, separate
+// from what gets ordered. Off by default (diary tracks the same number you
+// order); turning it on sets diary_* columns, turning it off nulls them out
+// again, which is exactly the fallback the diary already reads.
+
+function DiaryTargetSection({ userId, current, onSaved }: {
+  userId: string;
+  current: MacroRow | null;
+  onSaved: (m: MacroRow) => void;
+}) {
+  const hasCustom = current?.diary_kcal_target != null;
+  const [enabled, setEnabled] = useState(hasCustom);
+  const [protein, setProtein] = useState(String(Math.round(current?.diary_protein_g ?? current?.protein_g ?? 0)));
+  const [carbs, setCarbs] = useState(String(Math.round(current?.diary_carbs_g ?? current?.carbs_g ?? 0)));
+  const [fat, setFat] = useState(String(Math.round(current?.diary_fat_g ?? current?.fat_g ?? 0)));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  if (!current) return null; // nothing to build a diary target on top of yet
+
+  // Kcal is derived from macros (4 kcal/g protein & carbs, 9 kcal/g fat —
+  // same Atwater factors already used in src/lib/macros.ts), not typed in
+  // separately, so the two can never disagree.
+  const computedKcal = Math.round((Number(protein) || 0) * 4 + (Number(carbs) || 0) * 4 + (Number(fat) || 0) * 9);
+
+  function flashSaved() {
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 2000);
+  }
+
+  // daily_macro_target has no UPDATE policy — every change (order target or
+  // diary target) is a new row, same append-only history DietWizard already
+  // uses. This carries the current order-target fields forward unchanged.
+  async function persist(diary: { diary_kcal_target: number | null; diary_protein_g: number | null; diary_carbs_g: number | null; diary_fat_g: number | null }) {
+    setSaving(true); setErr(null);
+    try {
+      const supabase = createClient();
+      const { data, error } = await (supabase.from("daily_macro_target") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+        .insert({
+          user_id: userId, tenant_id: current!.tenant_id,
+          kcal_target: current!.kcal_target, protein_g: current!.protein_g, carbs_g: current!.carbs_g, fat_g: current!.fat_g,
+          diet_type: current!.diet_type, goal: current!.goal, sex: current!.sex,
+          height_cm: current!.height_cm, weight_kg: current!.weight_kg, activity_level: current!.activity_level, method: current!.method,
+          source: "diary_target_update",
+          ...diary,
+        })
+        .select("*")
+        .single();
+      if (error) throw new Error(error.message);
+      track("diary_target_saved", { enabled: diary.diary_kcal_target != null, kcal: diary.diary_kcal_target }, "food_diary");
+      onSaved(data as MacroRow);
+      flashSaved();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not save this.";
+      track("food_log_error", { stage: "diary_target_save", message }, "food_diary");
+      setErr(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function turnOff() {
+    setEnabled(false);
+    persist({ diary_kcal_target: null, diary_protein_g: null, diary_carbs_g: null, diary_fat_g: null });
+  }
+
+  function save() {
+    persist({
+      diary_kcal_target: computedKcal,
+      diary_protein_g: Number(protein) || 0,
+      diary_carbs_g: Number(carbs) || 0,
+      diary_fat_g: Number(fat) || 0,
+    });
+  }
+
+  const inputStyle: React.CSSProperties = { width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13 };
+
+  return (
+    <div style={{ background: C.offWhite, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "#1a1a1a", margin: 0 }}>Diary tracking target</p>
+        {savedFlash && <span style={{ fontSize: 11, color: "#15803d", fontWeight: 600 }}>Saved</span>}
+      </div>
+
+      {!enabled ? (
+        <>
+          <p style={{ fontSize: 12, color: C.muted, margin: "0 0 10px" }}>
+            Currently turned Off — your Food Diary tracks the same number you order ({Math.round(current.kcal_target ?? 0).toLocaleString()} kcal).
+            Change that if you want to log a different number than what you order.
+          </p>
+          <button
+            onClick={() => setEnabled(true)}
+            style={{ background: "none", border: `1.5px solid ${C.tealDark}`, borderRadius: 8, padding: "8px 14px", color: C.tealDark, fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}
+          >
+            Set a custom diary target
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{
+            display: "flex", gap: 8, alignItems: "flex-start", background: "#eef4ff", border: "1px solid #d6e4ff",
+            borderRadius: 8, padding: "8px 10px", margin: "6px 0 12px",
+          }}>
+            <IconInfoCircle size={15} color="#2563eb" style={{ flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: 11.5, color: "#1e3a5f", margin: 0, lineHeight: 1.4 }}>
+              This changes <strong>only</strong> what your Food Diary tracks against. It does <strong>not</strong> change
+              what Akli builds or delivers in your order — orders still target {Math.round(current.kcal_target ?? 0).toLocaleString()} kcal.
+            </p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 4 }}>
+            <label style={{ fontSize: 11, color: C.light }}>
+              Protein (g)
+              <input type="number" value={protein} onChange={(e) => setProtein(e.target.value)} style={{ ...inputStyle, marginTop: 3 }} />
+            </label>
+            <label style={{ fontSize: 11, color: C.light }}>
+              Carbs (g)
+              <input type="number" value={carbs} onChange={(e) => setCarbs(e.target.value)} style={{ ...inputStyle, marginTop: 3 }} />
+            </label>
+            <label style={{ fontSize: 11, color: C.light }}>
+              Fat (g)
+              <input type="number" value={fat} onChange={(e) => setFat(e.target.value)} style={{ ...inputStyle, marginTop: 3 }} />
+            </label>
+          </div>
+
+          <p style={{ fontSize: 11.5, color: C.muted, margin: "0 0 10px" }}>
+            Kcal (calculated): <strong style={{ color: C.primary }}>{computedKcal.toLocaleString()}</strong>
+          </p>
+
+          {err && <p style={{ fontSize: 11.5, color: C.error, margin: "0 0 8px" }}>{err}</p>}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={save} disabled={saving} className="btn-primary" style={{ flex: 1, padding: "9px 0", fontSize: 12.5 }}>
+              {saving ? "Saving…" : "Save diary target"}
+            </button>
+            <button
+              onClick={turnOff}
+              disabled={saving}
+              style={{ padding: "9px 14px", fontSize: 12.5, background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, cursor: "pointer" }}
+            >
+              Turn off
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Diet section ────────────────────────────────────────────────────────────────
 
-function DietSection({ userId, profile, macroHistory, onWizardSaved }: {
+function DietSection({ userId, profile, macroHistory, onWizardSaved, onDiaryTargetSaved }: {
   userId: string;
   profile: UserRow | null;
   macroHistory: MacroRow[];
   onWizardSaved: (m: MacroRow) => void;
+  onDiaryTargetSaved: (m: MacroRow) => void;
 }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
@@ -298,7 +451,7 @@ function DietSection({ userId, profile, macroHistory, onWizardSaved }: {
       {current ? (
         <div style={{ background: C.offWhite, borderRadius: 10, padding: "12px 14px", marginBottom: 12 }}>
           <p style={{ fontSize: 11, color: C.light, margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            Current daily target
+            Current order target
           </p>
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
             {[
@@ -327,6 +480,8 @@ function DietSection({ userId, profile, macroHistory, onWizardSaved }: {
       ) : (
         <p style={{ fontSize: 13, color: C.light, margin: "0 0 12px" }}>No diet set up yet.</p>
       )}
+
+      <DiaryTargetSection userId={userId} current={current} onSaved={onDiaryTargetSaved} />
 
       <button onClick={() => setWizardOpen(true)} className="btn-primary" style={{ width: "100%", marginBottom: history.length > 0 ? 16 : 0 }}>
         Update my diet
@@ -507,6 +662,12 @@ export default function Profile({ userId, profile, macroHistory, addresses, wall
     setTimeout(() => setSavedFlash(false), 2500);
   }
 
+  // Same append-only history as handleDietSaved — daily_macro_target has no
+  // UPDATE policy, so a diary target change is also a new row.
+  function handleDiaryTargetSaved(m: MacroRow) {
+    setMacroHistoryState(prev => [m, ...prev]);
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: C.offWhite, display: "flex", flexDirection: "column" }}>
       {/* Hero header */}
@@ -609,7 +770,7 @@ export default function Profile({ userId, profile, macroHistory, addresses, wall
         </Section>
 
         <Section title="Your diet" subtitle="Current target, history, and updates" defaultOpen>
-          <DietSection userId={userId} profile={profile} macroHistory={macroHistoryState} onWizardSaved={handleDietSaved} />
+          <DietSection userId={userId} profile={profile} macroHistory={macroHistoryState} onWizardSaved={handleDietSaved} onDiaryTargetSaved={handleDiaryTargetSaved} />
         </Section>
 
         <Section title="Delivery addresses" subtitle="Manage where Akli delivers to you">
