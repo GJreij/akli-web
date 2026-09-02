@@ -20,10 +20,19 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q")?.trim();
   const usdaExternalId = searchParams.get("usdaDensityFor")?.trim();
 
-  if (barcode) return handleBarcodeLookup(barcode);
-  if (q) return handleNameSearch(q);
-  if (usdaExternalId) return handleUsdaDensity(usdaExternalId);
-  return NextResponse.json({ error: "Provide a barcode, q, or usdaDensityFor parameter" }, { status: 400 });
+  try {
+    if (barcode) return await handleBarcodeLookup(barcode);
+    if (q) return await handleNameSearch(q);
+    if (usdaExternalId) return await handleUsdaDensity(usdaExternalId);
+    return NextResponse.json({ error: "Provide a barcode, q, or usdaDensityFor parameter" }, { status: 400 });
+  } catch (e) {
+    // None of the OpenFoodFacts/USDA fetches below have their own try/catch —
+    // a network failure or bad JSON from either third-party API used to
+    // reach here as an unhandled rejection (bare 500, nothing logged, no way
+    // to tell "USDA is down" from a real bug).
+    console.error("food lookup failed:", { barcode, q, usdaExternalId, error: e });
+    return NextResponse.json({ error: "Food lookup failed" }, { status: 500 });
+  }
 }
 
 // Separate from the catalog lookup above — this never touches the database,
