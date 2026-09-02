@@ -18,6 +18,48 @@ export function scaleMacros(item: FoodCatalogItem, quantity: number) {
   };
 }
 
+// ─── Search relevance ─────────────────────────────────────────────────────────
+// USDA (and by convention, our own cached/user-submitted rows) name foods as
+// "Head ingredient, descriptor, descriptor" — e.g. "Croissants, apple" vs.
+// "Apples, raw, with skin". A query matching the head is the actual food
+// someone means; a query only matching a later descriptor is a modifier hit
+// (a dish that happens to contain/taste of that ingredient). Without this
+// distinction, searching "apple" ranked "Croissants, apple" and "Strudel,
+// apple" ahead of the plain fruit — technically all substring matches, but
+// backwards from what a plain-ingredient query means.
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hasWord(haystack: string, word: string) {
+  return new RegExp(`\\b${escapeRegExp(word)}\\b`).test(haystack);
+}
+
+export function scoreFoodMatch(name: string, query: string): number {
+  const n = name.toLowerCase().trim();
+  const q = query.toLowerCase().trim();
+  const segments = n.split(",");
+  const head = segments[0].trim();
+  const words = q.split(/\s+/).filter(Boolean);
+
+  let tier: number;
+  // Exact head match, allowing for simple pluralization either direction
+  // ("apple" query vs. "Apples, raw" head) — the strongest possible signal.
+  if (head === q || head === `${q}s` || head === `${q}es` || `${head}s` === q) tier = 100;
+  else if (head.startsWith(q)) tier = 90;
+  else if (hasWord(head, q) || words.every((w) => hasWord(head, w))) tier = 75;
+  // Matches, but only in a descriptor — e.g. "apple" inside "Croissants, apple".
+  else if (hasWord(n, q) || words.every((w) => hasWord(n, w))) tier = 45;
+  else tier = 10; // raw substring only (e.g. mid-word) — still shown, ranked last
+
+  // Tiebreak within a tier: fewer descriptors reads as the more "plain"/
+  // default form of a food — "Apples, raw, without skin" over "Apples,
+  // dried, sulfured, uncooked" for a bare "apple" query. Scaled small enough
+  // to never cross tiers (tiers are 15+ apart).
+  return tier - (segments.length - 1) * 0.1;
+}
+
 // ─── OpenFoodFacts ───────────────────────────────────────────────────────────
 
 interface OffNutriments {
