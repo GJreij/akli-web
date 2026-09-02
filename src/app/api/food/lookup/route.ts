@@ -117,10 +117,21 @@ async function cacheUsdaResults(items: Awaited<ReturnType<typeof searchUsdaFdc>>
   return cached;
 }
 
+// Treats "-", ",", "/" and "_" the same as a space between words — someone
+// typing "apple-banana-lemon" or "apple, banana, lemon" means the same
+// per-word search as "apple banana lemon"; queryLocalCatalog's word split
+// only understood whitespace, so a hyphenated/comma query fell through as
+// one unmatchable literal substring and searchUsdaFdc got the same raw
+// string, which fares little better against USDA's own search.
+function normalizeQuery(q: string) {
+  return q.replace(/[-,_/]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 // Generic (raw/unbranded) results only, unless and until none exist at all —
 // searching "chicken breast" shouldn't surface a wall of near-duplicate
 // brand variants when the plain ingredient is what most people mean.
-async function handleNameSearch(q: string) {
+async function handleNameSearch(rawQ: string) {
+  const q = normalizeQuery(rawQ);
   const genericLocal = await queryLocalCatalog(q, { genericOnly: true });
   // Only trust local cache alone once it's a genuinely full page — a single
   // weak/incidental local match (e.g. "Mayonnaise ... with olive oil"

@@ -113,7 +113,14 @@ const USDA_DATA_TYPES: Record<UsdaTier, string> = {
 
 export async function searchUsdaFdc(query: string, tier: UsdaTier, pageSize = 8) {
   const apiKey = process.env.USDA_FDC_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) {
+    // Silent before this — a missing key meant every search just quietly
+    // fell back to whatever was already cached, indistinguishable from "no
+    // matches" from the outside. Confirmed live: production was missing
+    // this var entirely and nothing anywhere logged it.
+    console.warn("searchUsdaFdc: USDA_FDC_API_KEY is not set — USDA results are unavailable");
+    return [];
+  }
 
   const params = new URLSearchParams({
     query,
@@ -122,7 +129,10 @@ export async function searchUsdaFdc(query: string, tier: UsdaTier, pageSize = 8)
     api_key: apiKey,
   });
   const res = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?${params.toString()}`);
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.error(`searchUsdaFdc: USDA search failed (${res.status})`, await res.text().catch(() => ""));
+    return [];
+  }
   const json = (await res.json()) as UsdaSearchResponse;
 
   return (json.foods ?? []).map((food) => {
@@ -188,9 +198,15 @@ function normalizeUnitName(raw: string | undefined | null): keyof UsdaPortionWei
 
 export async function fetchUsdaPortionWeights(externalId: string): Promise<UsdaPortionWeights | null> {
   const apiKey = process.env.USDA_FDC_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.warn("fetchUsdaPortionWeights: USDA_FDC_API_KEY is not set — portion weights are unavailable");
+    return null;
+  }
   const res = await fetch(`https://api.nal.usda.gov/fdc/v1/food/${externalId}?api_key=${apiKey}`);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.error(`fetchUsdaPortionWeights: USDA detail fetch failed (${res.status})`, await res.text().catch(() => ""));
+    return null;
+  }
   const json = (await res.json()) as { foodPortions?: UsdaFoodPortion[] };
 
   const weights: UsdaPortionWeights = {};
