@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Akli</string>
+    <string name="title_activity_main">Akli</string>
+    <string name="package_name">org.aklilb.app</string>
+    <string name="custom_url_scheme">org.aklilb.app</string>
+</resources>

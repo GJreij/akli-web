@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
+import NativeShell from "@/components/NativeShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Suspense fallback={null}>
           <AnalyticsTracker />
         </Suspense>
+        <NativeShell />
         {children}
       </body>
     </html>
