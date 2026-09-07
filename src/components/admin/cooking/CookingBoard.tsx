@@ -170,14 +170,11 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                 <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.offWhite}` }}>
                   {r.comments.length > 0 && (
                     <div style={{ margin: "12px 0" }}>
-                      {r.comments.map((c, i) => {
-                        const flagged = r.comments.length > 1;
-                        return (
-                          <p key={i} style={{ margin: "0 0 4px", fontSize: 12.5, color: flagged ? C.error : undefined }}>
-                            <strong>{c.name}:</strong> <span style={{ color: flagged ? C.error : C.muted }}>{c.comment}</span>
-                          </p>
-                        );
-                      })}
+                      {r.comments.map((c, i) => (
+                        <p key={i} style={{ margin: "0 0 4px", fontSize: 12.5, color: C.error }}>
+                          <strong>{c.name}:</strong> <span style={{ color: C.error }}>{c.comment}</span>
+                        </p>
+                      ))}
                     </div>
                   )}
 
