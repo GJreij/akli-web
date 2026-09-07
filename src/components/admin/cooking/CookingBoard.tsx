@@ -156,7 +156,10 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                     )}
                   </div>
                   <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light }}>
-                    {r.earliest_date} · {r.subrecipes.length} subrecipe{r.subrecipes.length === 1 ? "" : "s"} · {r.comments.length} comment{r.comments.length === 1 ? "" : "s"}
+                    {r.earliest_date} · {r.subrecipes.length} subrecipe{r.subrecipes.length === 1 ? "" : "s"} ·{" "}
+                    <span style={{ color: r.comments.length > 0 ? C.error : C.light, fontWeight: r.comments.length > 0 ? 600 : 400 }}>
+                      {r.comments.length} comment{r.comments.length === 1 ? "" : "s"}
+                    </span>
                   </p>
                   {allergenConflicts.length > 0 && (
                     <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#c45f00", fontWeight: 600 }}>
