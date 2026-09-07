@@ -1,7 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import type { Database } from "@/lib/supabase/types";
-import { fetchFromOpenFoodFacts, searchUsdaFdc, fetchUsdaPortionWeights, scoreFoodMatch, type FoodCatalogItem } from "@/lib/foodCatalog";
+import { fetchFromOpenFoodFacts, fetchUsdaPortionWeights, type FoodCatalogItem } from "@/lib/foodCatalog";
+import { searchFoodByName } from "@/lib/foodSearch";
 
 export const runtime = "nodejs";
 
@@ -78,98 +79,10 @@ async function handleBarcodeLookup(barcode: string) {
   return NextResponse.json({ found: true, item: cached as FoodCatalogItem });
 }
 
-const SEARCH_RESULT_CAP = 8;
-// How many candidates to pull from local cache / USDA before ranking and
-// trimming to SEARCH_RESULT_CAP. USDA's own relevance order isn't reliable
-// for plain-ingredient queries (see scoreFoodMatch) — pulling only 8 and
-// trusting that order meant a good match ranked #15 by USDA never even
-// reached the reranker.
-const CANDIDATE_POOL_SIZE = 25;
-// A local match is only "good enough to skip USDA" if it's at least a
-// head-term match (score >= 75 in scoreFoodMatch's tiers) — a pile of
-// modifier-only local matches (e.g. eight dishes that merely contain "apple")
-// shouldn't block a fresh USDA search that might find the real ingredient.
-const STRONG_MATCH_THRESHOLD = 75;
-
-async function queryLocalCatalog(q: string, opts: { genericOnly?: boolean; limit?: number } = {}) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (admin.from("food_catalog_item") as any)
-    .select("*")
-    .eq("status", "verified")
-    .limit(opts.limit ?? SEARCH_RESULT_CAP);
-  // Each word required as a separate substring, not the whole phrase as one
-  // — USDA names are often ingredient-first ("Oil, olive, extra virgin"),
-  // so a literal "%olive oil%" match misses it entirely even though both
-  // words are right there.
-  for (const word of q.trim().split(/\s+/).filter(Boolean)) {
-    query = query.ilike("name", `%${word}%`);
-  }
-  if (opts.genericOnly) query = query.is("brand", null);
-  const { data, error } = await query;
-  if (error) console.error("food_catalog_item search error:", error);
-  return (data ?? []) as FoodCatalogItem[];
-}
-
-// Single batched upsert rather than one round trip per item — matters more
-// now that CANDIDATE_POOL_SIZE (25) replaced the old pageSize of 8.
-async function cacheUsdaResults(items: Awaited<ReturnType<typeof searchUsdaFdc>>) {
-  const usable = items.filter((item) => item.kcal_per_100 != null); // unusable without calories
-  if (usable.length === 0) return [];
-  const rows = usable.map((item) => ({ source: "usda", status: "verified", ...item }));
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin.from("food_catalog_item") as any)
-    .upsert(rows, { onConflict: "source,external_id" })
-    .select("*");
-  if (error) {
-    console.error("food_catalog_item USDA upsert error:", error);
-    return [];
-  }
-  return (data ?? []) as FoodCatalogItem[];
-}
-
-function rankAndSlice(items: FoodCatalogItem[], q: string) {
-  return [...items]
-    .sort((a, b) => scoreFoodMatch(b.name, q) - scoreFoodMatch(a.name, q))
-    .slice(0, SEARCH_RESULT_CAP);
-}
-
-// Treats "-", ",", "/" and "_" the same as a space between words — someone
-// typing "apple-banana-lemon" or "apple, banana, lemon" means the same
-// per-word search as "apple banana lemon"; queryLocalCatalog's word split
-// only understood whitespace, so a hyphenated/comma query fell through as
-// one unmatchable literal substring and searchUsdaFdc got the same raw
-// string, which fares little better against USDA's own search.
-function normalizeQuery(q: string) {
-  return q.replace(/[-,_/]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-// Generic (raw/unbranded) results only, unless and until none exist at all —
-// searching "chicken breast" shouldn't surface a wall of near-duplicate
-// brand variants when the plain ingredient is what most people mean.
+// Name search (local catalog + USDA, ranked) lives in @/lib/foodSearch —
+// shared with /api/food/chat's search_food tool so both go through the
+// exact same logic instead of drifting apart.
 async function handleNameSearch(rawQ: string) {
-  const q = normalizeQuery(rawQ);
-  const genericLocal = await queryLocalCatalog(q, { genericOnly: true, limit: CANDIDATE_POOL_SIZE });
-  // Only trust local cache alone once it has a genuinely full page of
-  // *strong* matches — a pile of weak/incidental local hits (e.g.
-  // "Mayonnaise ... with olive oil" matching a search for "olive oil")
-  // shouldn't short-circuit a fresh USDA search that might find the real
-  // ingredient, even if there happen to be 8+ of them.
-  const strongLocal = genericLocal.filter((i) => scoreFoodMatch(i.name, q) >= STRONG_MATCH_THRESHOLD);
-  if (strongLocal.length >= SEARCH_RESULT_CAP) return NextResponse.json({ items: rankAndSlice(genericLocal, q) });
-
-  const genericUsda = await cacheUsdaResults(await searchUsdaFdc(q, "generic", CANDIDATE_POOL_SIZE));
-  const seenGeneric = new Set(genericLocal.map((i) => i.id));
-  const combinedGeneric = [...genericLocal, ...genericUsda.filter((i) => !seenGeneric.has(i.id))];
-  if (combinedGeneric.length > 0) return NextResponse.json({ items: rankAndSlice(combinedGeneric, q) });
-
-  // Nothing generic exists anywhere for this query — only now fall back to
-  // branded/packaged results.
-  const brandedLocal = await queryLocalCatalog(q, { limit: CANDIDATE_POOL_SIZE });
-  const combined = [...brandedLocal];
-  if (combined.length < CANDIDATE_POOL_SIZE) {
-    const brandedUsda = await cacheUsdaResults(await searchUsdaFdc(q, "branded", CANDIDATE_POOL_SIZE));
-    const seen = new Set(combined.map((i) => i.id));
-    combined.push(...brandedUsda.filter((i) => !seen.has(i.id)));
-  }
-  return NextResponse.json({ items: rankAndSlice(combined, q) });
+  const items = await searchFoodByName(admin, rawQ);
+  return NextResponse.json({ items });
 }

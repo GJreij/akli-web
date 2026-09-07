@@ -17,6 +17,21 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Dev-only: the project lives under OneDrive, whose sync agent holds
+  // real, sustained locks on files inside .next while webpack writes them
+  // (confirmed via repeated EBUSY on .next/server/*.js during dev). That
+  // collision can crash Node's native filesystem watcher on Windows
+  // (`Assertion failed: !_wcsnicmp(...)`, src\win\fs-event.c). Polling
+  // instead of native OS file-change events sidesteps that native watcher.
+  // (Relocating distDir outside the OneDrive tree was tried and reverted —
+  // it breaks Node's node_modules resolution for the generated bundles,
+  // which require() their way up from wherever .next physically lives.)
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = { poll: 1000, aggregateTimeout: 300 };
+    }
+    return config;
+  },
 };
 
 module.exports = withPWA(nextConfig);

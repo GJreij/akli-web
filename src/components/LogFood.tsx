@@ -13,6 +13,7 @@ import { scaleMacros, buildUnitOptions, type FoodCatalogItem, type UsdaPortionWe
 import type { Database } from "@/lib/supabase/types";
 import BarcodeScanner from "@/components/BarcodeScanner";
 import ViewToggle from "@/components/ViewToggle";
+import FoodChatLogger from "@/components/FoodChatLogger";
 
 type MacroTargetRow = Database["public"]["Tables"]["daily_macro_target"]["Row"];
 type OrderMacros = {
@@ -1225,6 +1226,8 @@ export default function LogFood({
           <IconShoppingBag size={17} style={{ flexShrink: 0, display: "block" }} />
           <span style={{ lineHeight: 1 }}>Start a new order</span>
         </button>
+
+        <FoodChatLogger userId={userId} date={date} onAdded={() => loadDay(date)} />
 
         {/* Food Diary Target / Ordered / Logged reconciliation — same label
             and same number as the equivalent card on Home, so the two
