@@ -67,7 +67,9 @@ Rules:
 
 11. Never assume a protein type the user hasn't stated, including when translating a Lebanese/Arabic cut or prep term — get this wrong and it compounds through every later question. Terms like "ras aasfour", "lahme mfarmeh", "kafta", "lahmeh" conventionally mean beef or lamb, NOT chicken, unless the user actually says chicken/jaj/frax or names a dish that's inherently chicken (shish tawouk, chicken shawarma). If genuinely unsure what a term means, ask rather than guess — a wrong silent assumption here is worse than one extra question.
 
-12. If the user directly contradicts something you assumed or already proposed ("it's meat not chicken", "that's wrong", "you missed X") — they are correct and the conversation is not up for debate: immediately and completely drop the old assumption and every term derived from it (e.g. if told "not chicken", stop saying "chicken", "breast", or "thigh" entirely — those are chicken-specific and now wrong too). Never restate or lean on your own earlier guess after being corrected, never ask the user to re-confirm what you got wrong, and never explain what you originally thought — just take the correction and move on.`;
+12. If the user directly contradicts something you assumed or already proposed ("it's meat not chicken", "that's wrong", "you missed X") — they are correct and the conversation is not up for debate: immediately and completely drop the old assumption and every term derived from it (e.g. if told "not chicken", stop saying "chicken", "breast", or "thigh" entirely — those are chicken-specific and now wrong too). Never restate or lean on your own earlier guess after being corrected, never ask the user to re-confirm what you got wrong, and never explain what you originally thought — just take the correction and move on.
+
+13. If the user names a specific packaged/branded product — a brand, or "from Carrefour/Spinneys/a supermarket" — search_food for it first. Real branded results are rare (the catalog leans generic/USDA, which barely covers Lebanese retail brands), so a miss here is expected, not a failure: fall back to a reasonable generic estimate for that kind of product exactly as you would for anything else, but set suggest_scan to true on that entry so the confirmation screen can point them to the barcode scanner for the real numbers. Only set it when a specific product was actually named and unmatched — never for a plain description ("yogurt", "a salad") or a homemade dish, and never as a substitute for actually trying search_food first.`;
 
 const searchFoodTool: Anthropic.Tool = {
   name: "search_food",
@@ -114,10 +116,14 @@ const proposeEntriesTool: Anthropic.Tool = {
               description: "For composite/reconstructed dishes only: brief comma-separated ingredient list, e.g. 'rice, brown lentils, caramelized onions, olive oil'. Empty string for single-catalog-item entries.",
             },
             confidence: { type: "string", enum: ["confirmed", "estimated"] },
+            suggest_scan: {
+              type: "boolean",
+              description: "True only if the user named a specific packaged/branded product (a brand, or 'from Carrefour/Spinneys/...') and search_food did not return a confident match for that exact product — meaning this estimate is a generic stand-in, and scanning the real barcode would be meaningfully more accurate. False otherwise, including for homemade/composite dishes.",
+            },
           },
           required: [
             "meal_type", "name", "quantity_label", "grams", "kcal", "protein_g", "carbs_g", "fat_g",
-            "catalog_item_id", "components", "confidence",
+            "catalog_item_id", "components", "confidence", "suggest_scan",
           ],
           additionalProperties: false,
         },
@@ -140,6 +146,7 @@ export interface ProposedEntry {
   catalog_item_id: number | null;
   components: string | null;
   confidence: "confirmed" | "estimated";
+  suggest_scan: boolean;
 }
 
 interface ChatTurn {
@@ -189,6 +196,7 @@ function toProposedEntries(raw: unknown): ProposedEntry[] {
       catalog_item_id: r.catalog_item_id && !Number.isNaN(catalogIdNum) ? catalogIdNum : null,
       components: r.components ? String(r.components) : null,
       confidence: r.confidence === "confirmed" ? "confirmed" : "estimated",
+      suggest_scan: r.suggest_scan === true,
     } as ProposedEntry;
   });
 }

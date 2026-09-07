@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  IconMessageCircle2, IconChevronDown, IconChevronUp, IconSend2, IconX, IconLoader2,
+  IconMessageCircle2, IconChevronDown, IconChevronUp, IconSend2, IconX, IconLoader2, IconBarcode,
 } from "@tabler/icons-react";
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
@@ -329,6 +329,12 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                         </p>
                         {e.components && (
                           <p style={{ margin: "2px 0 0", fontSize: 11, color: C.light, fontStyle: "italic" }}>{e.components}</p>
+                        )}
+                        {e.suggest_scan && (
+                          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#2563eb" }}>
+                            <IconBarcode size={12} style={{ verticalAlign: "-2px", marginRight: 3 }} />
+                            Couldn&apos;t find this exact product — for precise numbers, scan the barcode instead (✕ this, then use + Log food → Scan)
+                          </p>
                         )}
                       </div>
                       <button
