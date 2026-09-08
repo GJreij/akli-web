@@ -8,12 +8,14 @@ import MacroSection from "./MacroSection";
 import CancelOrderControl from "@/components/admin/CancelOrderControl";
 import AdminAllergensEditor from "@/components/AdminAllergensEditor";
 import { emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
+import AddressSection from "./AddressSection";
 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name" | "email" | "phone_number" | "created_at" | "onboarding" | "role" | "status" | "is_guest"
   | "celery" | "cereals_containing_gluten" | "crustaceans" | "eggs" | "fish" | "lupin" | "milk" | "molluscs" | "sulphites" | "mustard" | "peanuts" | "sesame" | "soybeans" | "tree_nuts">;
 type Preference = { recipe_id: number | null; like: boolean | null; dislike: boolean | null; dont_include: boolean | null; comment: string | null };
 type RecipeName = { id: number; name: string | null };
-type Address = Pick<Database["public"]["Tables"]["user_delivery_address"]["Row"], "id" | "label" | "is_default" | "address_text">;
+type Address = Pick<Database["public"]["Tables"]["user_delivery_address"]["Row"], "id" | "label" | "is_default" | "address_text" | "lat" | "lng">;
+type FeeOverride = Pick<Database["public"]["Tables"]["delivery_fee_override"]["Row"], "address_id" | "fee_per_day" | "note">;
 type MealPlan = Pick<Database["public"]["Tables"]["meal_plan"]["Row"], "id" | "start_date" | "end_date">;
 type MealPlanDay = Pick<Database["public"]["Tables"]["meal_plan_day"]["Row"], "id" | "meal_plan_id" | "status">;
 type Payment = Pick<Database["public"]["Tables"]["payment"]["Row"], "id" | "amount" | "currency" | "provider" | "status" | "created_at">;
@@ -70,20 +72,30 @@ async function UserDetail({ id }: { id: string }) {
   if (!user) notFound();
   const allergenFlags: AllergenFlags = { ...emptyAllergenFlags(), ...user };
 
-  const [addressesRes, mealPlansRes, macrosRes, prefsRes] = await Promise.all([
-    supabase.from("user_delivery_address").select("id,label,is_default,address_text").eq("user_id", id),
+  const [addressesRes, mealPlansRes, macrosRes, prefsRes, macroPriceRes] = await Promise.all([
+    supabase.from("user_delivery_address").select("id,label,is_default,address_text,lat,lng").eq("user_id", id),
     supabase.from("meal_plan").select("id,start_date,end_date").eq("user_id", id).order("start_date", { ascending: false }),
     supabase.from("daily_macro_target")
       .select("id,created_at,kcal_target,protein_g,carbs_g,fat_g,diet_type,goal,source,method,sex,height_cm,weight_kg,activity_level")
       .eq("user_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("user_recipe_preferences").select("recipe_id,like,dislike,dont_include,comment").eq("user_id", id),
+    supabase.from("macro_price").select("delivery_price").order("created_at", { ascending: false }).limit(1).single(),
   ]);
 
   const addresses = (addressesRes.data ?? []) as Address[];
   const mealPlans = (mealPlansRes.data ?? []) as MealPlan[];
   const macros    = (macrosRes.data ?? []) as MacroRow[];
+  const defaultDeliveryFee = (macroPriceRes.data as { delivery_price: number | null } | null)?.delivery_price ?? 0;
   const mealPlanIds = mealPlans.map(m => m.id);
+
+  const addressIds = addresses.map(a => a.id);
+  const overridesRes = addressIds.length
+    ? await supabase.from("delivery_fee_override").select("address_id,fee_per_day,note").in("address_id", addressIds)
+    : { data: [] as FeeOverride[] };
+  const overridesByAddressId = Object.fromEntries(
+    ((overridesRes.data ?? []) as FeeOverride[]).map(o => [o.address_id, { fee_per_day: o.fee_per_day, note: o.note }])
+  );
 
   const preferences = ((prefsRes.data ?? []) as Preference[]).filter(p => p.recipe_id != null);
   const prefRecipeIds = Array.from(new Set(preferences.map(p => p.recipe_id as number)));
@@ -182,16 +194,7 @@ async function UserDetail({ id }: { id: string }) {
       </Section>
 
       <Section title={`Delivery addresses (${addresses.length})`}>
-        {addresses.length === 0 ? (
-          <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No saved addresses.</p>
-        ) : (
-          addresses.map(a => (
-            <div key={a.id} style={{ fontSize: 13, marginBottom: 8 }}>
-              <strong>{a.label ?? "Address"}</strong>{a.is_default ? " (default)" : ""}
-              <br /><span style={{ color: C.muted }}>{a.address_text}</span>
-            </div>
-          ))
-        )}
+        <AddressSection userId={user.id} addresses={addresses} overridesByAddressId={overridesByAddressId} defaultFee={defaultDeliveryFee} />
       </Section>
 
       <Section title={`Meal plans (${mealPlans.length})`}>

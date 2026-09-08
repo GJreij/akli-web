@@ -608,6 +608,51 @@ export type Database = {
           },
         ]
       }
+      delivery_fee_override: {
+        Row: {
+          address_id: number
+          created_at: string
+          fee_per_day: number
+          id: number
+          note: string | null
+          set_by_admin_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address_id: number
+          created_at?: string
+          fee_per_day: number
+          id?: number
+          note?: string | null
+          set_by_admin_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address_id?: number
+          created_at?: string
+          fee_per_day?: number
+          id?: number
+          note?: string | null
+          set_by_admin_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_fee_override_address_id_fkey"
+            columns: ["address_id"]
+            isOneToOne: true
+            referencedRelation: "user_delivery_address"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_fee_override_set_by_admin_id_fkey"
+            columns: ["set_by_admin_id"]
+            isOneToOne: false
+            referencedRelation: "user"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_slots: {
         Row: {
           created_at: string
@@ -1035,6 +1080,7 @@ export type Database = {
           edit_fee_price: number | null
           fat_g_price: number | null
           id: number
+          minimum_order_price: number | null
           proteing_g_price: number | null
           recipe_packaging_price: number | null
           subrecipe_packaging_price: number | null
@@ -1049,6 +1095,7 @@ export type Database = {
           edit_fee_price?: number | null
           fat_g_price?: number | null
           id?: number
+          minimum_order_price?: number | null
           proteing_g_price?: number | null
           recipe_packaging_price?: number | null
           subrecipe_packaging_price?: number | null
@@ -1063,6 +1110,7 @@ export type Database = {
           edit_fee_price?: number | null
           fat_g_price?: number | null
           id?: number
+          minimum_order_price?: number | null
           proteing_g_price?: number | null
           recipe_packaging_price?: number | null
           subrecipe_packaging_price?: number | null
