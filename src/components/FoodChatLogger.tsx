@@ -31,6 +31,8 @@ interface ChatTurn {
 }
 
 type PendingEntry = ProposedEntry & { _id: string };
+type MacroField = "kcal" | "protein_g" | "carbs_g" | "fat_g";
+const MACRO_LABEL: Record<MacroField, string> = { kcal: "calories", protein_g: "protein", carbs_g: "carbs", fat_g: "fat" };
 
 function round(n: number) {
   return Math.round(n);
@@ -63,6 +65,8 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
   const [saving, setSaving] = useState(false);
   const [pendingEntries, setPendingEntries] = useState<PendingEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editingMacro, setEditingMacro] = useState<{ id: string; field: MacroField } | null>(null);
+  const [editValue, setEditValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +110,31 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     setPendingEntries(null);
     track("food_chat_refine_requested", {}, "food_diary");
     await sendText("Ask me a couple of quick questions to make these estimates more accurate.");
+  }
+
+  function startEditingMacro(entry: PendingEntry, field: MacroField) {
+    setEditingMacro({ id: entry._id, field });
+    setEditValue(String(round(entry[field])));
+  }
+
+  // Same pattern as requestRefinement — a locally-typed value can't safely
+  // stand in for a real recalculation (changing protein changes what the
+  // whole item's calories should plausibly be), so this hands the one
+  // known-true number to the model as a correction and lets it work out a
+  // consistent set of macros, the same way any other correction is handled.
+  async function submitMacroEdit(entry: PendingEntry) {
+    const value = Number(editValue);
+    const field = editingMacro?.field;
+    setEditingMacro(null);
+    if (!field || !Number.isFinite(value) || value < 0 || sending) return;
+    if (value === Math.round(entry[field])) return; // unchanged — nothing to send
+
+    setPendingEntries(null);
+    const unit = field === "kcal" ? "kcal" : "g";
+    track("food_chat_macro_override", { field }, "food_diary");
+    await sendText(
+      `For "${entry.name}" (${entry.meal_type}, ${entry.quantity_label}), the ${MACRO_LABEL[field]} is actually ${value}${unit} — recalculate the other macros and calories to stay consistent with that exact ${MACRO_LABEL[field]} value, keep everything else about this item the same.`
+    );
   }
 
   async function sendText(text: string) {
@@ -203,6 +232,44 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     }
   }
 
+  // Tap a macro value to set it directly (e.g. "she knows this had 20g of
+  // protein") — the actual recalculation still goes through the model (see
+  // submitMacroEdit), this just renders the tap target / inline input.
+  function renderMacroValue(entry: PendingEntry, field: MacroField, unit: string, prefix: string) {
+    const isEditing = editingMacro?.id === entry._id && editingMacro.field === field;
+    if (isEditing) {
+      return (
+        <input
+          key={field}
+          type="number"
+          autoFocus
+          value={editValue}
+          onChange={(ev) => setEditValue(ev.target.value)}
+          onFocus={(ev) => ev.target.select()}
+          onKeyDown={(ev) => {
+            if (ev.key === "Enter") { ev.preventDefault(); submitMacroEdit(entry); }
+            if (ev.key === "Escape") { ev.preventDefault(); setEditingMacro(null); }
+          }}
+          onBlur={() => submitMacroEdit(entry)}
+          style={{
+            width: 44, fontSize: 11.5, padding: "0 2px", border: `1px solid ${C.tealDark}`, borderRadius: 4,
+            font: "inherit", color: C.primary,
+          }}
+        />
+      );
+    }
+    return (
+      <span
+        key={field}
+        onClick={() => startEditingMacro(entry, field)}
+        style={{ cursor: "pointer", borderBottom: `1px dotted ${C.light}` }}
+        title="Tap to set this exactly"
+      >
+        {prefix}{round(entry[field])}{unit}
+      </span>
+    );
+  }
+
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 18, overflow: "hidden" }}>
       <button
@@ -269,9 +336,9 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={sending}
-                  rows={2}
+                  rows={1}
                   placeholder={sending ? "Thinking…" : history.length === 0
-                    ? "e.g. breakfast was 2 eggs and toast, lunch was mjaddara with yogurt…"
+                    ? "e.g. 2 eggs and toast"
                     : "Your answer…"}
                   style={{
                     flex: 1, resize: "none", padding: "10px 12px", borderRadius: 10,
@@ -324,8 +391,15 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                             </span>
                           )}
                         </div>
-                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light }}>
-                          {e.quantity_label} · {round(e.kcal)} kcal · P {round(e.protein_g)}g · C {round(e.carbs_g)}g · F {round(e.fat_g)}g
+                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0 }}>
+                          <span>{e.quantity_label}&nbsp;·&nbsp;</span>
+                          {renderMacroValue(e, "kcal", "kcal", "")}
+                          <span>&nbsp;·&nbsp;P&nbsp;</span>
+                          {renderMacroValue(e, "protein_g", "g", "")}
+                          <span>&nbsp;·&nbsp;C&nbsp;</span>
+                          {renderMacroValue(e, "carbs_g", "g", "")}
+                          <span>&nbsp;·&nbsp;F&nbsp;</span>
+                          {renderMacroValue(e, "fat_g", "g", "")}
                         </p>
                         {e.components && (
                           <p style={{ margin: "2px 0 0", fontSize: 11, color: C.light, fontStyle: "italic" }}>{e.components}</p>
