@@ -177,6 +177,12 @@ export interface CheckoutSummaryResponse {
       min_order_days: number | null;
     };
     promo_discount_amount: number;
+    minimum_order: {
+      threshold: number;
+      fee_applied: number;
+      is_applied: boolean;
+      days_affected: number;
+    };
     promo_code_status: "valid" | "invalid" | "not_provided";
     promo_code_used: string | null;
     promo_message: string;

@@ -2496,6 +2496,13 @@ export default function OrderFlow({
               </div>
             )}
 
+            {(bd?.minimum_order?.fee_applied ?? 0) > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
+                <span style={{ fontSize: 13 }}>Minimum order fee</span>
+                <span style={{ fontSize: 13 }}>+${bd!.minimum_order.fee_applied.toFixed(2)}</span>
+              </div>
+            )}
+
             {bd?.delivery && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <span style={{ fontSize: 13 }}>Delivery</span>
@@ -2509,6 +2516,12 @@ export default function OrderFlow({
             <div style={{ background: "#f0f7f7", borderRadius: 8, padding: "7px 10px", margin: "8px 0 10px", fontSize: 11.5, color: C.tealDark }}>
               🚚 Free delivery on days totalling over ${freeThreshold}
             </div>
+
+            {(bd?.minimum_order?.threshold ?? 0) > 0 && (
+              <div style={{ background: "#f0f7f7", borderRadius: 8, padding: "7px 10px", margin: "8px 0 10px", fontSize: 11.5, color: C.tealDark }}>
+                ℹ️ ${bd!.minimum_order.threshold.toFixed(2)} minimum order
+              </div>
+            )}
 
             {walletApplied > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, color: C.tealDark }}>
