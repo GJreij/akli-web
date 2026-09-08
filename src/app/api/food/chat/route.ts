@@ -16,15 +16,16 @@ const admin = createClient<Database>(
 );
 
 const anthropic = new Anthropic();
-// Sonnet, not Haiku — the refine flow (rule 10) can run long, repetitive,
-// multi-fact conversations (several one-word answers in a row: "white",
-// "regular", "ground", "simmered"), and Haiku was observed losing track of
-// facts already established a few turns back and re-asking about them —
-// confirmed via food_chat_log: told "it was meat" / "ground" / "simmered",
-// it later asked about "white meat" again from scratch. Still a few cents
-// a month at real usage (see prior cost discussion) — worth it for a
-// feature whose entire point is feeling like it's actually listening.
-const MODEL = "claude-sonnet-5";
+// Back to Haiku for cost. Note: the "forgot it was meat, not chicken"
+// incident that prompted the earlier switch to Sonnet turned out to be a
+// prompt gap, not a Haiku-specific limitation — the model had silently
+// mistranslated "ras aasfour" as chicken and had nothing telling it to
+// treat a direct user correction as final (see rules 2b, 9, 11, 12, added
+// after that incident). Those apply on any model. Still worth watching
+// food_chat_log if long refine-flow conversations (rule 10) start losing
+// track again — that's the one shape of conversation most likely to
+// stress a smaller model.
+const MODEL = "claude-haiku-4-5";
 const MAX_LOOP_ITERATIONS = 6;
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
