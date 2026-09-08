@@ -56,6 +56,7 @@ const C = {
   border:   "#e0dbd5",
   white:    "#ffffff",
   error:    "#c0392b",
+  warn:     "#b8860b",
 };
 
 const MEAL_LABELS: Record<MealType, string> = {
@@ -1873,7 +1874,7 @@ export default function OrderFlow({
     if (!plan) return;
     setCoLoading(true);
     try {
-      setCheckoutData(await getCheckoutSummary(userId, plan, promoApplied || undefined));
+      setCheckoutData(await getCheckoutSummary(userId, plan, promoApplied || undefined, addressId));
     } catch { setCheckoutData(null); }
     finally {
       setCoLoading(false);
@@ -1886,11 +1887,24 @@ export default function OrderFlow({
     if (!plan || !promoInput.trim()) return;
     setCoLoading(true);
     try {
-      const data = await getCheckoutSummary(userId, plan, promoInput.trim());
+      const data = await getCheckoutSummary(userId, plan, promoInput.trim(), addressId);
       setCheckoutData(data);
       setPromoApplied(promoInput.trim());
       track("promo_applied", { code: promoInput.trim(), status: data.price_breakdown.promo_code_status }, "order");
     } catch { /* ignore */ }
+    finally { setCoLoading(false); }
+  }
+
+  // Re-quotes the delivery fee for the newly selected address — the price
+  // card sits above the address picker on this screen, so switching
+  // addresses must refresh it live rather than leaving the old fee showing.
+  async function selectAddress(id: number) {
+    setAddressId(id);
+    if (!plan) return;
+    setCoLoading(true);
+    try {
+      setCheckoutData(await getCheckoutSummary(userId, plan, promoApplied || undefined, id));
+    } catch { /* keep showing the previous summary rather than blanking it */ }
     finally { setCoLoading(false); }
   }
 
@@ -2512,6 +2526,12 @@ export default function OrderFlow({
               </div>
             )}
 
+            {bd?.delivery?.is_custom_fee && (
+              <div style={{ background: "#fbf3e3", borderRadius: 8, padding: "7px 10px", margin: "0 0 10px", fontSize: 11.5, color: C.warn }}>
+                ℹ️ Delivery for this address has been set specially for you — it&apos;s not the usual fee.
+              </div>
+            )}
+
             {/* Free delivery callout */}
             <div style={{ background: "#f0f7f7", borderRadius: 8, padding: "7px 10px", margin: "8px 0 10px", fontSize: 11.5, color: C.tealDark }}>
               🚚 Free delivery on days totalling over ${freeThreshold}
@@ -2664,15 +2684,14 @@ export default function OrderFlow({
             userId={userId}
             addresses={addressList}
             selectedId={addressId}
-            onSelect={setAddressId}
-            onAdded={(a) => { setAddressList(prev => [a, ...(a.is_default ? prev.map(p => ({ ...p, is_default: false })) : prev)]); setAddressId(a.id); }}
+            onSelect={selectAddress}
+            onAdded={(a) => { setAddressList(prev => [a, ...(a.is_default ? prev.map(p => ({ ...p, is_default: false })) : prev)]); selectAddress(a.id); }}
             onRemoved={(id) => {
               setAddressList(prev => prev.filter(a => a.id !== id));
-              setAddressId(prev => {
-                if (prev !== id) return prev;
-                const remaining = addressList.filter(a => a.id !== id);
-                return remaining.find(a => a.is_default)?.id ?? remaining[0]?.id ?? null;
-              });
+              if (addressId !== id) return;
+              const remaining = addressList.filter(a => a.id !== id);
+              const nextId = remaining.find(a => a.is_default)?.id ?? remaining[0]?.id ?? null;
+              if (nextId !== null) selectAddress(nextId); else setAddressId(null);
             }}
             onDefaultChanged={(id) => {
               setAddressList(prev => prev.map(a => ({ ...a, is_default: a.id === id })));

@@ -169,6 +169,7 @@ export interface CheckoutSummaryResponse {
       delivery_fee: number;
       is_free_delivery: boolean;
       waived_by_promo: boolean;
+      is_custom_fee: boolean;
     };
     final_price: number;
     volume_discount: {
@@ -204,12 +205,13 @@ export interface CheckoutSummaryResponse {
 export async function getCheckoutSummary(
   user_id: string,
   final_plan: GenerateMealPlanResponse,
-  promo_code?: string
+  promo_code?: string,
+  delivery_address_id?: number | null
 ): Promise<CheckoutSummaryResponse> {
   const res = await fetch(`${FLASK_URL}/checkout_summary`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id, final_plan, promo_code: promo_code ?? null }),
+    body: JSON.stringify({ user_id, final_plan, promo_code: promo_code ?? null, delivery_address_id: delivery_address_id ?? null }),
   });
   if (!res.ok) throw new Error(`checkout_summary error ${res.status}: ${await res.text()}`);
   return res.json();
