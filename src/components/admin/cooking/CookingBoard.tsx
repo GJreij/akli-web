@@ -36,7 +36,7 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
   for (const r of recipes) {
     for (const s of r.subrecipes) {
       const list = occurrencesBySubrecipe.get(s.subrecipe_id) ?? [];
-      list.push({ recipeId: r.recipe_id, subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: r.meal_plan_day_recipe_ids });
+      list.push({ recipeId: r.recipe_id, subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: s.meal_plan_day_recipe_ids ?? r.meal_plan_day_recipe_ids });
       occurrencesBySubrecipe.set(s.subrecipe_id, list);
     }
   }
@@ -207,7 +207,7 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                                 type="checkbox"
                                 checked={checked}
                                 disabled={disabled}
-                                onChange={() => toggleSelected({ recipeId: r.recipe_id, subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: r.meal_plan_day_recipe_ids })}
+                                onChange={() => toggleSelected({ recipeId: r.recipe_id, subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: s.meal_plan_day_recipe_ids ?? r.meal_plan_day_recipe_ids })}
                               />
                               {s.name}
                             </label>
@@ -226,7 +226,7 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                                 </button>
                               )}
                               <button
-                                onClick={() => setPanelTargets([{ subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: r.meal_plan_day_recipe_ids }])}
+                                onClick={() => setPanelTargets([{ subrecipeId: s.subrecipe_id, name: s.name, mpdrIds: s.meal_plan_day_recipe_ids ?? r.meal_plan_day_recipe_ids }])}
                                 style={{
                                   background: C.primary, color: C.white,
                                   border: "none", borderRadius: 7, padding: "5px 11px", fontSize: 11.5, fontWeight: 600,

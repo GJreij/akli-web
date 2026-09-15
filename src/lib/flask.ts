@@ -533,6 +533,13 @@ export interface CookingSubrecipe {
   instructions: string | null;
   total_servings: number;
   selected_meal_plan_day_recipe_serving_id: number[];
+  // meal_plan_day_recipe ids that actually have a serving row for THIS
+  // subrecipe — a recipe's own instances can vary in subrecipe composition,
+  // so this is not always the same as the parent CookingRecipe's
+  // meal_plan_day_recipe_ids. Use this (not the recipe-level list) when
+  // calling /portioning/summary for one subrecipe. Optional: undefined until
+  // the Flask deploy that adds this field to /cooking/overview has gone out.
+  meal_plan_day_recipe_ids?: number[];
   ingredients_needed: CookingIngredient[];
 }
 
@@ -636,6 +643,7 @@ export function mergeCookingOverviews(results: CookingRecipe[][]): CookingRecipe
           subrecipes: r.subrecipes.map(s => ({
             ...s,
             selected_meal_plan_day_recipe_serving_id: [...s.selected_meal_plan_day_recipe_serving_id],
+            meal_plan_day_recipe_ids: s.meal_plan_day_recipe_ids ? [...s.meal_plan_day_recipe_ids] : s.meal_plan_day_recipe_ids,
             ingredients_needed: s.ingredients_needed.map(i => ({ ...i })),
           })),
           comments: [...r.comments],
@@ -663,6 +671,7 @@ export function mergeCookingOverviews(results: CookingRecipe[][]): CookingRecipe
           const copy = {
             ...s,
             selected_meal_plan_day_recipe_serving_id: [...s.selected_meal_plan_day_recipe_serving_id],
+            meal_plan_day_recipe_ids: s.meal_plan_day_recipe_ids ? [...s.meal_plan_day_recipe_ids] : s.meal_plan_day_recipe_ids,
             ingredients_needed: s.ingredients_needed.map(i => ({ ...i })),
           };
           existing.subrecipes.push(copy);
@@ -673,6 +682,11 @@ export function mergeCookingOverviews(results: CookingRecipe[][]): CookingRecipe
         existingSub.selected_meal_plan_day_recipe_serving_id = [
           ...new Set([...existingSub.selected_meal_plan_day_recipe_serving_id, ...s.selected_meal_plan_day_recipe_serving_id]),
         ];
+        if (s.meal_plan_day_recipe_ids) {
+          existingSub.meal_plan_day_recipe_ids = [
+            ...new Set([...(existingSub.meal_plan_day_recipe_ids ?? []), ...s.meal_plan_day_recipe_ids]),
+          ];
+        }
         mergeIngredients(existingSub.ingredients_needed, s.ingredients_needed);
       }
     }

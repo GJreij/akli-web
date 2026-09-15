@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import AdminNav from "@/components/AdminNav";
+import StaleAppGuard from "@/components/admin/StaleAppGuard";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -14,6 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div style={{ minHeight: "100vh", background: "#eee9e6" }}>
+      <StaleAppGuard />
       <AdminNav />
       {children}
     </div>
