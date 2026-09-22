@@ -801,7 +801,14 @@ export interface DeliveryRow {
   delivery_slot: { id: number; start_time: string | null; end_time: string | null } | null;
   client: { id: string | null; name: string | null; last_name: string | null; phone_number: string | null } | null;
   address: string | null;
+  // The client's own free-text label on this saved address (e.g. a landmark
+  // or street note) — distinct from the formal geocoded `address`.
+  address_label: string | null;
   maps_link: string | null;
+  // false when maps_link is a text-search fallback (no real saved pin, or
+  // the pin was never moved off the map picker's default center) rather than
+  // a precise, verified location.
+  maps_is_precise: boolean;
   payment: DeliveryPayment | null;
 }
 

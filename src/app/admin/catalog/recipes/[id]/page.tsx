@@ -6,8 +6,9 @@ import { PageHeader, Section, inputStyle, labelStyle, primaryButton, dangerButto
 import SubmitButton from "@/components/admin/SubmitButton";
 import {
   updateRecipe, deleteRecipe, addRecipeSubrecipe, removeRecipeSubrecipe,
-  updateRecipeSubrecipeSettings,
+  updateRecipeSubrecipeSettings, uploadRecipePhoto, deleteRecipePhoto,
 } from "../actions";
+import RecipePhotoField from "@/components/admin/RecipePhotoField";
 
 type Recipe = Database["public"]["Tables"]["recipe"]["Row"];
 type RecipeSubrecipe = Database["public"]["Tables"]["recipe_subrecipe"]["Row"];
@@ -36,12 +37,22 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
   const deleteAction = deleteRecipe.bind(null, recipe.id);
   const addSubrecipeAction = addRecipeSubrecipe.bind(null, recipe.id);
   const updateCompositionAction = updateRecipeSubrecipeSettings.bind(null, recipe.id);
+  const uploadPhotoAction = uploadRecipePhoto.bind(null, recipe.id);
+  const deletePhotoAction = deleteRecipePhoto.bind(null, recipe.id);
 
   return (
     <div style={{ padding: "16px 20px 60px" }}>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <Link href="/admin/catalog/recipes" style={{ fontSize: 12.5, color: C.muted, textDecoration: "none" }}>← Back to recipes</Link>
         <PageHeader title={recipe.name ?? "Recipe"} />
+
+        <Section title="Photo">
+          <RecipePhotoField
+            photoUrl={recipe.photo ?? null}
+            uploadAction={uploadPhotoAction}
+            deleteAction={deletePhotoAction}
+          />
+        </Section>
 
         <form action={updateAction}>
           <Section title="Basics">
@@ -54,9 +65,6 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
               </label>
               <label style={labelStyle}>Instructions
                 <textarea name="instructions" defaultValue={recipe.instructions ?? ""} rows={3} style={{ ...inputStyle, resize: "vertical" }} />
-              </label>
-              <label style={labelStyle}>Photo URL
-                <input name="photo" defaultValue={recipe.photo ?? ""} style={inputStyle} />
               </label>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <label style={{ ...labelStyle, flex: "0 1 120px" }}>Prep time (min)

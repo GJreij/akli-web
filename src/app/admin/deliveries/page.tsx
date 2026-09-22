@@ -77,7 +77,10 @@ async function DeliveryList({ start, end }: { start: string; end: string }) {
                         {d.client ? `${d.client.name ?? ""} ${d.client.last_name ?? ""}`.trim() || "Unknown client" : "Unknown client"}
                         <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: C.muted }}>{fmtSlot(d.delivery_slot)}</span>
                       </p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: C.muted }}>{d.address ?? "No address on file"}</p>
+                      {d.address_label && (
+                        <p style={{ margin: "4px 0 0", fontSize: 12.5, fontWeight: 600, color: C.primary }}>{d.address_label}</p>
+                      )}
+                      <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>{d.address ?? "No address on file"}</p>
                       {d.client?.phone_number && (
                         <a href={`tel:${d.client.phone_number}`} style={{ fontSize: 12, color: C.tealDark, textDecoration: "none" }}>
                           📞 {d.client.phone_number}
@@ -90,12 +93,16 @@ async function DeliveryList({ start, end }: { start: string; end: string }) {
                           href={d.maps_link}
                           target="_blank"
                           rel="noopener noreferrer"
+                          title={d.maps_is_precise ? "Opens the client's saved pin" : "No verified pin — searches Google Maps for the address text"}
                           style={{
-                            fontSize: 11.5, fontWeight: 600, color: C.white, background: C.primary,
-                            borderRadius: 7, padding: "5px 10px", textDecoration: "none", whiteSpace: "nowrap",
+                            fontSize: 11.5, fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap",
+                            borderRadius: 7, padding: "5px 10px",
+                            color: d.maps_is_precise ? C.white : C.primary,
+                            background: d.maps_is_precise ? C.primary : "transparent",
+                            border: d.maps_is_precise ? "none" : `1px solid ${C.border}`,
                           }}
                         >
-                          Open in Maps
+                          {d.maps_is_precise ? "Open in Maps" : "Search on Maps"}
                         </a>
                       )}
                       <PaymentBadge payment={d.payment} />

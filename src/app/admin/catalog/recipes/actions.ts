@@ -11,11 +11,12 @@ function num(formData: FormData, key: string) {
 }
 
 function parseRecipeForm(formData: FormData) {
+  // photo is intentionally not handled here — it has its own dedicated
+  // upload/delete actions below, so saving the basics form never overwrites it.
   return {
     name: String(formData.get("name") ?? "").trim(),
     description: String(formData.get("description") ?? "").trim() || null,
     instructions: String(formData.get("instructions") ?? "").trim() || null,
-    photo: String(formData.get("photo") ?? "").trim() || null,
     prep_time: num(formData, "prep_time"),
     cook_time: num(formData, "cook_time"),
     could_be_breakfast: formData.get("could_be_breakfast") === "on",
@@ -40,6 +41,66 @@ export async function updateRecipe(id: number, formData: FormData) {
   const { supabase } = await requireAdmin();
   const payload = parseRecipeForm(formData);
   await (supabase.from("recipe") as any).update(payload).eq("id", id); // eslint-disable-line @typescript-eslint/no-explicit-any
+  revalidatePath("/admin/catalog/recipes");
+  revalidatePath(`/admin/catalog/recipes/${id}`);
+}
+
+// =============================================================================
+// PHOTO (Supabase Storage — recipePicturesBucket)
+// =============================================================================
+
+const RECIPE_PHOTO_BUCKET = "recipePicturesBucket";
+
+// Existing photo URLs point at the render/image transform endpoint, e.g.
+// ".../storage/v1/render/image/public/recipePicturesBucket/recipe_picture/<name>?width=800…" —
+// pull the object path back out of that so a replace/delete can clean up the old file.
+function recipePhotoStoragePath(url: string | null): string | null {
+  if (!url) return null;
+  const marker = `/${RECIPE_PHOTO_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  return url.slice(idx + marker.length).split("?")[0] || null;
+}
+
+function recipePhotoPublicUrl(path: string): string {
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/render/image/public/${RECIPE_PHOTO_BUCKET}/${path}?width=800&quality=80&format=webp`;
+}
+
+export async function uploadRecipePhoto(id: number, formData: FormData) {
+  const { supabase } = await requireAdmin();
+  const file = formData.get("photo_file");
+  if (!(file instanceof File) || file.size === 0) throw new Error("No file selected.");
+  if (!file.type.startsWith("image/")) throw new Error("Please upload an image file.");
+
+  const { data: current } = await supabase.from("recipe").select("photo").eq("id", id).single();
+  const oldPath = recipePhotoStoragePath((current as { photo: string | null } | null)?.photo ?? null);
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const path = `recipe_picture/${id}-${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(RECIPE_PHOTO_BUCKET)
+    .upload(path, file, { contentType: file.type, upsert: false });
+  if (uploadError) throw new Error(uploadError.message);
+
+  const { error: dbError } = await (supabase.from("recipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .update({ photo: recipePhotoPublicUrl(path) }).eq("id", id);
+  if (dbError) throw new Error(dbError.message);
+
+  if (oldPath) await supabase.storage.from(RECIPE_PHOTO_BUCKET).remove([oldPath]);
+
+  revalidatePath("/admin/catalog/recipes");
+  revalidatePath(`/admin/catalog/recipes/${id}`);
+}
+
+export async function deleteRecipePhoto(id: number) {
+  const { supabase } = await requireAdmin();
+  const { data: current } = await supabase.from("recipe").select("photo").eq("id", id).single();
+  const oldPath = recipePhotoStoragePath((current as { photo: string | null } | null)?.photo ?? null);
+
+  await (supabase.from("recipe") as any).update({ photo: null }).eq("id", id); // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (oldPath) await supabase.storage.from(RECIPE_PHOTO_BUCKET).remove([oldPath]);
+
   revalidatePath("/admin/catalog/recipes");
   revalidatePath(`/admin/catalog/recipes/${id}`);
 }
