@@ -1243,7 +1243,9 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
               </p>
             )}
 
-            {recipes === null ? (
+            {/* Wait for the date's menu too — rendering before it arrives
+                showed the unfiltered list and let an off-menu recipe be picked. */}
+            {recipes === null || (availableRecipeIds === null && !menuLoadFailed) ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>Loading recipes…</p>
             ) : compatibleRecipes.length === 0 ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
@@ -1829,7 +1831,9 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
               </p>
             )}
 
-            {recipes === null ? (
+            {/* Wait for the date's menu too — rendering before it arrives
+                showed the unfiltered list and let an off-menu recipe be picked. */}
+            {recipes === null || (availableRecipeIds === null && !menuLoadFailed) ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>Loading recipes…</p>
             ) : compatibleRecipes.length === 0 ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
