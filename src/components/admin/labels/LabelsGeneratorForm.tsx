@@ -17,10 +17,12 @@ export default function LabelsGeneratorForm({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(clients.map((c) => c.user_id)));
   const [paperSize, setPaperSize] = useState<PaperSize>("A4");
   const [orientation, setOrientation] = useState<Orientation>("portrait");
-  const [marginMm, setMarginMm] = useState(10);
-  const [labelWidthMm, setLabelWidthMm] = useState(70);
-  const [labelHeightMm, setLabelHeightMm] = useState(50);
+  const [marginMm, setMarginMm] = useState(0);
+  const [labelWidthMm, setLabelWidthMm] = useState(52);
+  const [labelHeightMm, setLabelHeightMm] = useState(52);
   const [stroke, setStroke] = useState(true);
+  const [includeComments, setIncludeComments] = useState(true);
+  const [warning, setWarning] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +38,7 @@ export default function LabelsGeneratorForm({
   async function handleGenerate() {
     setGenerating(true);
     setError(null);
+    setWarning(null);
     try {
       const res = await fetch("/api/admin/labels/pdf", {
         method: "POST",
@@ -44,12 +47,15 @@ export default function LabelsGeneratorForm({
           start,
           end,
           userIds: selectedIds.size < clients.length ? Array.from(selectedIds) : undefined,
-          options: { paperSize, orientation, marginMm, labelWidthMm, labelHeightMm, stroke },
+          options: { paperSize, orientation, marginMm, labelWidthMm, labelHeightMm, stroke, includeComments },
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Request failed (${res.status})`);
+      }
+      if (res.headers.get("X-Label-Comments-Failed")) {
+        setWarning("Some funny comments couldn't be generated, so those labels printed without one. Try again if you want them all.");
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -125,9 +131,14 @@ export default function LabelsGeneratorForm({
             <input type="checkbox" checked={stroke} onChange={(e) => setStroke(e.target.checked)} />
             Cut-line stroke
           </label>
+          <label style={{ ...labelStyle, flex: "0 1 200px", flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={includeComments} onChange={(e) => setIncludeComments(e.target.checked)} />
+            Add funny comments (AI)
+          </label>
         </div>
 
         {error && <p style={{ color: C.error, fontSize: 12.5, marginTop: 10 }}>{error}</p>}
+        {warning && <p style={{ color: "#b45309", fontSize: 12.5, marginTop: 10 }}>{warning}</p>}
 
         <button
           type="button"
@@ -135,7 +146,7 @@ export default function LabelsGeneratorForm({
           disabled={generating || clients.length === 0 || selectedIds.size === 0}
           style={{ ...primaryButton, marginTop: 14, opacity: generating || selectedIds.size === 0 ? 0.6 : 1 }}
         >
-          {generating ? "Generating…" : "Generate PDF"}
+          {generating ? (includeComments ? "Writing jokes…" : "Generating…") : "Generate PDF"}
         </button>
       </Section>
     </>

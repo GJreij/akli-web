@@ -19,6 +19,7 @@ export interface LabelPdfOptions {
   labelWidthMm: number;
   labelHeightMm: number;
   stroke: boolean;
+  includeComments: boolean;
 }
 
 const PAPER_SIZES_MM: Record<PaperSize, [number, number]> = {
@@ -56,6 +57,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; widthMm: number; heightMm: number; stroke: boolean }) {
   const scale = Math.min(widthMm / 70, heightMm / 50);
+  // The comment needs ~2 lines at the bottom — shrink the wordmark and
+  // tighten the rules to make room rather than overflowing the cell.
+  const hasComment = Boolean(label.comment);
   const styles = StyleSheet.create({
     cell: {
       width: mm(widthMm),
@@ -69,7 +73,7 @@ function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; wid
     wordmark: {
       fontFamily: "Playfair Display",
       fontWeight: 600,
-      fontSize: 32 * scale,
+      fontSize: (hasComment ? 22 : 32) * scale,
       color: PRIMARY,
       textAlign: "center",
     },
@@ -81,7 +85,7 @@ function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; wid
     },
     rule: {
       borderBottom: "0.5pt solid " + PRIMARY,
-      marginVertical: 3 * scale,
+      marginVertical: (hasComment ? 2 : 3) * scale,
     },
     mealType: {
       fontFamily: "Playfair Display",
@@ -93,7 +97,22 @@ function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; wid
     row: {
       fontSize: 8 * scale,
       color: PRIMARY,
-      marginBottom: 1.5 * scale,
+      marginBottom: (hasComment ? 1 : 1.5) * scale,
+    },
+    // Pinned to the bottom, with a rule and breathing room above so it
+    // doesn't crowd the label details.
+    commentBlock: {
+      marginTop: "auto",
+      paddingTop: 3 * scale,
+    },
+    comment: {
+      fontFamily: "Helvetica-BoldOblique",
+      // Floor so it stays legible on small labels.
+      fontSize: Math.max(6.5, 7 * scale),
+      color: PRIMARY,
+      textAlign: "center",
+      lineHeight: 1.2,
+      marginTop: 3 * scale,
     },
     bold: { fontWeight: 700 },
     macroLine: {
@@ -131,6 +150,12 @@ function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; wid
         <Text style={styles.bold}>Batch Code: </Text>
         {label.batch_code}
       </Text>
+      {hasComment && (
+        <View style={styles.commentBlock}>
+          <View style={styles.rule} />
+          <Text style={styles.comment}>{label.comment}</Text>
+        </View>
+      )}
     </View>
   );
 }

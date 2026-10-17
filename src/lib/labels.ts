@@ -13,6 +13,13 @@ export interface LabelData {
   fat: number;
   production_date: string; // D/M/YYYY, unpadded
   batch_code: string;
+  comment?: string; // optional AI one-liner, filled in by the PDF route when requested
+  // Identity of the meal behind the label — used to group a client's day
+  // for the AI comments and to save/reuse them per meal.
+  meal_plan_day_recipe_id: number;
+  recipe_id: number | null;
+  user_id: string;
+  consumption_date: string; // ISO
 }
 
 export interface ClientOption {
@@ -186,7 +193,7 @@ export async function fetchLabelsForRange(
     mpdrByMealPlanDayId.set(key, list);
   }
 
-  const labels: (LabelData & { consumption_date: string })[] = [];
+  const labels: LabelData[] = [];
 
   for (const mpdRow of mpdRows) {
     const user = userById.get(mpdRow.user_id);
@@ -201,6 +208,9 @@ export async function fetchLabelsForRange(
       const macros = servingsByMpdrId.get(r.id) ?? { kcal: 0, protein: 0, carbs: 0, fat: 0 };
       labels.push({
         consumption_date: mpdRow.consumption_date,
+        meal_plan_day_recipe_id: r.id,
+        recipe_id: r.recipe_id,
+        user_id: mpdRow.user_id,
         client_name: user.name ?? "",
         client_last_name: user.last_name ?? "",
         meal_type: r.meal_type ?? "",
@@ -226,16 +236,5 @@ export async function fetchLabelsForRange(
     return orderA - orderB;
   });
 
-  return labels.map((l) => ({
-    client_name: l.client_name,
-    client_last_name: l.client_last_name,
-    meal_type: l.meal_type,
-    recipe_name: l.recipe_name,
-    kcal: l.kcal,
-    protein: l.protein,
-    carbs: l.carbs,
-    fat: l.fat,
-    production_date: l.production_date,
-    batch_code: l.batch_code,
-  }));
+  return labels;
 }
