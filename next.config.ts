@@ -1,5 +1,10 @@
 import type { NextConfig } from "next";
 
+// Webpack polling (below) alone isn't enough under OneDrive — Next's own
+// Watchpack (app dir, env files) still uses the native watcher and hits the
+// same fs-event.c assertion, so make it poll too in dev.
+if (process.env.NODE_ENV !== "production") process.env.WATCHPACK_POLLING ??= "true";
+
 const withPWA = require("next-pwa")({
   dest: "public",
   disable: process.env.NODE_ENV === "development",

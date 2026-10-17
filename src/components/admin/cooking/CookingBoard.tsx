@@ -11,6 +11,37 @@ function allergenLabel(key: string) {
   return ALLERGENS.find(a => a.key === key)?.label ?? key;
 }
 
+// Small, quiet toggle — instructions are reference material, only shown on demand.
+function InstructionsToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: "transparent", color: C.muted, border: "none", padding: 0,
+        fontSize: 11.5, fontWeight: 600, cursor: "pointer", textDecoration: "underline",
+      }}
+    >
+      {open ? "Hide instructions" : "Instructions"}
+    </button>
+  );
+}
+
+function InstructionsText({ text }: { text: string }) {
+  return (
+    <p style={{
+      margin: "6px 0 8px", padding: "8px 10px", background: C.white, border: `1px solid ${C.border}`,
+      borderRadius: 8, fontSize: 12, lineHeight: 1.5, color: C.muted, whiteSpace: "pre-wrap",
+    }}>
+      {text}
+    </p>
+  );
+}
+
+export interface CookingInstructions {
+  recipes: Record<number, string>;
+  subrecipes: Record<number, string>;
+}
+
 interface Occurrence {
   recipeId: number;
   subrecipeId: number;
@@ -18,8 +49,9 @@ interface Occurrence {
   mpdrIds: number[];
 }
 
-export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) {
+export default function CookingBoard({ recipes, instructions }: { recipes: CookingRecipe[]; instructions?: CookingInstructions }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [openInstructions, setOpenInstructions] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Map<string, Occurrence>>(new Map());
   const [panelTargets, setPanelTargets] = useState<PortionTarget[] | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -52,6 +84,14 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
     setExpanded(prev => {
       const next = new Set(prev);
       next.has(recipeId) ? next.delete(recipeId) : next.add(recipeId);
+      return next;
+    });
+  }
+
+  function toggleInstructions(key: string) {
+    setOpenInstructions(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
   }
@@ -123,6 +163,8 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
           // Defensive default — undefined until the backend deploy that adds
           // this field to /cooking/overview has gone out.
           const allergenConflicts = r.allergen_conflicts ?? [];
+          const recipeInstructions = instructions?.recipes[r.recipe_id];
+          const recipeInstrKey = `r:${r.recipe_id}`;
           return (
             <div key={r.recipe_id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
               <button
@@ -181,6 +223,13 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                     </div>
                   )}
 
+                  {recipeInstructions && (
+                    <div style={{ margin: "12px 0 0" }}>
+                      <InstructionsToggle open={openInstructions.has(recipeInstrKey)} onClick={() => toggleInstructions(recipeInstrKey)} />
+                      {openInstructions.has(recipeInstrKey) && <InstructionsText text={recipeInstructions} />}
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "12px 0 6px" }}>
                     <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: C.primary }}>Ingredients (recipe total)</p>
                     <CopyListButton
@@ -199,6 +248,8 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                       const checked = isSelected(r.recipe_id, s.subrecipe_id);
                       const disabled = !checked && !canSelect(r.recipe_id, s.subrecipe_id);
                       const occurrenceCount = occurrencesBySubrecipe.get(s.subrecipe_id)?.length ?? 1;
+                      const subInstructions = instructions?.subrecipes[s.subrecipe_id];
+                      const subInstrKey = `s:${r.recipe_id}:${s.subrecipe_id}`;
                       return (
                         <div key={s.subrecipe_id} style={{ background: C.offWhite, borderRadius: 10, padding: "10px 12px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -241,6 +292,12 @@ export default function CookingBoard({ recipes }: { recipes: CookingRecipe[] }) 
                           <div style={{ fontSize: 11.5, color: C.muted }}>
                             {s.ingredients_needed.map(i => `${i.name}: ${i.total_quantity ?? i.quantity} ${i.unit ?? ""}`).join(" · ")}
                           </div>
+                          {subInstructions && (
+                            <div style={{ marginTop: 6 }}>
+                              <InstructionsToggle open={openInstructions.has(subInstrKey)} onClick={() => toggleInstructions(subInstrKey)} />
+                              {openInstructions.has(subInstrKey) && <InstructionsText text={subInstructions} />}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

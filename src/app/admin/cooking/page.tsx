@@ -7,6 +7,7 @@ import CookingBoard from "@/components/admin/cooking/CookingBoard";
 import ClientMultiSelect from "@/components/admin/cooking/ClientMultiSelect";
 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name">;
+type InstructionRow = { id: number; instructions: string | null };
 
 function BoardFallback() {
   return (
@@ -44,7 +45,24 @@ async function CookingResults({ start, end, subrecipe_id, client_ids, recipe_id,
       recipe_id: recipe_id || undefined,
     });
   }
-  return <CookingBoard recipes={recipes} />;
+
+  // Cooking instructions live on the catalog rows, not in the Flask
+  // overview — fetch them for just the recipes/subrecipes on the board.
+  const recipeIds = [...new Set(recipes.map(r => r.recipe_id))];
+  const subrecipeIds = [...new Set(recipes.flatMap(r => r.subrecipes.map(s => s.subrecipe_id)))];
+  const supabase = await createClient();
+  const [recipeInstrRes, subrecipeInstrRes] = await Promise.all([
+    recipeIds.length ? supabase.from("recipe").select("id,instructions").in("id", recipeIds) : { data: [] },
+    subrecipeIds.length ? supabase.from("subrecipe").select("id,instructions").in("id", subrecipeIds) : { data: [] },
+  ]);
+  const toMap = (rows: InstructionRow[] | null) =>
+    Object.fromEntries((rows ?? []).filter(r => r.instructions?.trim()).map(r => [r.id, r.instructions!.trim()]));
+  const instructions = {
+    recipes: toMap(recipeInstrRes.data as InstructionRow[] | null),
+    subrecipes: toMap(subrecipeInstrRes.data as InstructionRow[] | null),
+  };
+
+  return <CookingBoard recipes={recipes} instructions={instructions} />;
 }
 
 export default async function CookingPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string; subrecipe_id?: string; client_id?: string | string[]; recipe_id?: string }> }) {
