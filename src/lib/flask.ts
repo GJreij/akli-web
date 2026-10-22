@@ -227,7 +227,8 @@ export async function confirmOrder(
   payment_method: "cash" | "whish" | "neo",
   delivery_address_id: number,
   wallet_amount_requested?: number,
-  wallet_topup_amount?: number
+  wallet_topup_amount?: number,
+  needs_cutlery?: boolean
 ): Promise<{ success: boolean; order_id?: number; error?: string }> {
   const res = await fetch(`${FLASK_URL}/confirm_order`, {
     method: "POST",
@@ -236,6 +237,7 @@ export async function confirmOrder(
       user_id, meal_plan, checkout_summary, delivery_slot_id, payment_method, delivery_address_id,
       wallet_amount_requested: wallet_amount_requested ?? 0,
       wallet_topup_amount: wallet_topup_amount ?? 0,
+      needs_cutlery: needs_cutlery ?? false,
     }),
   });
   if (!res.ok) throw new Error(`confirm_order error ${res.status}: ${await res.text()}`);
@@ -755,6 +757,7 @@ export interface PackagingRecipe {
 export interface PackagingClient {
   name: string | null;
   last_name: string | null;
+  needs_cutlery: boolean;
   recipes: PackagingRecipe[];
 }
 
@@ -809,6 +812,7 @@ export interface DeliveryRow {
   // the pin was never moved off the map picker's default center) rather than
   // a precise, verified location.
   maps_is_precise: boolean;
+  needs_cutlery: boolean;
   payment: DeliveryPayment | null;
 }
 

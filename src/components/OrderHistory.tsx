@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconChevronDown, IconLeaf, IconReceipt2,
@@ -16,6 +16,7 @@ import {
   previewCancellationDiscountImpact, type DiscountImpactPreview,
 } from "@/lib/flask";
 import { createClient } from "@/lib/supabase/client";
+import { setDeliveryCutlery } from "@/app/orders/actions";
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,7 @@ type Delivery = {
   status: string | null;
   delivery_address: string | null;
   delivery_slot_id: number | null;
+  needs_cutlery: boolean;
 };
 
 type DayMacros = {
@@ -201,6 +203,64 @@ function isDayModifiable(day: PlanDay): boolean {
   if (day.status === "cancellation_pending" || day.status === "cancelled") return false;
   if (!day.date) return false;
   return day.date >= beirutISODate(3);
+}
+
+// Cutlery is a packing detail, not a meal change — no price, no payment
+// gate, and it stays open until the day before delivery. Mirrors the check
+// in app/orders/actions.ts::setDeliveryCutlery.
+function isCutleryEditable(day: PlanDay, delivery: Delivery): boolean {
+  if (day.status === "cancellation_pending" || day.status === "cancelled") return false;
+  if (delivery.status === "cancelled" || delivery.status === "cancellation_pending" || delivery.status === "delivered") return false;
+  return !!delivery.delivery_date && delivery.delivery_date >= beirutISODate(1);
+}
+
+function DayCutlery({ day, delivery }: { day: PlanDay; delivery: Delivery }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const on = delivery.needs_cutlery;
+  const editable = isCutleryEditable(day, delivery);
+
+  if (!editable) {
+    return on ? (
+      <p style={{ margin: "0 0 8px", fontSize: 10.5, color: C.tealDark, display: "flex", alignItems: "center", gap: 4 }}>
+        <IconToolsKitchen2 size={11} /> Cutlery included
+      </p>
+    ) : null;
+  }
+
+  function toggle() {
+    setErr(null);
+    startTransition(async () => {
+      try {
+        await setDeliveryCutlery(delivery.id, !on);
+        router.refresh();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Could not update cutlery.");
+      }
+    });
+  }
+
+  return (
+    <div style={{ margin: "0 0 8px" }}>
+      <button
+        onClick={toggle}
+        disabled={pending}
+        aria-pressed={on}
+        style={{
+          display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, cursor: "pointer",
+          border: `1px solid ${on ? C.tealDark : C.border}`,
+          background: on ? C.tealDark : C.white,
+          color: on ? C.white : C.muted,
+          fontSize: 11, fontWeight: 600, opacity: pending ? 0.6 : 1,
+        }}
+      >
+        <IconToolsKitchen2 size={12} />
+        {pending ? "Saving…" : on ? "Cutlery included · tap to remove" : "No cutlery · tap to add"}
+      </button>
+      {err && <p style={{ margin: "4px 0 0", fontSize: 10.5, color: C.error }}>{err}</p>}
+    </div>
+  );
 }
 
 function modifiableDays(plan: MealPlan): PlanDay[] {
@@ -2240,6 +2300,7 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
                       {delivery.delivery_address}
                     </p>
                   )}
+                  {delivery && <DayCutlery day={day} delivery={delivery} />}
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                     {meals.length === 0 ? (

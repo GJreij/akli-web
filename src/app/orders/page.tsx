@@ -6,7 +6,7 @@ type RawPlan     = { id: number; start_date: string | null; end_date: string | n
 type RawDay      = { id: number; meal_plan_id: number | null; date: string | null; status: string | null; delivery_id: number | null };
 type RawPayment  = { id: number; meal_plan_day_id: number | null; amount: number | null; currency: string | null; status: string | null; provider: string | null; created_at: string; wallet_amount_applied: number | null };
 type RawRecipe   = { id: number; meal_plan_day_id: number | null; meal_type: string | null; label: string | null; is_swapped: boolean | null; recipe: { id: number; name: string | null; photo: string | null } | null };
-type RawDelivery = { id: number; meal_plan_day_id: number | null; delivery_date: string | null; status: string | null; delivery_address: string | null; delivery_slot_id: number | null };
+type RawDelivery = { id: number; meal_plan_day_id: number | null; delivery_date: string | null; status: string | null; delivery_address: string | null; delivery_slot_id: number | null; needs_cutlery: boolean };
 type RawMacros   = { meal_plan_day_id: number | null; kcal_ordered: number | null; protein_ordered: number | null; carbs_ordered: number | null; fat_ordered: number | null };
 
 type RawSwapLog = { id: number; meal_plan_id: number | null; summary: string | null; price_delta: number | null; created_at: string };
@@ -92,7 +92,7 @@ export default async function OrdersPage() {
       .in("meal_plan_day_id", dayIds),
     supabase
       .from("deliveries")
-      .select("id, meal_plan_day_id, delivery_date, status, delivery_address, delivery_slot_id")
+      .select("id, meal_plan_day_id, delivery_date, status, delivery_address, delivery_slot_id, needs_cutlery")
       .in("meal_plan_day_id", dayIds),
     supabase
       .from("daily_macro_order")

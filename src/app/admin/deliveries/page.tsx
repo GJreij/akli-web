@@ -53,6 +53,7 @@ async function DeliveryList({ start, end }: { start: string; end: string }) {
     );
   }
 
+  const cutleryCount = deliveries.filter(d => d.needs_cutlery).length;
   const byDate = new Map<string, DeliveryRow[]>();
   for (const d of deliveries) {
     const key = d.delivery_date ?? "Unknown date";
@@ -62,6 +63,9 @@ async function DeliveryList({ start, end }: { start: string; end: string }) {
 
   return (
     <Section title={`Deliveries (${deliveries.length})`}>
+      <p style={{ margin: "0 0 12px", fontSize: 12.5, color: C.muted }}>
+        🍴 Cutlery requested: <strong style={{ color: C.primary }}>{cutleryCount}</strong> of {deliveries.length}
+      </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {[...byDate.entries()].map(([date, rows]) => (
           <div key={date}>
@@ -104,6 +108,14 @@ async function DeliveryList({ start, end }: { start: string; end: string }) {
                         >
                           {d.maps_is_precise ? "Open in Maps" : "Search on Maps"}
                         </a>
+                      )}
+                      {d.needs_cutlery && (
+                        <span style={{
+                          fontSize: 11.5, fontWeight: 700, color: C.white, background: C.tealDark,
+                          borderRadius: 6, padding: "3px 8px", textTransform: "uppercase", letterSpacing: "0.02em", whiteSpace: "nowrap",
+                        }}>
+                          🍴 Cutlery
+                        </span>
                       )}
                       <PaymentBadge payment={d.payment} />
                     </div>

@@ -99,6 +99,11 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
               <div key={`${day.delivery_date}-${slot.slot_id}`} style={{ background: C.offWhite, borderRadius: 10, padding: "10px 12px" }}>
                 <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.03em" }}>
                   {fmtSlot(slot)}
+                  {slot.clients.some(c => c.needs_cutlery) && (
+                    <span style={{ marginLeft: 8, color: C.tealDark }}>
+                      · 🍴 {slot.clients.filter(c => c.needs_cutlery).length} cutlery
+                    </span>
+                  )}
                 </p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -110,8 +115,16 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                     return (
                     <div key={ci} style={{ background: C.white, borderRadius: 8, padding: "8px 10px", border: `1px solid ${C.border}` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.primary }}>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.primary, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           {`${client.name ?? ""} ${client.last_name ?? ""}`.trim() || "Unknown client"}
+                          {client.needs_cutlery && (
+                            <span style={{
+                              fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
+                              padding: "2px 8px", borderRadius: 20, background: C.tealDark, color: C.white,
+                            }}>
+                              🍴 Add cutlery
+                            </span>
+                          )}
                         </p>
                         <button
                           onClick={() => toggleClientExpanded(clientKey)}

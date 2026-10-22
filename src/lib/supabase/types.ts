@@ -558,6 +558,7 @@ export type Database = {
           delivery_slot_id: number | null
           id: number
           meal_plan_day_id: number | null
+          needs_cutlery: boolean
           status: string | null
           updated_at: string | null
           user_id: string | null
@@ -569,6 +570,7 @@ export type Database = {
           delivery_slot_id?: number | null
           id?: number
           meal_plan_day_id?: number | null
+          needs_cutlery?: boolean
           status?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -580,6 +582,7 @@ export type Database = {
           delivery_slot_id?: number | null
           id?: number
           meal_plan_day_id?: number | null
+          needs_cutlery?: boolean
           status?: string | null
           updated_at?: string | null
           user_id?: string | null
@@ -2057,6 +2060,7 @@ export type Database = {
           created_at: string
           delivery_slot_id: number | null
           id: number
+          needs_cutlery: boolean
           updated_at: string | null
           user_id: string | null
         }
@@ -2064,6 +2068,7 @@ export type Database = {
           created_at?: string
           delivery_slot_id?: number | null
           id?: number
+          needs_cutlery?: boolean
           updated_at?: string | null
           user_id?: string | null
         }
@@ -2071,6 +2076,7 @@ export type Database = {
           created_at?: string
           delivery_slot_id?: number | null
           id?: number
+          needs_cutlery?: boolean
           updated_at?: string | null
           user_id?: string | null
         }

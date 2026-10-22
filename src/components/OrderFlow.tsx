@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconArrowRight, IconX, IconRefresh,
   IconLeaf, IconCheck, IconBrandWhatsapp, IconChevronDown, IconArrowBackUp,
-  IconMapPin, IconPlus, IconTrash, IconScaleOutline,
+  IconMapPin, IconPlus, IconTrash, IconScaleOutline, IconToolsKitchen2,
 } from "@tabler/icons-react";
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
@@ -1310,6 +1310,40 @@ function DailyBreakdown({ breakdown }: {
   );
 }
 
+// ─── Cutlery picker (checkout) ────────────────────────────────────────────────
+
+function CutleryPicker({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const option = (selected: boolean, label: string, onClick: () => void) => (
+    <button onClick={onClick} aria-pressed={selected} style={{
+      flex: 1, padding: "11px 8px", borderRadius: 10, cursor: "pointer",
+      border: `2px solid ${selected ? C.tealDark : C.border}`,
+      background: selected ? C.tealDark : C.white,
+      color: selected ? C.white : "#1a1a1a",
+      fontSize: 13.5, fontWeight: 600,
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+    }}>
+      {selected && <IconCheck size={15} />} {label}
+    </button>
+  );
+  return (
+    <div style={{ background: "#f0f7f7", border: `2px solid ${C.teal}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+        <div style={{ width: 34, height: 34, borderRadius: "50%", background: C.white, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <IconToolsKitchen2 size={19} color={C.tealDark} />
+        </div>
+        <p style={{ fontSize: 14.5, fontWeight: 700, margin: 0, color: C.primary }}>Do you need cutlery?</p>
+      </div>
+      <p style={{ fontSize: 12, color: C.muted, margin: "0 0 12px", lineHeight: 1.5 }}>
+        To cut down on plastic, we don&apos;t include cutlery unless you ask. It&apos;s free. You can change it later from your orders.
+      </p>
+      <div style={{ display: "flex", gap: 8 }}>
+        {option(!value, "No thanks", () => onChange(false))}
+        {option(value, "Yes, include it", () => onChange(true))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Address picker (checkout) ────────────────────────────────────────────────
 
 function AddressPicker({ userId, addresses, selectedId, onSelect, onAdded, onRemoved, onDefaultChanged }: {
@@ -1522,6 +1556,7 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
   cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [], recipeAllergens = {}, allowWeekendToggle = false,
+  initialNeedsCutlery = false,
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1541,6 +1576,9 @@ export default function OrderFlow({
   // before — orderableWeeks itself simply never contains weekend dates for
   // that page.
   allowWeekendToggle?: boolean;
+  // The client's last checkout choice (user_delivery_preference.needs_cutlery)
+  // — pre-selects the cutlery toggle. Off for anyone who never chose.
+  initialNeedsCutlery?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
@@ -1676,6 +1714,7 @@ export default function OrderFlow({
   const [confirming, setConfirming]     = useState(false);
   const [confirmErr, setConfirmErr]     = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "whish" | "neo" | null>(null);
+  const [needsCutlery, setNeedsCutlery] = useState(initialNeedsCutlery);
   const [useWalletCredit, setUseWalletCredit] = useState(false);
   // Adding funds to the wallet at checkout — separate from useWalletCredit,
   // which spends the wallet down: this one adds to it, on top of the order total.
@@ -1967,7 +2006,7 @@ export default function OrderFlow({
     setStep("confirming");
     const sortedDates = plan.days.map(d => d.date).sort();
     try {
-      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod ?? "cash", addressId, walletAmountApplied, walletTopupAmount);
+      const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod ?? "cash", addressId, walletAmountApplied, walletTopupAmount, needsCutlery);
       // confirmOrder() already throws on a non-2xx response, so reaching here without
       // an explicit error means the backend confirmed the order — don't rely solely
       // on a `success` flag that some backend responses omit.
@@ -2678,6 +2717,11 @@ export default function OrderFlow({
               </div>
             )}
           </div>
+
+          {/* Cutlery — off by default (less waste), so it's styled to stand
+              out: a client who expected cutlery and didn't get it would
+              otherwise have no idea this choice existed. */}
+          <CutleryPicker value={needsCutlery} onChange={setNeedsCutlery} />
 
           {/* Address */}
           <AddressPicker

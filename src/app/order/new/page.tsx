@@ -28,7 +28,7 @@ export default async function OrderNewPage() {
   const today = beirutISODate(0);
   const minOrderable = beirutISODate(2); // 48h lead time — earliest day a new order can cover
 
-  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes, closuresRes] = await Promise.all([
+  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes, closuresRes, deliveryPrefRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase.from("daily_macro_target").select("*").eq("user_id", user.id)
       .order("created_at", { ascending: false }).limit(1).single(),
@@ -58,6 +58,10 @@ export default async function OrderNewPage() {
       .select("closure_date, reason")
       .gte("closure_date", today)
       .order("closure_date", { ascending: true }),
+    supabase.from("user_delivery_preference").select("needs_cutlery")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   // Filter to rules whose date window covers today — done here rather than in
@@ -146,6 +150,7 @@ export default async function OrderNewPage() {
       cancellationPendingDays={cancellationPendingDays}
       closureDays={closureDays}
       volumeDiscountRules={activeVolumeRules}
+      initialNeedsCutlery={(deliveryPrefRes.data as { needs_cutlery: boolean } | null)?.needs_cutlery ?? false}
     />
   );
 }

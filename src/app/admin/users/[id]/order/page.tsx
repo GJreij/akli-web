@@ -35,7 +35,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
   const today = beirutISODate(0);
   const minOrderable = beirutISODate(2);
 
-  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes, closuresRes] = await Promise.all([
+  const [profileRes, macroRes, menusRes, slotsRes, prefsRes, addressesRes, orderedDaysRes, volumeRulesRes, closuresRes, deliveryPrefRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", targetUserId).single(),
     supabase.from("daily_macro_target").select("*").eq("user_id", targetUserId)
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -65,6 +65,10 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
       .select("closure_date, reason")
       .gte("closure_date", today)
       .order("closure_date", { ascending: true }),
+    supabase.from("user_delivery_preference").select("needs_cutlery")
+      .eq("user_id", targetUserId)
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
@@ -193,6 +197,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
         cancellationPendingDays={cancellationPendingDays}
         closureDays={closureDays}
         volumeDiscountRules={activeVolumeRules}
+        initialNeedsCutlery={(deliveryPrefRes.data as { needs_cutlery: boolean } | null)?.needs_cutlery ?? false}
         allowWeekendToggle
       />
     </div>
