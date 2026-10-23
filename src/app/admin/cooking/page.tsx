@@ -5,18 +5,14 @@ import type { Database } from "@/lib/supabase/types";
 import { getCookingOverview, mergeCookingOverviews, type CookingRecipe } from "@/lib/flask";
 import CookingBoard from "@/components/admin/cooking/CookingBoard";
 import ClientMultiSelect from "@/components/admin/cooking/ClientMultiSelect";
+import AkliLoader from "@/components/AkliLoader";
 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name">;
 type InstructionRow = { id: number; instructions: string | null };
 
+// Flask-backed, usually 1.5–3s — show the branded loader straight away.
 function BoardFallback() {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, height: 64 }} />
-      ))}
-    </div>
-  );
+  return <AkliLoader message="Firing up the kitchen board…" tone="dark" />;
 }
 
 async function CookingResults({ start, end, subrecipe_id, client_ids, recipe_id, preFetched }: { start: string; end: string; subrecipe_id?: string; client_ids: string[]; recipe_id?: string; preFetched?: CookingRecipe[] }) {

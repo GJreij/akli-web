@@ -1,15 +1,11 @@
 import { Suspense } from "react";
 import { PageHeader, Section, inputStyle, labelStyle, C } from "@/components/admin/ui";
 import { getDeliveriesOverview, type DeliveryRow } from "@/lib/flask";
+import AkliLoader from "@/components/AkliLoader";
 
+// Flask-backed, usually 1.5–3s — show the branded loader straight away.
 function ListFallback() {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, height: 90 }} />
-      ))}
-    </div>
-  );
+  return <AkliLoader message="Mapping out today's drops…" tone="dark" />;
 }
 
 function fmtSlot(slot: DeliveryRow["delivery_slot"]) {

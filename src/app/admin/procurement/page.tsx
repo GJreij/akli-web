@@ -3,13 +3,15 @@ import { PageHeader, Section, inputStyle, labelStyle, C } from "@/components/adm
 import CopyListButton from "@/components/admin/CopyListButton";
 import { getIngredientsToBuy } from "@/lib/flask";
 import { createClient } from "@/lib/supabase/server";
+import AkliLoader from "@/components/AkliLoader";
 import type { Database } from "@/lib/supabase/types";
 
 type UserRow = Pick<Database["public"]["Tables"]["user"]["Row"], "id" | "name" | "last_name">;
 type RecipeRow = Pick<Database["public"]["Tables"]["recipe"]["Row"], "id" | "name">;
 
+// Flask-backed, usually 1.5–3s — show the branded loader straight away.
 function ListFallback() {
-  return <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, height: 240 }} />;
+  return <AkliLoader message="Writing the shopping list…" tone="dark" />;
 }
 
 async function IngredientList({ start, end, recipe, client }: { start: string; end: string; recipe?: string; client?: string }) {
