@@ -2533,6 +2533,14 @@ export default function OrderFlow({
               <span style={{ fontSize: 13.5 }}>{bd?.total_price_before_discount != null ? `$${bd.total_price_before_discount.toFixed(2)}` : estDayPrice !== null ? `$${(estDayPrice * dayCount).toFixed(2)}` : "—"}</span>
             </div>
 
+            {/* Already part of the day total above — a note, not an extra line to add. */}
+            {(bd?.single_meal_fee?.total ?? 0) > 0 && (
+              <p style={{ margin: "-3px 0 8px", fontSize: 11.5, color: C.light }}>
+                Includes ${bd!.single_meal_fee!.total.toFixed(2)} single-meal packaging
+                ({bd!.single_meal_fee!.days} day{bd!.single_meal_fee!.days !== 1 ? "s" : ""} with one meal)
+              </p>
+            )}
+
             {(bd?.volume_discount?.amount ?? 0) > 0 && (
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, color: C.tealDark }}>
                 <span style={{ fontSize: 13 }}>

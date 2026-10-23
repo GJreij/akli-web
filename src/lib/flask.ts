@@ -178,6 +178,14 @@ export interface CheckoutSummaryResponse {
       min_order_days: number | null;
     };
     promo_discount_amount: number;
+    // Extra packaging on days with exactly one meal (macro_price.single_meal_fee).
+    // ALREADY included in total_price_before_discount — informational only.
+    // Optional: absent until the Flask deploy that adds it.
+    single_meal_fee?: {
+      fee_per_day: number;
+      days: number;
+      total: number;
+    };
     minimum_order: {
       threshold: number;
       fee_applied: number;
@@ -193,6 +201,7 @@ export interface CheckoutSummaryResponse {
       total_price: number;
       original_total_price: number;
       meals: number;
+      single_meal_fee?: number;
       delivery_applied: boolean;
       delivery_fee: number;
       total_price_with_delivery: number;
