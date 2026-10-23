@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, labelStyle, th, td, C } from "@/components/admin/ui";
 import OrdersAccordion, { type OrderGroup } from "./OrdersAccordion";
+import AdjustmentsPanel from "./AdjustmentsPanel";
 
 type PaymentRow = Pick<
   Database["public"]["Tables"]["payment"]["Row"],
@@ -98,7 +99,11 @@ function adjustmentLabel(type: string): string {
   return type;
 }
 
+// "open" (unpaid + partially paid) is the default: what's still to collect is
+// what this page is mostly used for. Everything else is one dropdown away.
+const DEFAULT_STATUS = "open";
 const STATUS_OPTIONS = [
+  { value: "open", label: "Unpaid + partially paid" },
   { value: "all", label: "All statuses" },
   { value: "paid", label: "Paid" },
   { value: "pending", label: "Not paid" },
@@ -332,7 +337,8 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
     if (group.days.length > 0 && group.days.every(d => d.cancelled)) orderMap.delete(key);
   }
   let orders = [...orderMap.values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
-  if (statusFilter !== "all") orders = orders.filter(o => o.status === statusFilter);
+  if (statusFilter === "open") orders = orders.filter(o => o.status === "pending" || o.status === "partial");
+  else if (statusFilter !== "all") orders = orders.filter(o => o.status === statusFilter);
 
   const rangeLabel = start || end ? "in range" : "(all time)";
 
@@ -382,45 +388,20 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
         )}
       </Section>
 
-      <Section title={`Post-order adjustments ${rangeLabel} (${adjustmentRows.length})`}>
-        {adjustmentRows.length === 0 ? (
-          <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No meal swaps, day edits, or discount corrections in this range.</p>
-        ) : (
-          <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                <th style={th}>Client</th>
-                <th style={th}>Type</th>
-                <th style={th}>Amount</th>
-                <th style={th}>Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {adjustmentRows.map(a => {
-                // amount is negative for a debit (client charged, revenue up)
-                // and positive for a credit (client refunded, revenue down).
-                const isDebit = (a.amount ?? 0) < 0;
-                return (
-                  <tr key={a.id}>
-                    <td style={td}>
-                      {a.user_id ? (
-                        <Link href={`/admin/users/${a.user_id}`} style={{ color: C.primary, fontWeight: 600, textDecoration: "none" }}>
-                          {nameFor(a.user_id)}
-                        </Link>
-                      ) : nameFor(null)}
-                    </td>
-                    <td style={{ ...td, color: C.muted }}>{adjustmentLabel(a.type)} {isDebit ? "(charged)" : "(credited)"}</td>
-                    <td style={{ ...td, fontWeight: 700, color: isDebit ? C.primary : C.error }}>
-                      {isDebit ? "+" : "-"}{fmtMoney(Math.abs(a.amount ?? 0))}
-                    </td>
-                    <td style={{ ...td, color: C.muted }}>{new Date(a.created_at).toLocaleDateString("en-GB", { timeZone: "Asia/Beirut" })}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </Section>
+      <AdjustmentsPanel
+        rangeLabel={rangeLabel}
+        // wallet_transactions.amount is negative for a debit (client charged,
+        // revenue up) and positive for a credit (client refunded, revenue
+        // down) — flip the sign so the panel works in revenue terms.
+        items={adjustmentRows.map(a => ({
+          id: a.id,
+          userId: a.user_id,
+          clientName: nameFor(a.user_id),
+          label: adjustmentLabel(a.type),
+          revenue: -(a.amount ?? 0),
+          date: new Date(a.created_at).toLocaleDateString("en-GB", { timeZone: "Asia/Beirut" }),
+        }))}
+      />
 
       {pendingTopupRequestCount > 0 && (
         <Section title="Pending wallet top-up requests">
@@ -464,7 +445,7 @@ async function FinancialData({ start, end, userId, statusFilter }: { start: stri
         )}
       </Section>
 
-      <Section title={`Orders ${rangeLabel} (${orders.length})`}>
+      <Section title={`${statusFilter === "open" ? "Unpaid orders" : "Orders"} ${rangeLabel} (${orders.length})`}>
         <OrdersAccordion orders={orders} />
       </Section>
     </>
@@ -491,7 +472,7 @@ export default async function FinancialPage({
   const rangeStart = params.start ?? fallback.start;
   const rangeEnd = params.end ?? fallback.end;
   const userId = params.user ?? "all";
-  const statusFilter = params.status ?? "all";
+  const statusFilter = params.status ?? DEFAULT_STATUS;
 
   const supabase = await createClient();
   const clientsRes = await supabase.from("user").select("id,name,last_name").order("name");
