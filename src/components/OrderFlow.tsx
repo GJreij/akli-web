@@ -2511,6 +2511,9 @@ export default function OrderFlow({
   if (step === "checkout") {
     const bd         = checkoutData?.price_breakdown;
     const dayCount   = plan?.days.length ?? 0;
+    // An admin-set fee for this address applies every day, so there's no
+    // free-delivery threshold to advertise.
+    const customDeliveryFee = bd?.delivery?.is_custom_fee ?? false;
     const freeThreshold = bd?.delivery?.minimum_per_day_for_free_delivery ?? 25;
     const walletMaxApplicable = bd?.wallet_max_applicable ?? 0;
     const { totalPrice, walletApplied, walletTopupAmount, amountDue } = computeAmountDue({
@@ -2581,7 +2584,11 @@ export default function OrderFlow({
 
             {/* Free delivery callout */}
             <div style={{ background: "#f0f7f7", borderRadius: 8, padding: "7px 10px", margin: "8px 0 10px", fontSize: 11.5, color: C.tealDark }}>
-              🚚 Free delivery on days totalling over ${freeThreshold}
+              {!customDeliveryFee
+                ? `🚚 Free delivery on days totalling over $${freeThreshold}`
+                : (bd?.delivery?.fee_per_day ?? 0) > 0
+                  ? `🚚 Your delivery fee of $${bd!.delivery.fee_per_day.toFixed(2)} applies to every delivery day`
+                  : "🚚 Free delivery on every day"}
             </div>
 
             {(bd?.minimum_order?.threshold ?? 0) > 0 && (

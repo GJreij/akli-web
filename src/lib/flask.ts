@@ -164,7 +164,9 @@ export interface CheckoutSummaryResponse {
     final_price_before_delivery: number;
     delivery: {
       fee_per_day: number;
-      minimum_per_day_for_free_delivery: number;
+      // null when the address has an admin-set override: that fee applies
+      // every day, with no free-delivery threshold.
+      minimum_per_day_for_free_delivery: number | null;
       delivery_days: number;
       delivery_fee: number;
       is_free_delivery: boolean;
