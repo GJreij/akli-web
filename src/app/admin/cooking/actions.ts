@@ -30,3 +30,30 @@ export async function savePortioning(rows: { meal_plan_day_recipe_serving_id: nu
     throw new Error(`Failed to save ${failed.length}/${rows.length} portion(s), e.g. serving ${failed[0].id}: ${detail}`);
   }
 }
+
+// Hide (cooked/done) or restore a recipe card on the Cooking board. Marks the
+// specific meals that made up the card, so a meal ordered AFTER the card was
+// hidden isn't marked and brings the card back. Display-only: nothing else
+// reads cooking_hidden_at.
+export async function setCookingHidden(mealPlanDayRecipeIds: number[], hidden: boolean) {
+  const ids = [...new Set(mealPlanDayRecipeIds)].filter(Number.isInteger);
+  if (ids.length === 0) throw new Error("No meals to update.");
+
+  const { supabase } = await requireAdmin();
+
+  // Batched: "Restore all" over a wide date range can be thousands of ids,
+  // too many for one request URL.
+  const stamp = hidden ? new Date().toISOString() : null;
+  const batches: number[][] = [];
+  for (let i = 0; i < ids.length; i += 300) batches.push(ids.slice(i, i + 300));
+  const results = await Promise.all(batches.map(batch =>
+    (supabase.from("meal_plan_day_recipe") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .update({ cooking_hidden_at: stamp })
+      .in("id", batch)
+      .select("id")
+  ));
+
+  const failed = results.find(r => r.error);
+  if (failed) throw new Error(`Failed to ${hidden ? "hide" : "restore"} meal: ${failed.error.message} (code ${failed.error.code})`);
+  if (results.every(r => !r.data || r.data.length === 0)) throw new Error(`Failed to ${hidden ? "hide" : "restore"} meal: no matching rows.`);
+}

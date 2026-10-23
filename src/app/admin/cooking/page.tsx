@@ -58,7 +58,18 @@ async function CookingResults({ start, end, subrecipe_id, client_ids, recipe_id,
     subrecipes: toMap(subrecipeInstrRes.data as InstructionRow[] | null),
   };
 
-  return <CookingBoard recipes={recipes} instructions={instructions} />;
+  // Which of the board's meals were hidden as cooked. Chunked: a wide date
+  // range can mean thousands of ids, too many for one URL / PostgREST's
+  // ~1000-row cap.
+  const allMpdrIds = [...new Set(recipes.flatMap(r => r.meal_plan_day_recipe_ids))];
+  const chunks: number[][] = [];
+  for (let i = 0; i < allMpdrIds.length; i += 300) chunks.push(allMpdrIds.slice(i, i + 300));
+  const hiddenRes = await Promise.all(chunks.map(ids =>
+    supabase.from("meal_plan_day_recipe").select("id").in("id", ids).not("cooking_hidden_at", "is", null)
+  ));
+  const hiddenMpdrIds = hiddenRes.flatMap(r => ((r.data ?? []) as { id: number }[]).map(x => x.id));
+
+  return <CookingBoard recipes={recipes} instructions={instructions} hiddenMpdrIds={hiddenMpdrIds} />;
 }
 
 export default async function CookingPage({ searchParams }: { searchParams: Promise<{ start?: string; end?: string; subrecipe_id?: string; client_id?: string | string[]; recipe_id?: string }> }) {

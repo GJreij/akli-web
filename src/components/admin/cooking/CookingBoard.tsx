@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { CookingRecipe } from "@/lib/flask";
+import { setCookingHidden } from "@/app/admin/cooking/actions";
 import CopyListButton from "../CopyListButton";
 import PortioningPanel, { type PortionTarget } from "./PortioningPanel";
 import { ALLERGENS } from "@/lib/allergens";
@@ -49,7 +51,32 @@ interface Occurrence {
   mpdrIds: number[];
 }
 
-export default function CookingBoard({ recipes, instructions }: { recipes: CookingRecipe[]; instructions?: CookingInstructions }) {
+const hideBtnStyle = {
+  background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 7,
+  padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+} as const;
+
+export default function CookingBoard({ recipes, instructions, hiddenMpdrIds = [] }: {
+  recipes: CookingRecipe[];
+  instructions?: CookingInstructions;
+  // Meals hidden as cooked (meal_plan_day_recipe.cooking_hidden_at set).
+  hiddenMpdrIds?: number[];
+}) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  // Hide/restore flips the card immediately; the server refresh that follows
+  // replaces this with the saved state.
+  const [hiddenOverride, setHiddenOverride] = useState<Map<number, boolean>>(new Map());
+  const [hideError, setHideError] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  // Fresh server data (after router.refresh) is the truth again — drop the
+  // optimistic flips so changes made on another device show up too.
+  const [overrideBase, setOverrideBase] = useState(hiddenMpdrIds);
+  if (overrideBase !== hiddenMpdrIds) {
+    setOverrideBase(hiddenMpdrIds);
+    setHiddenOverride(new Map());
+  }
+  const hiddenSet = new Set(hiddenMpdrIds);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [openInstructions, setOpenInstructions] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Map<string, Occurrence>>(new Map());
@@ -151,14 +178,71 @@ export default function CookingBoard({ recipes, instructions }: { recipes: Cooki
     setPanelTargets([...bySubrecipe.values()]);
   }
 
+  // A card counts as hidden only when EVERY meal in it is hidden — so a meal
+  // ordered after the card was hidden brings it back on its own.
+  function isHidden(r: CookingRecipe) {
+    const override = hiddenOverride.get(r.recipe_id);
+    if (override !== undefined) return override;
+    return r.meal_plan_day_recipe_ids.length > 0 && r.meal_plan_day_recipe_ids.every(id => hiddenSet.has(id));
+  }
+
+  function setHidden(r: CookingRecipe, hidden: boolean) {
+    setHideError(null);
+    setHiddenOverride(prev => new Map(prev).set(r.recipe_id, hidden));
+    if (hidden) {
+      // Don't leave a hidden card's subrecipes in the portioning selection.
+      setSelected(prev => new Map([...prev].filter(([, o]) => o.recipeId !== r.recipe_id)));
+    }
+    startTransition(async () => {
+      try {
+        await setCookingHidden(r.meal_plan_day_recipe_ids, hidden);
+        router.refresh();
+      } catch (e) {
+        setHiddenOverride(prev => { const next = new Map(prev); next.delete(r.recipe_id); return next; });
+        setHideError(e instanceof Error ? e.message : "Couldn't update this meal.");
+      }
+    });
+  }
+
+  // One request for every hidden card on the board (within the current
+  // dates/filters), not one per card.
+  function restoreAll(cards: CookingRecipe[]) {
+    setHideError(null);
+    setHiddenOverride(prev => {
+      const next = new Map(prev);
+      for (const r of cards) next.set(r.recipe_id, false);
+      return next;
+    });
+    startTransition(async () => {
+      try {
+        await setCookingHidden(cards.flatMap(r => r.meal_plan_day_recipe_ids), false);
+        router.refresh();
+      } catch (e) {
+        setHiddenOverride(prev => {
+          const next = new Map(prev);
+          for (const r of cards) next.delete(r.recipe_id);
+          return next;
+        });
+        setHideError(e instanceof Error ? e.message : "Couldn't restore these meals.");
+      }
+    });
+  }
+
   if (recipes.length === 0) {
     return <p style={{ fontSize: 13, color: C.light, margin: 0 }}>No recipes scheduled for this range/filter.</p>;
   }
 
+  const visibleRecipes = recipes.filter(r => !isHidden(r));
+  const hiddenRecipes = recipes.filter(isHidden);
+
   return (
     <>
+      {hideError && <p style={{ margin: "0 0 10px", fontSize: 12.5, color: C.error }}>{hideError}</p>}
+      {visibleRecipes.length === 0 && (
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: C.muted }}>Everything here is cooked and hidden. Restore a meal below if you need it again.</p>
+      )}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {recipes.map(r => {
+        {visibleRecipes.map(r => {
           const isOpen = expanded.has(r.recipe_id);
           // Defensive default — undefined until the backend deploy that adds
           // this field to /cooking/overview has gone out.
@@ -167,10 +251,11 @@ export default function CookingBoard({ recipes, instructions }: { recipes: Cooki
           const recipeInstrKey = `r:${r.recipe_id}`;
           return (
             <div key={r.recipe_id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 14 }}>
               <button
                 onClick={() => toggleExpand(r.recipe_id)}
                 style={{
-                  width: "100%", textAlign: "left", background: "transparent", border: "none", cursor: "pointer",
+                  flex: 1, minWidth: 0, textAlign: "left", background: "transparent", border: "none", cursor: "pointer",
                   padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center",
                 }}
               >
@@ -210,6 +295,10 @@ export default function CookingBoard({ recipes, instructions }: { recipes: Cooki
                   )}
                 </div>
               </button>
+              <button onClick={() => setHidden(r, true)} title="Cooked — hide from this board (you can restore it below)" style={hideBtnStyle}>
+                Done · hide
+              </button>
+              </div>
 
               {isOpen && (
                 <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.offWhite}` }}>
@@ -308,6 +397,40 @@ export default function CookingBoard({ recipes, instructions }: { recipes: Cooki
           );
         })}
       </div>
+
+      {hiddenRecipes.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={() => setShowHidden(v => !v)}
+              style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: C.muted }}
+            >
+              {showHidden ? "▾" : "▸"} Hidden ({hiddenRecipes.length})
+            </button>
+            <button onClick={() => restoreAll(hiddenRecipes)} style={{ ...hideBtnStyle, color: C.primary }}>
+              Restore all
+            </button>
+          </div>
+          {showHidden && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+              {hiddenRecipes.map(r => (
+                <div key={r.recipe_id} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                  background: C.offWhite, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px",
+                }}>
+                  <span style={{ fontSize: 13, color: C.muted }}>
+                    <span style={{ textDecoration: "line-through" }}>{r.name}</span>
+                    <span style={{ fontSize: 11.5, color: C.light }}> · {r.earliest_date}</span>
+                  </span>
+                  <button onClick={() => setHidden(r, false)} style={{ ...hideBtnStyle, color: C.primary }}>
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {selected.size > 0 && (
         <div style={{

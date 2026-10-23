@@ -1215,6 +1215,7 @@ export type Database = {
       meal_plan_day_recipe: {
         Row: {
           cooking_status: string | null
+          cooking_hidden_at: string | null
           created_at: string
           id: number
           is_swapped: boolean
@@ -1229,6 +1230,7 @@ export type Database = {
         }
         Insert: {
           cooking_status?: string | null
+          cooking_hidden_at?: string | null
           created_at?: string
           id?: number
           is_swapped?: boolean
@@ -1243,6 +1245,7 @@ export type Database = {
         }
         Update: {
           cooking_status?: string | null
+          cooking_hidden_at?: string | null
           created_at?: string
           id?: number
           is_swapped?: boolean
