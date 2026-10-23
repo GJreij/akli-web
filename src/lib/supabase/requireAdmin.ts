@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser, getUserRole } from "@/lib/supabase/server";
 
 /**
  * Guard for admin-only server actions. A Next.js server action is an
@@ -9,12 +9,12 @@ import { createClient } from "@/lib/supabase/server";
  * caller, not a page navigation.
  */
 export async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getAuthUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { data: actingProfile } = await supabase.from("user").select("role").eq("id", user.id).single();
-  if ((actingProfile as { role: string | null } | null)?.role !== "admin") throw new Error("Not authorized");
+  if ((await getUserRole(user.id)) !== "admin") throw new Error("Not authorized");
+
+  const supabase = await createClient();
 
   return { supabase, adminId: user.id };
 }

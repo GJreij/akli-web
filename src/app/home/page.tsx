@@ -16,7 +16,7 @@ export default async function HomePage({
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [profileRes, macroRes, menuRes] = await Promise.all([
+  const [profileRes, macroRes, menuRes, affiliateRowRes] = await Promise.all([
     supabase.from("user").select("*").eq("id", user.id).single(),
     supabase
       .from("daily_macro_target")
@@ -40,6 +40,14 @@ export default async function HomePage({
       .eq("tenant_id", 1)
       .limit(1)
       .single(),
+    // Affiliate/ambassador/athlete badge, if this user is an active member
+    // of the program — fetched alongside the rest rather than after it.
+    supabase
+      .from("affiliates")
+      .select("id,tier")
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
   ]);
 
   const profile = profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null;
@@ -50,13 +58,6 @@ export default async function HomePage({
   // loop straight back out.
   if (profile?.home_screen_default === "log_food" && dashboardOverride !== "1") redirect("/log-food");
 
-  // Affiliate/ambassador/athlete badge, if this user is an active member of the program.
-  const affiliateRowRes = await supabase
-    .from("affiliates")
-    .select("id,tier")
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
   const affiliateRow = affiliateRowRes.data as { id: number; tier: string } | null;
 
   let affiliateInfo: {

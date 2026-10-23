@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { logout } from "@/app/admin/logout/actions";
 
 const C = {
@@ -31,8 +32,11 @@ const TABS = [
 
 export default function AdminNav() {
   const pathname = usePathname();
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // The tab just tapped, highlighted right away instead of only once the
+  // new page has rendered. Cleared as soon as the URL actually changes.
+  const [clicked, setClicked] = useState<{ href: string; from: string } | null>(null);
+  const optimistic = clicked && clicked.from === pathname ? clicked.href : null;
 
   return (
     <div style={{ background: C.primary, padding: "16px 20px 0" }}>
@@ -42,15 +46,15 @@ export default function AdminNav() {
             akli admin
           </span>
           <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={() => router.push("/home?admin=1")}
+            <Link
+              href="/home?admin=1"
               style={{
                 background: "rgba(255,255,255,0.1)", color: C.white, border: "none", borderRadius: 6,
-                padding: "6px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer",
+                padding: "6px 12px", fontSize: 12, fontWeight: 500, cursor: "pointer", textDecoration: "none",
               }}
             >
               Home (Order)
-            </button>
+            </Link>
             <button
               onClick={() => startTransition(() => logout())}
               disabled={pending}
@@ -66,12 +70,14 @@ export default function AdminNav() {
         </div>
         <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
           {TABS.map(tab => {
-            const active = pathname.startsWith(tab.href);
+            const active = optimistic ? optimistic === tab.href : pathname.startsWith(tab.href);
             return (
-              <button
+              <Link
                 key={tab.href}
-                onClick={() => router.push(tab.href)}
+                href={tab.href}
+                onClick={() => setClicked({ href: tab.href, from: pathname })}
                 style={{
+                  textDecoration: "none",
                   background: active ? C.offWhite : "transparent",
                   color: active ? C.primary : "rgba(255,255,255,0.7)",
                   border: "none",
@@ -84,7 +90,7 @@ export default function AdminNav() {
                 }}
               >
                 {tab.label}
-              </button>
+              </Link>
             );
           })}
         </div>

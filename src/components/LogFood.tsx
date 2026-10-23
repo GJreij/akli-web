@@ -991,6 +991,12 @@ export default function LogFood({
   initialEntries: FoodLogEntryRow[];
 }) {
   const router = useRouter();
+
+  // Same as HomeDashboard: warm up the screens reachable from here, since
+  // router.push buttons don't prefetch on their own.
+  useEffect(() => {
+    for (const href of ["/home?dashboard=1", "/order/new", "/profile"]) router.prefetch(href);
+  }, [router]);
   const [date, setDate] = useState(initialDate);
   const [order, setOrder] = useState(initialOrder);
   const [entries, setEntries] = useState(initialEntries);

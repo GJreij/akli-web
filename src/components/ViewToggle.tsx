@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 const C = { primary: "#063330", offWhite: "#eee9e6" };
@@ -12,11 +13,15 @@ const C = { primary: "#063330", offWhite: "#eee9e6" };
 // bypasses the log_food default redirect on /home, same escape hatch used
 // elsewhere so this never loops back on itself.
 export default function ViewToggle({ active, userId }: { active: "home" | "food_diary"; userId: string | null }) {
-  const router = useRouter();
+  // Flip the highlight on tap, not only once the other page has rendered —
+  // the old screen stays up while the new one loads behind the skeleton.
+  const [shown, setShown] = useState(active);
 
+  // Navigation itself is the <Link> below (prefetched, so it's near-instant);
+  // this only saves the preference.
   function choose(next: "home" | "food_diary") {
     if (next === active) return;
-    router.push(next === "home" ? "/home?dashboard=1" : "/log-food");
+    setShown(next);
     if (!userId) return;
     const supabase = createClient();
     // Fire-and-forget — this is a low-stakes preference, not worth blocking
@@ -31,6 +36,7 @@ export default function ViewToggle({ active, userId }: { active: "home" | "food_
   }
 
   const segStyle = (isActive: boolean): React.CSSProperties => ({
+    textAlign: "center", textDecoration: "none",
     flex: 1, padding: "8px 0", borderRadius: 8, border: "none",
     background: isActive ? C.offWhite : "transparent",
     color: isActive ? C.primary : "rgba(255,255,255,0.7)",
@@ -39,12 +45,12 @@ export default function ViewToggle({ active, userId }: { active: "home" | "food_
 
   return (
     <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.08)", borderRadius: 12, padding: 4, marginBottom: 16 }}>
-      <button style={segStyle(active === "home")} onClick={() => choose("home")}>
+      <Link href="/home?dashboard=1" style={segStyle(shown === "home")} onClick={() => choose("home")}>
         Home Screen
-      </button>
-      <button style={segStyle(active === "food_diary")} onClick={() => choose("food_diary")}>
+      </Link>
+      <Link href="/log-food" style={segStyle(shown === "food_diary")} onClick={() => choose("food_diary")}>
         Food Diary
-      </button>
+      </Link>
     </div>
   );
 }

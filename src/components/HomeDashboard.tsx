@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
@@ -328,6 +328,13 @@ export default function HomeDashboard({
   isAdmin?: boolean;
 }) {
   const router = useRouter();
+
+  // The buttons below navigate with router.push, which (unlike <Link>)
+  // never prefetches — so warm up every screen reachable from here. With
+  // each route's loading.tsx this makes the tap respond instantly.
+  useEffect(() => {
+    for (const href of ["/log-food", "/order/new", "/orders", "/tastes", "/menu", "/profile"]) router.prefetch(href);
+  }, [router]);
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
   const [dietWizardOpen, setDietWizardOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
