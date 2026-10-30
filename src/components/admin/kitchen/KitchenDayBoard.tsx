@@ -202,7 +202,7 @@ function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
       <p style={{ margin: "8px 0 0", fontSize: 12, color: C.muted }}>
         Today {fmtServings(s.today.servings)} servings
         {s.today.covered > 0 && <> · <span style={{ color: C.tealDark, fontWeight: 600 }}>{fmtServings(s.today.covered)} already cooked</span></>}
-        {nextDays.length > 0 && <> · next: {nextDays.map(d => `${fmtDay(d.date)} ${fmtServings(d.servings)}`).join(", ")}</>}
+        {nextDays.length > 0 && <> · next: {nextDays.map(d => `${fmtDay(d.date)} → ${fmtServings(d.servings)}`).join(" · ")}</>}
       </p>
 
       {s.comments.length > 0 && (
