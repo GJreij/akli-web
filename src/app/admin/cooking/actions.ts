@@ -2,7 +2,8 @@
 
 import { requireAdmin } from "@/lib/supabase/requireAdmin";
 
-export async function savePortioning(rows: { meal_plan_day_recipe_serving_id: number; weight_after_cooking: number }[]) {
+// batch_id (Kitchen Day) links each portion to the kitchen_batch it came from.
+export async function savePortioning(rows: { meal_plan_day_recipe_serving_id: number; weight_after_cooking: number; batch_id?: number }[]) {
   if (rows.length === 0) {
     throw new Error("Nothing to save — no rows had a valid weight entered.");
   }
@@ -12,7 +13,11 @@ export async function savePortioning(rows: { meal_plan_day_recipe_serving_id: nu
   const results = await Promise.all(
     rows.map(r =>
       (supabase.from("meal_plan_day_recipe_serving") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
-        .update({ weight_after_cooking: r.weight_after_cooking, portioning_status: "done" })
+        .update({
+          weight_after_cooking: r.weight_after_cooking,
+          portioning_status: "done",
+          ...(r.batch_id != null ? { batch_id: r.batch_id } : {}),
+        })
         .eq("id", r.meal_plan_day_recipe_serving_id)
         .select("id")
     )

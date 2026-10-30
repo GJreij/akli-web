@@ -884,3 +884,82 @@ export async function getPortioningSummary(
   if (!json) return { error: "Unexpected response from server" };
   return { data: json };
 }
+
+// ─── /kitchen/day ────────────────────────────────────────────────────────────
+// Cook list for one cook date, net of cooked batches (kitchen_batch). See
+// BackEnd/mealplanner-flask/services/kitchen_service.py for the allocation rules.
+
+export interface KitchenIngredient {
+  ingredient_id: number;
+  name: string;
+  unit: string | null;
+  quantity: number;
+  is_staple: boolean;
+  stored_frozen: boolean;
+}
+
+export interface KitchenPortionPlan {
+  servings: number;
+  mpdr_ids: number[];
+  ingredients: KitchenIngredient[];
+}
+
+export interface KitchenWindowPlan extends KitchenPortionPlan {
+  through: string;
+  by_date: { date: string; servings: number }[];
+}
+
+export interface KitchenStockBatch {
+  batch_id: number;
+  cooked_on: string;
+  storage: "fridge" | "freezer";
+  use_by: string;
+  expired: boolean;
+  servings_cooked: number;
+  // In the fridge/freezer right now (after deliveries since it was cooked).
+  remaining: number;
+  // Of `remaining`, what's spoken for by open portions from the cook date on.
+  allocated_servings: number;
+  allocated_mpdr_ids: number[];
+  allocated_today_mpdr_ids: number[];
+  unallocated: number;
+  variant_note: string | null;
+  notes: string | null;
+}
+
+export interface KitchenSubrecipe {
+  subrecipe_id: number;
+  name: string;
+  instructions: string | null;
+  prep_type: "cook" | "assemble" | "ready";
+  skill: "chef" | "helper";
+  equipment: "stove" | "oven" | "grill" | "none" | null;
+  fridge_days: number | null;
+  freezer_days: number | null;
+  active_minutes: number | null;
+  total_minutes: number | null;
+  recipes: string[];
+  today: { servings: number; covered: number; mpdr_ids: number[] };
+  stock: KitchenStockBatch[];
+  must_cook: KitchenPortionPlan;
+  suggested: KitchenWindowPlan;
+  freeze: KitchenWindowPlan | null;
+  comments: { user_id: string; name: string; comment: string; date: string; servings: number }[];
+}
+
+export interface KitchenDay {
+  cook_date: string;
+  horizon_end: string;
+  subrecipes: KitchenSubrecipe[];
+}
+
+export async function getKitchenDay(date: string): Promise<KitchenDay> {
+  const res = await fetch(`${FLASK_URL}/kitchen/day`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`kitchen_day error ${res.status}: ${await res.text()}`);
+  return res.json();
+}

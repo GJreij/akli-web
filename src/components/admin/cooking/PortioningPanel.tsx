@@ -23,10 +23,12 @@ function displayName(client: PortioningSummary["clients"][number]["client"]) {
 
 type Mode = "total" | "per_serving";
 
-export default function PortioningPanel({ targets, onClose, onSaved }: {
+export default function PortioningPanel({ targets, onClose, onSaved, batchId }: {
   targets: PortionTarget[];
   onClose: () => void;
   onSaved: () => void;
+  // Kitchen Day: the kitchen_batch these portions are taken from.
+  batchId?: number;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,6 +183,7 @@ export default function PortioningPanel({ targets, onClose, onSaved }: {
           row.perTarget[t.subrecipeId].map(entry => ({
             meal_plan_day_recipe_serving_id: entry.servingId,
             weight_after_cooking: Math.round((gramsForServing(row, t.subrecipeId, entry) ?? 0) * 10) / 10,
+            batch_id: batchId,
           }))
         )
     );
