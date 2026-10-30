@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { IconArrowLeft, IconLeaf, IconChevronDown, IconInfoCircle } from "@tabler/icons-react";
 import RecipeRater from "@/components/RecipeRater";
 import RecipeComment from "@/components/RecipeComment";
-import { type PrefRating } from "@/lib/preferences";
+import SideSaladsSection, { type SideSalad } from "@/components/SideSaladsSection";
+import { type PrefRating, type SaladRating } from "@/lib/preferences";
 import { conflictingAllergens, type AllergenFlags } from "@/lib/allergens";
 
 type MealType = "breakfast" | "lunch" | "dinner" | "snack";
@@ -190,6 +191,10 @@ export default function TastesManager({
   initialComments,
   userAllergens,
   recipeAllergens,
+  sideSalads,
+  initialSaladRatings,
+  initialSaladNotes,
+  initialNoSideSalad,
 }: {
   userId: string;
   weeks: WeekGroup[];
@@ -197,6 +202,10 @@ export default function TastesManager({
   initialComments: Record<number, string>;
   userAllergens: AllergenFlags;
   recipeAllergens: Record<number, AllergenFlags>;
+  sideSalads: SideSalad[];
+  initialSaladRatings: Record<number, SaladRating>;
+  initialSaladNotes: Record<number, string>;
+  initialNoSideSalad: boolean;
 }) {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<MealType | null>(null);
@@ -316,6 +325,15 @@ export default function TastesManager({
 
       {/* Week groups */}
       <div style={{ padding: "14px 20px 60px" }}>
+        {activeFilter === null && (
+          <SideSaladsSection
+            userId={userId}
+            salads={sideSalads}
+            initialRatings={initialSaladRatings}
+            initialNotes={initialSaladNotes}
+            initialNever={initialNoSideSalad}
+          />
+        )}
         {weeks.length === 0 ? (
           <p style={{ textAlign: "center", color: C.light, marginTop: 40, fontSize: 13 }}>
             No upcoming menus published yet.

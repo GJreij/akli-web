@@ -734,8 +734,70 @@ function ConfirmingScreen() {
 
 // ─── Meal row ─────────────────────────────────────────────────────────────────
 
-function MealRow({ meal, onRemove, onReplace, expanded, conflicts }: {
-  meal: Meal; onRemove: () => void; onReplace: () => void; expanded?: boolean;
+type SaladChange = { removed: boolean; subrecipe_id?: number | null };
+
+// One line under a meal for its side salad: the salad (Remove), a removed
+// salad (Add back), or — when the client's My Tastes left this meal without
+// one — an "Add a salad" picker of the recipe's own salad + the house salad.
+function SaladLine({ meal, onChange }: { meal: Meal; onChange: (change: SaladChange) => void }) {
+  const [picking, setPicking] = useState(false);
+  const salad = meal.subrecipes.find(s => s.is_side_salad);
+  const options = meal.side_salad_options ?? [];
+  const linkBtn: React.CSSProperties = {
+    background: "none", border: "none", padding: 0, fontSize: 10.5, fontWeight: 600,
+    color: C.tealDark, cursor: "pointer", textDecoration: "underline",
+  };
+
+  let label: string;
+  let action: React.ReactNode;
+  if (salad) {
+    label = salad.name;
+    // An added salad goes back to "follow my preferences"; a default one is removed.
+    action = (
+      <button style={linkBtn} onClick={() => onChange(meal.side_salad_subrecipe_id != null
+        ? { removed: false, subrecipe_id: null }
+        : { removed: true })}>
+        Remove
+      </button>
+    );
+  } else if (meal.side_salad_removed) {
+    label = "Salad removed — bigger portion instead";
+    action = <button style={linkBtn} onClick={() => onChange({ removed: false })}>Add back</button>;
+  } else if (options.length > 0) {
+    label = "No salad (your preferences)";
+    action = <button style={linkBtn} onClick={() => setPicking(p => !p)}>{picking ? "Cancel" : "Add a salad"}</button>;
+  } else {
+    return null;
+  }
+
+  return (
+    <div style={{ margin: "5px 0 0" }}>
+      <p style={{ fontSize: 10.5, color: C.muted, margin: 0, display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+        <span>🥗 {label}</span>
+        {action}
+      </p>
+      {picking && !salad && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 5 }}>
+          {options.map(o => (
+            <button
+              key={o.subrecipe_id}
+              onClick={() => { setPicking(false); onChange({ removed: false, subrecipe_id: o.subrecipe_id }); }}
+              style={{
+                padding: "4px 10px", borderRadius: 20, fontSize: 11, cursor: "pointer",
+                border: `1px solid ${C.border}`, background: C.white, color: C.tealDark, fontWeight: 600,
+              }}
+            >
+              + {o.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MealRow({ meal, onRemove, onReplace, onSaladChange, expanded, conflicts }: {
+  meal: Meal; onRemove: () => void; onReplace: () => void; onSaladChange: (change: SaladChange) => void; expanded?: boolean;
   conflicts?: { key: string; label: string }[];
 }) {
   const [imgErr, setImgErr] = useState(false);
@@ -767,6 +829,7 @@ function MealRow({ meal, onRemove, onReplace, expanded, conflicts }: {
               ⚠️ Contains {conflicts.map(c => c.label).join(", ")}
             </p>
           )}
+          <SaladLine meal={meal} onChange={onSaladChange} />
         </div>
         <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
           <button onClick={onReplace} title="Replace" style={{ width: 32, height: 32, padding: 0, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, color: C.muted, background: "none", border: "none", cursor: "pointer" }}>
@@ -1010,13 +1073,14 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
   );
 }
 
-function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onAddMeal, isOnlyDay, userAllergens, recipeAllergens }: {
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onSaladChange, onAddMeal, isOnlyDay, userAllergens, recipeAllergens }: {
   day: PlanDay;
   expanded: boolean;
   onToggleExpand: () => void;
   onRemoveDay: () => void;
   onRemoveMeal: (meal: Meal) => void;
   onReplaceMeal: (meal: Meal) => void;
+  onSaladChange: (meal: Meal, change: SaladChange) => void;
   onAddMeal: (mealType: MealType) => void;
   isOnlyDay: boolean;
   userAllergens: AllergenFlags;
@@ -1053,6 +1117,7 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
             meal={meal}
             onRemove={() => onRemoveMeal(meal)}
             onReplace={() => onReplaceMeal(meal)}
+            onSaladChange={change => onSaladChange(meal, change)}
             expanded={expanded}
             conflicts={conflictingAllergens(userAllergens, recipeAllergens[meal.recipe_id])}
           />
@@ -1896,6 +1961,18 @@ export default function OrderFlow({
     applyChange([log]);
   }
 
+  // Remove / add back / add a side salad on one meal — the day is
+  // re-solved with the other meals pinned, so that meal's portion absorbs
+  // the difference and the day keeps the same macros (and price).
+  function handleSaladChange(date: string, meal: Meal, change: SaladChange) {
+    applyChange([{
+      date, meal_key: meal.meal_key,
+      side_salad_removed: change.removed,
+      ...(change.subrecipe_id !== undefined ? { side_salad_subrecipe_id: change.subrecipe_id } : {}),
+      created_at: new Date().toISOString(),
+    }]);
+  }
+
   function handleReplaceMeal(newId: number) {
     if (!replaceTarget) return;
     const log: ChangeLog = {
@@ -2429,6 +2506,7 @@ export default function OrderFlow({
               onRemoveDay={() => removePlanDay(day.date)}
               onRemoveMeal={meal => setRemoveTarget({ date: day.date, meal })}
               onReplaceMeal={meal => setReplaceTarget({ date: day.date, meal })}
+              onSaladChange={(meal, change) => handleSaladChange(day.date, meal, change)}
               onAddMeal={mealType => setAddTarget({ date: day.date, mealType })}
               userAllergens={userAllergens}
               recipeAllergens={recipeAllergens}

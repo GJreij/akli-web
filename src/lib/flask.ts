@@ -73,6 +73,9 @@ export interface MealSubrecipe {
   name: string;
   servings: number;
   macros: SubrecipeMacros;
+  // The meal's removable side salad (subrecipe.is_side_salad) — already
+  // resolved to the client's own rules (house salad fallback, etc.).
+  is_side_salad?: boolean;
 }
 
 export interface Meal {
@@ -83,6 +86,13 @@ export interface Meal {
   photo: string | null;
   macros: SubrecipeMacros;
   subrecipes: MealSubrecipe[];
+  // Client removed this meal's side salad while ordering ("Add back" undoes it).
+  side_salad_removed?: boolean;
+  // Salad the client added to this meal despite their My Tastes (null =
+  // follow their preferences).
+  side_salad_subrecipe_id?: number | null;
+  // Salads that can be added to this meal: the recipe's own + the house salad.
+  side_salad_options?: { subrecipe_id: number; name: string }[];
 }
 
 export interface PlanDay {
@@ -482,6 +492,8 @@ export interface ChangeLog {
   new_recipe_id?: number;
   include_macros_in_rest?: boolean; // true = spread to other meals, false = eating out (reduce day kcal)
   meal_type?: "breakfast" | "lunch" | "dinner" | "snack"; // required when adding a brand-new meal (no old_recipe_id)
+  side_salad_removed?: boolean; // remove (true) / add back (false) this meal's side salad; re-solves the day
+  side_salad_subrecipe_id?: number | null; // with side_salad_removed: add this salad to the meal (null = back to My Tastes)
 }
 
 export async function updateMealPlan(
@@ -554,6 +566,10 @@ export interface CookingSubrecipe {
   // the Flask deploy that adds this field to /cooking/overview has gone out.
   meal_plan_day_recipe_ids?: number[];
   ingredients_needed: CookingIngredient[];
+  is_side_salad?: boolean;
+  // My Tastes notes on THIS salad, only from clients served it in this
+  // card's range. Optional: undefined until the Flask deploy that adds it.
+  salad_notes?: { user_id: string; name: string; comment: string }[];
 }
 
 export interface CookingAllergenConflict {
@@ -699,6 +715,9 @@ export function mergeCookingOverviews(results: CookingRecipe[][]): CookingRecipe
           existingSub.meal_plan_day_recipe_ids = [
             ...new Set([...(existingSub.meal_plan_day_recipe_ids ?? []), ...s.meal_plan_day_recipe_ids]),
           ];
+        }
+        if (s.salad_notes?.length) {
+          existingSub.salad_notes = dedupeByKey([...(existingSub.salad_notes ?? []), ...s.salad_notes], n => n.user_id);
         }
         mergeIngredients(existingSub.ingredients_needed, s.ingredients_needed);
       }

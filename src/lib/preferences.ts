@@ -53,6 +53,64 @@ export async function upsertRecipeComment(
     );
 }
 
+// ─── Side salads ─────────────────────────────────────────────────────────────
+// One row per (client, side salad subrecipe). A disliked salad is swapped
+// for the Akli House Salad by the solver, and dropped if that's disliked too.
+
+export type SaladRating = "like" | "dislike" | null;
+
+export async function upsertSideSaladPref(
+  userId: string,
+  subrecipeId: number,
+  rating: SaladRating
+): Promise<void> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from("user_side_salad_preference" as any) as any)
+    .upsert(
+      {
+        user_id:      userId,
+        subrecipe_id: subrecipeId,
+        like:         rating === "like",
+        dislike:      rating === "dislike",
+        updated_at:   new Date().toISOString(),
+      },
+      { onConflict: "user_id,subrecipe_id" }
+    );
+  if (error) throw error;
+}
+
+// Kitchen note for one specific salad (e.g. "no tomatoes" on Fattoush) —
+// shown on the cooking board under that salad only.
+export async function upsertSideSaladComment(
+  userId: string,
+  subrecipeId: number,
+  comment: string
+): Promise<void> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from("user_side_salad_preference" as any) as any)
+    .upsert(
+      {
+        user_id:      userId,
+        subrecipe_id: subrecipeId,
+        comment:      comment.trim() || null,
+        updated_at:   new Date().toISOString(),
+      },
+      { onConflict: "user_id,subrecipe_id" }
+    );
+  if (error) throw error;
+}
+
+export async function setNoSideSalad(userId: string, value: boolean): Promise<void> {
+  const supabase = createClient();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.from("user") as any)
+    .update({ no_side_salad: value })
+    .eq("id", userId);
+  if (error) throw error;
+}
+
 export function parsePref(row: { like: boolean | null; dislike: boolean | null; dont_include: boolean | null }): PrefRating {
   if (row.dont_include) return "skip";
   if (row.dislike)      return "dislike";

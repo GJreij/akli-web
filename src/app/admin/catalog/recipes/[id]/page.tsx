@@ -30,8 +30,9 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
   if (!recipe) notFound();
 
   const composition = (compositionRes.data ?? []) as RecipeSubrecipe[];
-  const allSubrecipes = (subrecipesRes.data ?? []) as Subrecipe[];
+  const allSubrecipes = (subrecipesRes.data ?? []) as (Subrecipe & { is_side_salad?: boolean | null })[];
   const subrecipesById = new Map(allSubrecipes.map(s => [s.id, s]));
+  const sideSaladCount = composition.filter(row => row.subrecipe_id != null && subrecipesById.get(row.subrecipe_id)?.is_side_salad).length;
 
   const updateAction = updateRecipe.bind(null, recipe.id);
   const deleteAction = deleteRecipe.bind(null, recipe.id);
@@ -125,7 +126,10 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
                     const removeAction = removeRecipeSubrecipe.bind(null, recipe.id, row.id);
                     return (
                       <tr key={row.id}>
-                        <td style={td}>{sub?.name ?? `#${row.subrecipe_id}`}</td>
+                        <td style={td}>
+                          {sub?.name ?? `#${row.subrecipe_id}`}
+                          {sub?.is_side_salad && <span style={{ fontSize: 10.5, color: C.muted, marginLeft: 6 }}>🥗 side salad</span>}
+                        </td>
                         <td style={{ ...td, color: C.muted }}>{row.subrecipe_label ?? "—"}</td>
                         <td style={td}>
                           <input
@@ -160,6 +164,11 @@ export default async function RecipeDetailPage({ params, searchParams }: { param
               {composition.length > 1 && !composition.some(row => row.is_main) && (
                 <p style={{ fontSize: 11.5, color: C.warn, marginTop: -8, marginBottom: 14 }}>
                   No subrecipe is marked main yet — pick the biggest-serving one and save before this recipe is ready.
+                </p>
+              )}
+              {sideSaladCount > 1 && (
+                <p style={{ fontSize: 11.5, color: C.warn, marginTop: -8, marginBottom: 14 }}>
+                  This recipe has {sideSaladCount} side salads — keep only one, otherwise &quot;Remove salad&quot; and the house-salad fallback only apply to one of them.
                 </p>
               )}
               <p style={{ fontSize: 11.5, color: C.light, marginTop: -8, marginBottom: 14 }}>

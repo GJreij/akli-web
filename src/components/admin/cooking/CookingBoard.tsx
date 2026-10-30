@@ -249,6 +249,9 @@ export default function CookingBoard({ recipes, instructions, hiddenMpdrIds = []
           const allergenConflicts = r.allergen_conflicts ?? [];
           const recipeInstructions = instructions?.recipes[r.recipe_id];
           const recipeInstrKey = `r:${r.recipe_id}`;
+          // Salad notes live on the salad itself (below), but still count
+          // here so a collapsed card doesn't hide that there's a note.
+          const noteCount = r.comments.length + r.subrecipes.reduce((n, s) => n + (s.salad_notes?.length ?? 0), 0);
           return (
             <div key={r.recipe_id} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 14 }}>
@@ -284,8 +287,8 @@ export default function CookingBoard({ recipes, instructions, hiddenMpdrIds = []
                   </div>
                   <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light }}>
                     {r.earliest_date} · {r.subrecipes.length} subrecipe{r.subrecipes.length === 1 ? "" : "s"} ·{" "}
-                    <span style={{ color: r.comments.length > 0 ? C.error : C.light, fontWeight: r.comments.length > 0 ? 600 : 400 }}>
-                      {r.comments.length} comment{r.comments.length === 1 ? "" : "s"}
+                    <span style={{ color: noteCount > 0 ? C.error : C.light, fontWeight: noteCount > 0 ? 600 : 400 }}>
+                      {noteCount} comment{noteCount === 1 ? "" : "s"}
                     </span>
                   </p>
                   {allergenConflicts.length > 0 && (
@@ -381,6 +384,15 @@ export default function CookingBoard({ recipes, instructions, hiddenMpdrIds = []
                           <div style={{ fontSize: 11.5, color: C.muted }}>
                             {s.ingredients_needed.map(i => `${i.name}: ${i.total_quantity ?? i.quantity} ${i.unit ?? ""}`).join(" · ")}
                           </div>
+                          {(s.salad_notes?.length ?? 0) > 0 && (
+                            <div style={{ marginTop: 6 }}>
+                              {s.salad_notes!.map(n => (
+                                <p key={n.user_id} style={{ margin: "0 0 3px", fontSize: 12, color: C.error }}>
+                                  🥗 <strong>{n.name}:</strong> {n.comment}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                           {subInstructions && (
                             <div style={{ marginTop: 6 }}>
                               <InstructionsToggle open={openInstructions.has(subInstrKey)} onClick={() => toggleInstructions(subInstrKey)} />

@@ -16,6 +16,7 @@ function parseSubrecipeForm(formData: FormData) {
     instructions: String(formData.get("instructions") ?? "").trim() || null,
     prep_time: String(formData.get("prep_time") ?? "").trim() || null,
     freezable: formData.get("freezable") === "on",
+    is_side_salad: formData.get("is_side_salad") === "on",
     max_serving: num(formData, "max_serving"),
     kcal: num(formData, "kcal"),
     protein: num(formData, "protein"),

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import TastesManager from "@/components/TastesManager";
-import { parsePref, type PrefRating } from "@/lib/preferences";
+import { type SideSalad } from "@/components/SideSaladsSection";
+import { parsePref, type PrefRating, type SaladRating } from "@/lib/preferences";
 import { emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 
 type RecipeRow = {
@@ -17,7 +18,7 @@ export default async function TastesPage() {
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [menusRes, prefsRes, userRes] = await Promise.all([
+  const [menusRes, prefsRes, userRes, saladsRes, saladPrefsRes] = await Promise.all([
     supabase
       .from("weekly_menu")
       .select(`id, week_start_date, week_end_date,
@@ -31,11 +32,21 @@ export default async function TastesPage() {
       .eq("user_id", user.id),
     supabase
       .from("user")
-      .select("celery, cereals_containing_gluten, crustaceans, eggs, fish, lupin, milk, molluscs, sulphites, mustard, peanuts, sesame, soybeans, tree_nuts")
+      .select("celery, cereals_containing_gluten, crustaceans, eggs, fish, lupin, milk, molluscs, sulphites, mustard, peanuts, sesame, soybeans, tree_nuts, no_side_salad")
       .eq("id", user.id)
       .single(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("subrecipe") as any)
+      .select("id, name, recipe_subrecipe(recipe_id), subrec_ingred(quantity, ingredient(name))")
+      .eq("is_side_salad", true)
+      .order("name"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("user_side_salad_preference" as any) as any)
+      .select("subrecipe_id, like, dislike, comment")
+      .eq("user_id", user.id),
   ]);
-  const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...(userRes.data ?? {}) };
+  const { no_side_salad: noSideSalad, ...allergenRow } = (userRes.data ?? {}) as Partial<AllergenFlags> & { no_side_salad?: boolean | null };
+  const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...allergenRow };
 
   // Build week groups with deduped recipes
   type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { recipe: RecipeRow | null }[] };
@@ -78,6 +89,41 @@ export default async function TastesPage() {
     if (p.comment) initialComments[p.recipe_id] = p.comment;
   }
 
+  // Side salads: only the ones some upcoming dish actually comes with, plus
+  // the house salad (the fallback for a disliked salad) — the same "what's
+  // coming up" scope as the recipe list. Prefs for a salad that's off the
+  // menu stay saved and apply again when it comes back.
+  const HOUSE_SALAD_NAME = "Akli House Salad";
+  const SKIP_INGREDIENTS = new Set(["salt", "olive oil", "black pepper", "white pepper"]);
+  type SaladRow = {
+    id: number; name: string;
+    recipe_subrecipe: { recipe_id: number }[];
+    subrec_ingred: { quantity: number | null; ingredient: { name: string } | null }[];
+  };
+  const upcomingRecipeIds = new Set(recipeIds);
+  const sideSalads: SideSalad[] = ((saladsRes.data ?? []) as SaladRow[])
+    .filter(s => s.name === HOUSE_SALAD_NAME || s.recipe_subrecipe.some(rs => upcomingRecipeIds.has(rs.recipe_id)))
+    .map(s => ({
+      id: s.id,
+      name: s.name,
+      isHouse: s.name === HOUSE_SALAD_NAME,
+      ingredients: [...s.subrec_ingred]
+        .filter(si => si.ingredient && !SKIP_INGREDIENTS.has(si.ingredient.name.toLowerCase()))
+        .sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0))
+        .slice(0, 6)
+        .map(si => si.ingredient!.name.toLowerCase())
+        .join(", "),
+    }))
+    .sort((a, b) => Number(b.isHouse) - Number(a.isHouse));
+
+  const initialSaladRatings: Record<number, SaladRating> = {};
+  const initialSaladNotes: Record<number, string> = {};
+  type SaladPrefRow = { subrecipe_id: number; like: boolean; dislike: boolean; comment: string | null };
+  for (const p of (saladPrefsRes.data ?? []) as SaladPrefRow[]) {
+    initialSaladRatings[p.subrecipe_id] = p.dislike ? "dislike" : p.like ? "like" : null;
+    if (p.comment) initialSaladNotes[p.subrecipe_id] = p.comment;
+  }
+
   return (
     <TastesManager
       userId={user.id}
@@ -86,6 +132,10 @@ export default async function TastesPage() {
       initialComments={initialComments}
       userAllergens={userAllergens}
       recipeAllergens={recipeAllergens}
+      sideSalads={sideSalads}
+      initialSaladRatings={initialSaladRatings}
+      initialSaladNotes={initialSaladNotes}
+      initialNoSideSalad={!!noSideSalad}
     />
   );
 }

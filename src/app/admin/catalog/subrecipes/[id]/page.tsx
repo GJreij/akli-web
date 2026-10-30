@@ -73,7 +73,14 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
                   <input type="checkbox" name="freezable" defaultChecked={Boolean(subrecipe.freezable)} />
                   Freezable
                 </label>
+                <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-end", marginBottom: 8 }}>
+                  <input type="checkbox" name="is_side_salad" defaultChecked={Boolean((subrecipe as { is_side_salad?: boolean | null }).is_side_salad)} />
+                  Side salad
+                </label>
               </div>
+              <p style={{ fontSize: 11.5, color: C.light, margin: 0 }}>
+                Side salads show in clients&apos; My Tastes (like / don&apos;t like / note) and can be removed per meal while ordering. A recipe should have at most one.
+              </p>
             </div>
           </Section>
 
