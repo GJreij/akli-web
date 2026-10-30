@@ -945,6 +945,7 @@ export interface KitchenSubrecipe {
   suggested: KitchenWindowPlan;
   freeze: KitchenWindowPlan | null;
   comments: { user_id: string; name: string; comment: string; date: string; servings: number }[];
+  ingredients_per_serving: KitchenIngredient[];
 }
 
 export interface KitchenDay {

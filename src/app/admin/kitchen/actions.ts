@@ -47,6 +47,36 @@ export async function logBatches(input: {
   return (data ?? []).map((r: { id: number }) => r.id) as number[];
 }
 
+// "I only have 1 left, not 4": the board's `remaining` is derived (cooked −
+// discarded − what deliveries since then used), so the gap is booked on the
+// batch itself — less than expected goes to discarded_servings, more than
+// expected raises servings_cooked. Each correction is appended to notes.
+export async function correctBatchRemaining(batchId: number, shownRemaining: number, actualRemaining: number) {
+  if (!Number.isFinite(actualRemaining) || actualRemaining < 0) throw new Error("Enter how many servings you actually have.");
+  const diff = Math.round((shownRemaining - actualRemaining) * 100) / 100;
+  if (Math.abs(diff) < 0.01) return;
+
+  const { supabase } = await requireAdmin();
+  const { data: batch, error: readErr } = await (supabase.from("kitchen_batch") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .select("servings_cooked, discarded_servings, notes")
+    .eq("id", batchId)
+    .single();
+  if (readErr || !batch) throw new Error(`Couldn't load the batch: ${readErr?.message ?? "not found"}`);
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const note = `${stamp}: corrected ${shownRemaining} → ${actualRemaining} left`;
+  const update = diff > 0
+    ? { discarded_servings: Math.round(((batch.discarded_servings ?? 0) + diff) * 100) / 100 }
+    : { servings_cooked: Math.round((batch.servings_cooked - diff) * 100) / 100 };
+
+  const { data, error } = await (supabase.from("kitchen_batch") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .update({ ...update, notes: batch.notes ? `${batch.notes}\n${note}` : note, updated_at: new Date().toISOString() })
+    .eq("id", batchId)
+    .select("id");
+  if (error) throw new Error(`Couldn't save the correction: ${error.message} (code ${error.code})`);
+  if (!data || data.length === 0) throw new Error("Couldn't save the correction: no matching row.");
+}
+
 // finished = used up; discarded = thrown away (counts as waste).
 export async function closeBatch(batchId: number, status: "finished" | "discarded", discardedServings?: number) {
   const { supabase } = await requireAdmin();

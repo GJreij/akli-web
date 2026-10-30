@@ -3,12 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { KitchenDay, KitchenIngredient, KitchenStockBatch, KitchenSubrecipe } from "@/lib/flask";
-import { logBatches, closeBatch } from "@/app/admin/kitchen/actions";
+import { logBatches, closeBatch, correctBatchRemaining } from "@/app/admin/kitchen/actions";
 import PortioningPanel, { type PortionTarget } from "../cooking/PortioningPanel";
 import CopyListButton from "../CopyListButton";
 import { C } from "../ui";
 
-type Plan = "must" | "suggested" | "freeze";
+type Plan = "must" | "suggested" | "freeze" | "custom";
 
 function fmtServings(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, "");
@@ -37,7 +37,10 @@ const EQUIPMENT_LABEL: Record<string, string> = { stove: "🔥 Stove", oven: "�
 
 // Combined ingredient amounts for a plan choice — "freeze" is suggested + the
 // extra freezer portions, cooked as one pot.
-function planIngredients(s: KitchenSubrecipe, plan: Plan): KitchenIngredient[] {
+function planIngredients(s: KitchenSubrecipe, plan: Plan, custom: number): KitchenIngredient[] {
+  if (plan === "custom") {
+    return s.ingredients_per_serving.map(i => ({ ...i, quantity: Math.round(i.quantity * custom * 10) / 10 }));
+  }
   if (plan === "must") return s.must_cook.ingredients;
   if (plan === "suggested" || !s.freeze) return s.suggested.ingredients;
   const byId = new Map(s.suggested.ingredients.map(i => [i.ingredient_id, { ...i }]));
@@ -49,7 +52,8 @@ function planIngredients(s: KitchenSubrecipe, plan: Plan): KitchenIngredient[] {
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function planServings(s: KitchenSubrecipe, plan: Plan) {
+function planServings(s: KitchenSubrecipe, plan: Plan, custom = 0) {
+  if (plan === "custom") return custom;
   if (plan === "must") return s.must_cook.servings;
   if (plan === "suggested") return s.suggested.servings;
   return s.suggested.servings + (s.freeze?.servings ?? 0);
@@ -61,8 +65,30 @@ function StockRow({ b, s, onPortion, onClose }: {
   onPortion: (mpdrIds: number[], batchId: number) => void;
   onClose: (b: KitchenStockBatch, status: "finished" | "discarded") => void;
 }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [correcting, setCorrecting] = useState(false);
+  const [actual, setActual] = useState(fmtServings(Math.max(b.remaining, 0)));
+  const [err, setErr] = useState<string | null>(null);
   const empty = b.remaining <= 0.01;
+
+  function saveCorrection() {
+    const n = parseFloat(actual);
+    if (!Number.isFinite(n) || n < 0) { setErr("Enter how many servings you actually have."); return; }
+    setErr(null);
+    startTransition(async () => {
+      try {
+        await correctBatchRemaining(b.batch_id, b.remaining, n);
+        setCorrecting(false);
+        router.refresh();
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : "Couldn't save the correction.");
+      }
+    });
+  }
+
   return (
+    <div>
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap",
       background: b.expired ? "#fdecea" : C.white, border: `1px solid ${C.border}`, borderRadius: 9, padding: "7px 10px",
@@ -88,16 +114,33 @@ function StockRow({ b, s, onPortion, onClose }: {
         {empty || b.expired
           ? <button style={smallBtn} onClick={() => onClose(b, b.expired && !empty ? "discarded" : "finished")}>{b.expired && !empty ? "Thrown away" : "Used up"}</button>
           : <button style={{ ...smallBtn, color: C.error }} onClick={() => onClose(b, "discarded")}>Throw away</button>}
+        {!correcting && <button style={smallBtn} onClick={() => setCorrecting(true)} title="Fix how many servings are really left">Correct</button>}
       </span>
+    </div>
+    {correcting && (
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: "5px 0 0 4px", fontSize: 12.5, color: C.muted }}>
+        Actually left right now:
+        <input
+          type="number" step="any" min="0" inputMode="decimal" value={actual} onChange={e => setActual(e.target.value)}
+          style={{ width: 80, padding: "5px 8px", borderRadius: 7, border: `1px solid ${C.border}`, fontSize: 13 }}
+        />
+        servings
+        <button onClick={saveCorrection} disabled={pending} style={{ ...smallBtn, background: C.primary, color: C.white, border: "none" }}>
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button onClick={() => { setCorrecting(false); setErr(null); }} style={{ background: "transparent", border: "none", color: C.muted, fontSize: 12, cursor: "pointer" }}>Cancel</button>
+        {err && <span style={{ color: C.error }}>{err}</span>}
+      </div>
+    )}
     </div>
   );
 }
 
-function LogBatchForm({ s, plan, cookDate, onDone }: { s: KitchenSubrecipe; plan: Plan; cookDate: string; onDone: () => void }) {
+function LogBatchForm({ s, plan, custom, cookDate, onDone }: { s: KitchenSubrecipe; plan: Plan; custom: number; cookDate: string; onDone: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const withFreeze = plan === "freeze" && s.freeze;
-  const [fridge, setFridge] = useState(fmtServings(plan === "must" ? s.must_cook.servings : s.suggested.servings));
+  const [fridge, setFridge] = useState(fmtServings(plan === "custom" ? custom : plan === "must" ? s.must_cook.servings : s.suggested.servings));
   const [freezer, setFreezer] = useState(withFreeze ? fmtServings(s.freeze!.servings) : "");
   const [error, setError] = useState<string | null>(null);
 
@@ -157,11 +200,13 @@ function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
   onCloseBatch: (b: KitchenStockBatch, status: "finished" | "discarded") => void;
 }) {
   const hasExtra = s.suggested.servings > s.must_cook.servings + 0.01;
-  const [plan, setPlan] = useState<Plan>(hasExtra ? "suggested" : "must");
+  const covered = s.must_cook.servings <= 0.01;
+  const [plan, setPlan] = useState<Plan>(hasExtra ? "suggested" : covered ? "custom" : "must");
+  const [customText, setCustomText] = useState(fmtServings(Math.max(s.suggested.servings, s.must_cook.servings) || 1));
+  const custom = Math.max(0, parseFloat(customText) || 0);
   const [logging, setLogging] = useState(false);
   const [showInstr, setShowInstr] = useState(false);
-  const ingredients = planIngredients(s, plan);
-  const covered = s.must_cook.servings <= 0.01;
+  const ingredients = planIngredients(s, plan, custom);
   const nextDays = s.suggested.by_date.filter(d => d.date !== cookDate);
 
   const option = (value: Plan, label: string, sub: string) => (
@@ -215,23 +260,35 @@ function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
         </div>
       )}
 
-      {(!covered || hasExtra) && (
-        <>
+      <>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "10px 0 8px" }}>
             {!covered && option("must", `Today only · ${fmtServings(s.must_cook.servings)}`, "Just what's needed now")}
             {hasExtra && option("suggested", `Through ${fmtDay(s.suggested.through)} · ${fmtServings(s.suggested.servings)}`, `Keeps ${s.fridge_days}d in the fridge`)}
             {s.freeze && option("freeze", `+ freeze · ${fmtServings(planServings(s, "freeze"))}`, `Extra ${fmtServings(s.freeze.servings)} frozen through ${fmtDay(s.freeze.through)}`)}
+            <label style={{
+              display: "flex", gap: 6, alignItems: "center", cursor: "pointer", padding: "6px 9px", borderRadius: 8,
+              border: `1px solid ${plan === "custom" ? C.teal : C.border}`, background: plan === "custom" ? "#eef6f6" : C.white, flex: "1 1 150px",
+            }}>
+              <input type="radio" checked={plan === "custom"} onChange={() => setPlan("custom")} />
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: C.primary }}>My amount</span>
+              <input
+                type="number" step="any" min="0" inputMode="decimal" value={customText}
+                onFocus={() => setPlan("custom")}
+                onChange={e => { setCustomText(e.target.value); setPlan("custom"); }}
+                style={{ width: 72, padding: "4px 7px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 13 }}
+              />
+              <span style={{ fontSize: 11.5, color: C.light }}>servings</span>
+            </label>
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0" }}>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.primary }}>Ingredients for {fmtServings(planServings(s, plan))} servings</p>
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: C.primary }}>Ingredients for {fmtServings(planServings(s, plan, custom))} servings</p>
             <CopyListButton label="Copy" text={ingredients.map(i => `${i.name}: ${fmtQty(i)}`).join("\n")} />
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12, color: C.muted }}>
             {ingredients.map(i => <span key={i.ingredient_id}>{i.name}: <strong style={{ color: C.primary }}>{fmtQty(i)}</strong></span>)}
           </div>
-        </>
-      )}
+      </>
 
       {s.stock.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
@@ -242,7 +299,7 @@ function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
       )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
-        {!logging && (!covered || hasExtra) && (
+        {!logging && (
           <button
             onClick={() => setLogging(true)}
             style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
@@ -261,14 +318,14 @@ function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
           {s.instructions}
         </p>
       )}
-      {logging && <LogBatchForm s={s} plan={plan} cookDate={cookDate} onDone={() => setLogging(false)} />}
+      {logging && <LogBatchForm s={s} plan={plan} custom={custom} cookDate={cookDate} onDone={() => setLogging(false)} />}
     </div>
   );
 }
 
-function SectionHeading({ title, sub }: { title: string; sub?: string }) {
+function SectionHeading({ id, title, sub }: { id?: string; title: string; sub?: string }) {
   return (
-    <div style={{ margin: "22px 0 8px" }}>
+    <div id={id} style={{ margin: "22px 0 8px", scrollMarginTop: 12 }}>
       <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.primary }}>{title}</h2>
       {sub && <p style={{ margin: "2px 0 0", fontSize: 12, color: C.light }}>{sub}</p>}
     </div>
@@ -291,6 +348,13 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   const covered = subs.filter(s => s.prep_type !== "ready" && !needsToday(s) && s.today.servings > 0);
   const ahead = subs.filter(s => s.prep_type !== "ready" && !needsToday(s) && s.today.servings <= 0 && (s.suggested.servings > 0 || s.stock.length > 0));
   const expired = subs.flatMap(s => s.stock.filter(b => b.expired && b.remaining > 0.01).map(b => ({ s, b })));
+
+  function jumpTo(id: string) {
+    if (id === "sec-covered") setShowCovered(true);
+    if (id === "sec-ahead") setShowAhead(true);
+    // Let a just-expanded section render before scrolling to it.
+    setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 0);
+  }
 
   function openPortion(s: KitchenSubrecipe, mpdrIds: number[], batchId?: number) {
     setPanel({ targets: [{ subrecipeId: s.subrecipe_id, name: s.name, mpdrIds }], batchId });
@@ -326,15 +390,24 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
-          { n: cook.length, label: "to cook" },
-          { n: assemble.length, label: "to assemble" },
-          { n: covered.length, label: "already cooked" },
-          { n: ready.length, label: "ready-made" },
+          { id: "sec-cook", n: cook.length, label: "to cook" },
+          { id: "sec-assemble", n: assemble.length, label: "to assemble" },
+          { id: "sec-ready", n: ready.length, label: "ready-made" },
+          { id: "sec-covered", n: covered.length, label: "already cooked" },
+          { id: "sec-ahead", n: ahead.length, label: "not needed today" },
         ].map(x => (
-          <div key={x.label} style={{ flex: "1 1 120px", background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px" }}>
+          <button
+            key={x.id}
+            onClick={() => jumpTo(x.id)}
+            disabled={x.n === 0}
+            style={{
+              flex: "1 1 100px", textAlign: "left", background: C.white, border: `1px solid ${C.border}`, borderRadius: 12,
+              padding: "10px 12px", cursor: x.n === 0 ? "default" : "pointer", opacity: x.n === 0 ? 0.5 : 1,
+            }}
+          >
             <p style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.primary }}>{x.n}</p>
-            <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{x.label}</p>
-          </div>
+            <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{x.label} ↓</p>
+          </button>
         ))}
       </div>
 
@@ -351,21 +424,21 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
 
       {cook.length > 0 && (
         <>
-          <SectionHeading title="Cook" sub="Pick how far ahead to cook. Batches that keep cover the next days, so they won't come back tomorrow." />
+          <SectionHeading id="sec-cook" title="Cook" sub="Pick how far ahead to cook. Batches that keep cover the next days, so they won't come back tomorrow." />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{cook.map(card)}</div>
         </>
       )}
 
       {assemble.length > 0 && (
         <>
-          <SectionHeading title="Assemble" sub="No cooking: salads, dressings, spreads. Good jobs for your helper." />
+          <SectionHeading id="sec-assemble" title="Assemble" sub="No cooking: salads, dressings, spreads. Good jobs for your helper." />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{assemble.map(card)}</div>
         </>
       )}
 
       {ready.length > 0 && (
         <>
-          <SectionHeading title="Ready-made: just portion" />
+          <SectionHeading id="sec-ready" title="Ready-made: just portion" />
           <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "6px 14px" }}>
             {ready.map(s => (
               <div key={s.subrecipe_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${C.offWhite}`, gap: 8 }}>
@@ -382,7 +455,7 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
 
       {covered.length > 0 && (
         <>
-          <button onClick={() => setShowCovered(v => !v)} style={{ background: "transparent", border: "none", padding: 0, margin: "22px 0 8px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: C.primary }}>
+          <button id="sec-covered" onClick={() => setShowCovered(v => !v)} style={{ scrollMarginTop: 12, background: "transparent", border: "none", padding: 0, margin: "22px 0 8px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: C.primary }}>
             {showCovered ? "▾" : "▸"} Already cooked for today ({covered.length})
           </button>
           {showCovered && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{covered.map(card)}</div>}
@@ -391,7 +464,7 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
 
       {ahead.length > 0 && (
         <>
-          <button onClick={() => setShowAhead(v => !v)} style={{ display: "block", background: "transparent", border: "none", padding: 0, margin: "22px 0 8px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: C.primary }}>
+          <button id="sec-ahead" onClick={() => setShowAhead(v => !v)} style={{ scrollMarginTop: 12, display: "block", background: "transparent", border: "none", padding: 0, margin: "22px 0 8px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: C.primary }}>
             {showAhead ? "▾" : "▸"} Not needed today: in stock or can cook ahead ({ahead.length})
           </button>
           {showAhead && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{ahead.map(card)}</div>}
