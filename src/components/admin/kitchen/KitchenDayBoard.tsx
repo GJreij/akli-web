@@ -359,6 +359,7 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   const [error, setError] = useState<string | null>(null);
   const [showCovered, setShowCovered] = useState(false);
   const [showAhead, setShowAhead] = useState(false);
+  const [showPrep, setShowPrep] = useState(false);
   const [choices, setChoices] = useState<Map<number, Choice>>(new Map());
   const choiceFor = (s: KitchenSubrecipe) => choices.get(s.subrecipe_id) ?? defaultChoice(s);
   function patchChoice(s: KitchenSubrecipe, patch: Partial<Choice>) {
@@ -381,6 +382,7 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   function jumpTo(id: string) {
     if (id === "sec-covered") setShowCovered(true);
     if (id === "sec-ahead") setShowAhead(true);
+    if (id === "sec-prep") setShowPrep(true);
     // Let a just-expanded section render before scrolling to it.
     setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 0);
   }
@@ -423,9 +425,9 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
-          { id: "sec-prep", n: prepLines.length, label: "to prep" },
           { id: "sec-cook", n: cook.length, label: "to cook" },
           { id: "sec-assemble", n: assemble.length, label: "to assemble" },
+          { id: "sec-prep", n: prepLines.length, label: "prep list" },
           { id: "sec-ready", n: ready.length, label: "ready-made" },
           { id: "sec-covered", n: covered.length, label: "already cooked" },
           { id: "sec-ahead", n: ahead.length, label: "not needed today" },
@@ -457,13 +459,6 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
         </div>
       )}
 
-      {prepLines.length > 0 && (
-        <>
-          <SectionHeading id="sec-prep" title="Prep" sub="Everything to weigh and cut for today's cook and assemble list, added up across dishes. Follows the amount picked on each card." />
-          <PrepList lines={prepLines} storageKey={`akli-prep-${day.cook_date}`} />
-        </>
-      )}
-
       {cook.length > 0 && (
         <>
           <SectionHeading id="sec-cook" title="Cook" sub="Pick how far ahead to cook. Batches that keep cover the next days, so they won't come back tomorrow." />
@@ -475,6 +470,31 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
         <>
           <SectionHeading id="sec-assemble" title="Assemble" sub="No cooking: salads, dressings, spreads. Good jobs for your helper." />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{assemble.map(card)}</div>
+        </>
+      )}
+
+      {prepLines.length > 0 && (
+        <>
+          <button id="sec-prep" onClick={() => setShowPrep(v => !v)} style={{ scrollMarginTop: 12, display: "block", textAlign: "left", background: "transparent", border: "none", padding: 0, margin: "22px 0 2px", cursor: "pointer", fontSize: 15, fontWeight: 700, color: C.primary }}>
+            {showPrep ? "▾" : "▸"} Prep list for what you picked ({prepLines.length} ingredients)
+          </button>
+          <p style={{ margin: "0 0 8px", fontSize: 12, color: C.light }}>
+            Adds up the Cook and Assemble cards above, at the amount chosen on each. Change a card and this updates.
+          </p>
+          {showPrep && (
+            <>
+              <div style={{ background: C.offWhite, borderRadius: 10, padding: "8px 12px", marginBottom: 8, fontSize: 12, color: C.muted }}>
+                <strong style={{ color: C.primary }}>Based on: </strong>
+                {[...cook, ...assemble].map(s => {
+                  const c = choiceFor(s);
+                  const n = planServings(s, c.plan, choiceCustom(c));
+                  const how = c.plan === "must" ? "today" : c.plan === "suggested" ? `through ${fmtDay(s.suggested.through)}` : c.plan === "freeze" ? "+ freeze" : "my amount";
+                  return `${s.name} ${fmtServings(n)} (${how})`;
+                }).join(" · ")}
+              </div>
+              <PrepList lines={prepLines} storageKey={`akli-prep-${day.cook_date}`} />
+            </>
+          )}
         </>
       )}
 
