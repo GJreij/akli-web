@@ -28,7 +28,11 @@ function parseIngredientForm(formData: FormData) {
     tenant_id: 1,
   };
   const allergens = Object.fromEntries(ALLERGENS.map(a => [a, formData.get(a) === "on"]));
-  return { ...base, ...allergens };
+  // Kitchen Day flags — edit page only (hidden kitchen_fields marker).
+  const kitchen = formData.has("kitchen_fields")
+    ? { is_staple: formData.get("is_staple") === "on", stored_frozen: formData.get("stored_frozen") === "on", thaw_hours: num("thaw_hours") }
+    : {};
+  return { ...base, ...allergens, ...kitchen };
 }
 
 export async function createIngredient(formData: FormData) {

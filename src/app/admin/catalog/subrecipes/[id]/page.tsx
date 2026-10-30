@@ -35,6 +35,12 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
 
   const subrecipe = subrecipeRes.data as Subrecipe | null;
   if (!subrecipe) notFound();
+  // Kitchen Day columns aren't in the generated types yet.
+  const kitchen = subrecipe as Subrecipe & {
+    prep_type?: string | null; skill?: string | null; equipment?: string | null;
+    fridge_days?: number | null; freezer_days?: number | null;
+    active_minutes?: number | null; total_minutes?: number | null; prep_ahead?: string | null;
+  };
 
   const composition = (compositionRes.data ?? []) as SubrecIngred[];
   const allIngredients = (ingredientsRes.data ?? []) as Ingredient[];
@@ -70,10 +76,6 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
                   <input name="max_serving" type="number" defaultValue={subrecipe.max_serving ?? ""} style={inputStyle} />
                 </label>
                 <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-end", marginBottom: 8 }}>
-                  <input type="checkbox" name="freezable" defaultChecked={Boolean(subrecipe.freezable)} />
-                  Freezable
-                </label>
-                <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6, alignSelf: "flex-end", marginBottom: 8 }}>
                   <input type="checkbox" name="is_side_salad" defaultChecked={Boolean((subrecipe as { is_side_salad?: boolean | null }).is_side_salad)} />
                   Side salad
                 </label>
@@ -82,6 +84,54 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
                 Side salads show in clients&apos; My Tastes (like / don&apos;t like / note) and can be removed per meal while ordering. A recipe should have at most one.
               </p>
             </div>
+          </Section>
+
+          <Section title="Kitchen">
+            <input type="hidden" name="kitchen_fields" value="1" />
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label style={{ ...labelStyle, flex: "1 1 150px" }}>Type
+                <select name="prep_type" defaultValue={kitchen.prep_type ?? "cook"} style={inputStyle}>
+                  <option value="cook">Cook (heat)</option>
+                  <option value="assemble">Assemble (no heat)</option>
+                  <option value="ready">Ready-made (just portion)</option>
+                </select>
+              </label>
+              <label style={{ ...labelStyle, flex: "1 1 130px" }}>Who
+                <select name="skill" defaultValue={kitchen.skill ?? "chef"} style={inputStyle}>
+                  <option value="chef">Chef</option>
+                  <option value="helper">Helper</option>
+                </select>
+              </label>
+              <label style={{ ...labelStyle, flex: "1 1 130px" }}>Equipment
+                <select name="equipment" defaultValue={kitchen.equipment ?? ""} style={inputStyle}>
+                  <option value="">—</option>
+                  <option value="stove">Stove</option>
+                  <option value="oven">Oven</option>
+                  <option value="grill">Grill</option>
+                  <option value="none">No heat</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+              <label style={{ ...labelStyle, flex: "0 1 130px" }}>Fridge days
+                <input name="fridge_days" type="number" min="0" defaultValue={kitchen.fridge_days ?? ""} style={inputStyle} />
+              </label>
+              <label style={{ ...labelStyle, flex: "0 1 130px" }}>Freezer days
+                <input name="freezer_days" type="number" min="0" placeholder="Doesn't freeze" defaultValue={kitchen.freezer_days ?? ""} style={inputStyle} />
+              </label>
+              <label style={{ ...labelStyle, flex: "0 1 130px" }}>Hands-on min
+                <input name="active_minutes" type="number" min="0" defaultValue={kitchen.active_minutes ?? ""} style={inputStyle} />
+              </label>
+              <label style={{ ...labelStyle, flex: "0 1 130px" }}>Total min
+                <input name="total_minutes" type="number" min="0" defaultValue={kitchen.total_minutes ?? ""} style={inputStyle} />
+              </label>
+            </div>
+            <label style={{ ...labelStyle, marginTop: 10 }}>Day before (optional)
+              <input name="prep_ahead" placeholder="e.g. Marinate overnight, soak chickpeas" defaultValue={kitchen.prep_ahead ?? ""} style={inputStyle} />
+            </label>
+            <p style={{ fontSize: 11.5, color: C.light, margin: "8px 0 0" }}>
+              Fridge days count the cook day as 0 (2 = cook Sunday, serve through Tuesday). Leave freezer days empty if it doesn&apos;t freeze.
+            </p>
           </Section>
 
           <Section title="Macros">

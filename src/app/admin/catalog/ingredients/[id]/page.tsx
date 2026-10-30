@@ -88,6 +88,23 @@ export default async function IngredientDetailPage({ params }: { params: Promise
             </div>
           </Section>
 
+          <Section title="Kitchen">
+            <input type="hidden" name="kitchen_fields" value="1" />
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-end" }}>
+              <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" name="is_staple" defaultChecked={Boolean((ingredient as { is_staple?: boolean }).is_staple)} />
+                Always in stock (leave off shopping lists)
+              </label>
+              <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" name="stored_frozen" defaultChecked={Boolean((ingredient as { stored_frozen?: boolean }).stored_frozen)} />
+                Kept frozen (remind me to thaw)
+              </label>
+              <label style={{ ...labelStyle, flex: "0 1 130px" }}>Thaw hours
+                <input name="thaw_hours" type="number" min="0" defaultValue={(ingredient as { thaw_hours?: number | null }).thaw_hours ?? ""} style={inputStyle} />
+              </label>
+            </div>
+          </Section>
+
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <SubmitButton style={primaryButton} pendingText="Saving…">Save changes</SubmitButton>
           </div>

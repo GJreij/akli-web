@@ -7,19 +7,37 @@ import { logBatches, closeBatch, correctBatchRemaining } from "@/app/admin/kitch
 import PortioningPanel, { type PortionTarget } from "../cooking/PortioningPanel";
 import CopyListButton from "../CopyListButton";
 import { C } from "../ui";
+import PrepList, { buildPrepLines } from "./PrepList";
 
-type Plan = "must" | "suggested" | "freeze" | "custom";
+export type Plan = "must" | "suggested" | "freeze" | "custom";
 
-function fmtServings(n: number) {
+// How much the cook chose to make for one subrecipe. Lives on the board (not
+// the card) so the Prep list adds up exactly what each card is set to.
+export interface Choice { plan: Plan; customText: string }
+
+export function defaultChoice(s: KitchenSubrecipe): Choice {
+  const hasExtra = s.suggested.servings > s.must_cook.servings + 0.01;
+  const covered = s.must_cook.servings <= 0.01;
+  return {
+    plan: hasExtra ? "suggested" : covered ? "custom" : "must",
+    customText: fmtServings(Math.max(s.suggested.servings, s.must_cook.servings) || 1),
+  };
+}
+
+export function choiceCustom(c: Choice) {
+  return Math.max(0, parseFloat(c.customText) || 0);
+}
+
+export function fmtServings(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, "");
 }
 
-function fmtQty(i: KitchenIngredient) {
+export function fmtQty(i: KitchenIngredient) {
   const q = i.unit === "g" || i.unit === "ml" ? Math.round(i.quantity) : i.quantity;
   return `${q} ${i.unit ?? ""}`.trim();
 }
 
-function fmtDay(iso: string) {
+export function fmtDay(iso: string) {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
@@ -28,7 +46,7 @@ const badge = (bg: string, color: string) => ({
   padding: "2px 8px", borderRadius: 20, background: bg, color,
 });
 
-const smallBtn = {
+export const smallBtn = {
   background: C.offWhite, color: C.primary, border: `1px solid ${C.border}`, borderRadius: 7,
   padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" as const,
 };
@@ -37,7 +55,7 @@ const EQUIPMENT_LABEL: Record<string, string> = { stove: "🔥 Stove", oven: "�
 
 // Combined ingredient amounts for a plan choice — "freeze" is suggested + the
 // extra freezer portions, cooked as one pot.
-function planIngredients(s: KitchenSubrecipe, plan: Plan, custom: number): KitchenIngredient[] {
+export function planIngredients(s: KitchenSubrecipe, plan: Plan, custom: number): KitchenIngredient[] {
   if (plan === "custom") {
     return s.ingredients_per_serving.map(i => ({ ...i, quantity: Math.round(i.quantity * custom * 10) / 10 }));
   }
@@ -52,7 +70,7 @@ function planIngredients(s: KitchenSubrecipe, plan: Plan, custom: number): Kitch
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function planServings(s: KitchenSubrecipe, plan: Plan, custom = 0) {
+export function planServings(s: KitchenSubrecipe, plan: Plan, custom = 0) {
   if (plan === "custom") return custom;
   if (plan === "must") return s.must_cook.servings;
   if (plan === "suggested") return s.suggested.servings;
@@ -193,17 +211,19 @@ function LogBatchForm({ s, plan, custom, cookDate, onDone }: { s: KitchenSubreci
   );
 }
 
-function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
+function CookCard({ s, cookDate, choice, onChoice, onPortion, onCloseBatch }: {
   s: KitchenSubrecipe;
   cookDate: string;
+  choice: Choice;
+  onChoice: (patch: Partial<Choice>) => void;
   onPortion: (s: KitchenSubrecipe, mpdrIds: number[], batchId?: number) => void;
   onCloseBatch: (b: KitchenStockBatch, status: "finished" | "discarded") => void;
 }) {
   const hasExtra = s.suggested.servings > s.must_cook.servings + 0.01;
   const covered = s.must_cook.servings <= 0.01;
-  const [plan, setPlan] = useState<Plan>(hasExtra ? "suggested" : covered ? "custom" : "must");
-  const [customText, setCustomText] = useState(fmtServings(Math.max(s.suggested.servings, s.must_cook.servings) || 1));
-  const custom = Math.max(0, parseFloat(customText) || 0);
+  const { plan, customText } = choice;
+  const setPlan = (p: Plan) => onChoice({ plan: p });
+  const custom = choiceCustom(choice);
   const [logging, setLogging] = useState(false);
   const [showInstr, setShowInstr] = useState(false);
   const ingredients = planIngredients(s, plan, custom);
@@ -274,7 +294,7 @@ function CookCard({ s, cookDate, onPortion, onCloseBatch }: {
               <input
                 type="number" step="any" min="0" inputMode="decimal" value={customText}
                 onFocus={() => setPlan("custom")}
-                onChange={e => { setCustomText(e.target.value); setPlan("custom"); }}
+                onChange={e => onChoice({ customText: e.target.value, plan: "custom" })}
                 style={{ width: 72, padding: "4px 7px", borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 13 }}
               />
               <span style={{ fontSize: 11.5, color: C.light }}>servings</span>
@@ -339,6 +359,11 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   const [error, setError] = useState<string | null>(null);
   const [showCovered, setShowCovered] = useState(false);
   const [showAhead, setShowAhead] = useState(false);
+  const [choices, setChoices] = useState<Map<number, Choice>>(new Map());
+  const choiceFor = (s: KitchenSubrecipe) => choices.get(s.subrecipe_id) ?? defaultChoice(s);
+  function patchChoice(s: KitchenSubrecipe, patch: Partial<Choice>) {
+    setChoices(prev => new Map(prev).set(s.subrecipe_id, { ...(prev.get(s.subrecipe_id) ?? defaultChoice(s)), ...patch }));
+  }
 
   const subs = day.subrecipes;
   const needsToday = (s: KitchenSubrecipe) => s.must_cook.servings > 0.01;
@@ -347,6 +372,10 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   const ready = subs.filter(s => s.prep_type === "ready" && s.today.servings > 0);
   const covered = subs.filter(s => s.prep_type !== "ready" && !needsToday(s) && s.today.servings > 0);
   const ahead = subs.filter(s => s.prep_type !== "ready" && !needsToday(s) && s.today.servings <= 0 && (s.suggested.servings > 0 || s.stock.length > 0));
+  const prepLines = buildPrepLines([...cook, ...assemble], s => {
+    const c = choiceFor(s);
+    return planIngredients(s, c.plan, choiceCustom(c));
+  });
   const expired = subs.flatMap(s => s.stock.filter(b => b.expired && b.remaining > 0.01).map(b => ({ s, b })));
 
   function jumpTo(id: string) {
@@ -377,7 +406,11 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   }
 
   const card = (s: KitchenSubrecipe) => (
-    <CookCard key={s.subrecipe_id} s={s} cookDate={day.cook_date} onPortion={openPortion} onCloseBatch={onCloseBatch} />
+    <CookCard
+      key={s.subrecipe_id} s={s} cookDate={day.cook_date}
+      choice={choiceFor(s)} onChoice={patch => patchChoice(s, patch)}
+      onPortion={openPortion} onCloseBatch={onCloseBatch}
+    />
   );
 
   if (subs.length === 0) {
@@ -390,11 +423,13 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
+          { id: "sec-prep", n: prepLines.length, label: "to prep" },
           { id: "sec-cook", n: cook.length, label: "to cook" },
           { id: "sec-assemble", n: assemble.length, label: "to assemble" },
           { id: "sec-ready", n: ready.length, label: "ready-made" },
           { id: "sec-covered", n: covered.length, label: "already cooked" },
           { id: "sec-ahead", n: ahead.length, label: "not needed today" },
+          ...(day.next_cook_date ? [{ id: "sec-tomorrow", n: null, label: `next day · ${fmtDay(day.next_cook_date)}` }] : []),
         ].map(x => (
           <button
             key={x.id}
@@ -405,7 +440,7 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
               padding: "10px 12px", cursor: x.n === 0 ? "default" : "pointer", opacity: x.n === 0 ? 0.5 : 1,
             }}
           >
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.primary }}>{x.n}</p>
+            <p style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.primary }}>{x.n ?? "→"}</p>
             <p style={{ margin: 0, fontSize: 11.5, color: C.light }}>{x.label} ↓</p>
           </button>
         ))}
@@ -420,6 +455,13 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
             </p>
           ))}
         </div>
+      )}
+
+      {prepLines.length > 0 && (
+        <>
+          <SectionHeading id="sec-prep" title="Prep" sub="Everything to weigh and cut for today's cook and assemble list, added up across dishes. Follows the amount picked on each card." />
+          <PrepList lines={prepLines} storageKey={`akli-prep-${day.cook_date}`} />
+        </>
       )}
 
       {cook.length > 0 && (

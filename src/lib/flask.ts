@@ -896,6 +896,7 @@ export interface KitchenIngredient {
   quantity: number;
   is_staple: boolean;
   stored_frozen: boolean;
+  thaw_hours: number | null;
 }
 
 export interface KitchenPortionPlan {
@@ -920,6 +921,8 @@ export interface KitchenStockBatch {
   remaining: number;
   // Of `remaining`, what's spoken for by open portions from the cook date on.
   allocated_servings: number;
+  // Part of allocated_servings delivered on the cook date itself.
+  allocated_today_servings: number;
   allocated_mpdr_ids: number[];
   allocated_today_mpdr_ids: number[];
   unallocated: number;
@@ -938,6 +941,8 @@ export interface KitchenSubrecipe {
   freezer_days: number | null;
   active_minutes: number | null;
   total_minutes: number | null;
+  // Day-before job, e.g. "Marinate overnight".
+  prep_ahead: string | null;
   recipes: string[];
   today: { servings: number; covered: number; mpdr_ids: number[] };
   stock: KitchenStockBatch[];
@@ -951,6 +956,8 @@ export interface KitchenSubrecipe {
 export interface KitchenDay {
   cook_date: string;
   horizon_end: string;
+  // Next date after cook_date with deliveries (within the 7-day horizon).
+  next_cook_date: string | null;
   subrecipes: KitchenSubrecipe[];
 }
 

@@ -3,11 +3,26 @@ import { PageHeader, Section, inputStyle, labelStyle, C } from "@/components/adm
 import { getKitchenDay } from "@/lib/flask";
 import { beirutISODate } from "@/lib/dates";
 import KitchenDayBoard from "@/components/admin/kitchen/KitchenDayBoard";
+import TomorrowPanel from "@/components/admin/kitchen/TomorrowPanel";
 import AkliLoader from "@/components/AkliLoader";
+
+async function TomorrowResults({ date }: { date: string }) {
+  const day = await getKitchenDay(date);
+  return <TomorrowPanel day={day} />;
+}
 
 async function KitchenResults({ date }: { date: string }) {
   const day = await getKitchenDay(date);
-  return <KitchenDayBoard day={day} />;
+  return (
+    <>
+      <KitchenDayBoard day={day} />
+      {day.next_cook_date && (
+        <Suspense fallback={<p style={{ marginTop: 24, fontSize: 12.5, color: C.light }}>Loading the next cook day…</p>}>
+          <TomorrowResults date={day.next_cook_date} />
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 export default async function KitchenPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
