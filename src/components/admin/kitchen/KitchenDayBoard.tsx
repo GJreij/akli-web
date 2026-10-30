@@ -3,11 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { KitchenDay, KitchenIngredient, KitchenStockBatch, KitchenSubrecipe } from "@/lib/flask";
-import { logBatches, closeBatch, correctBatchRemaining } from "@/app/admin/kitchen/actions";
+import { logBatches, closeBatch, correctBatchRemaining, sortCommentsWithAi } from "@/app/admin/kitchen/actions";
 import PortioningPanel, { type PortionTarget } from "../cooking/PortioningPanel";
 import CopyListButton from "../CopyListButton";
 import { C } from "../ui";
 import PrepList, { buildPrepLines } from "./PrepList";
+import { CommentLine, SeparatePots } from "./CommentHandling";
+import KitchenSettingsBar from "./KitchenSettingsBar";
+import KitchenAssistant from "./KitchenAssistant";
 
 export type Plan = "must" | "suggested" | "freeze" | "custom";
 
@@ -272,10 +275,8 @@ function CookCard({ s, cookDate, choice, onChoice, onPortion, onCloseBatch }: {
 
       {s.comments.length > 0 && (
         <div style={{ margin: "8px 0 0" }}>
-          {s.comments.map((c, i) => (
-            <p key={i} style={{ margin: "0 0 2px", fontSize: 12, color: C.error }}>
-              <strong>{c.name}</strong> ({fmtDay(c.date)}, {fmtServings(c.servings)}): {c.comment}
-            </p>
+          {s.comments.map(c => (
+            <CommentLine key={`${c.user_id}-${c.recipe_id}-${c.comment}`} c={c} subrecipeId={s.subrecipe_id} dayLabel={fmtDay(c.date)} />
           ))}
         </div>
       )}
@@ -283,7 +284,8 @@ function CookCard({ s, cookDate, choice, onChoice, onPortion, onCloseBatch }: {
       <>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "10px 0 8px" }}>
             {!covered && option("must", `Today only · ${fmtServings(s.must_cook.servings)}`, "Just what's needed now")}
-            {hasExtra && option("suggested", `Through ${fmtDay(s.suggested.through)} · ${fmtServings(s.suggested.servings)}`, `Keeps ${s.fridge_days}d in the fridge`)}
+            {hasExtra && option("suggested", `Through ${fmtDay(s.suggested.through)} · ${fmtServings(s.suggested.servings)}`,
+              s.suggested.buffer > 0 ? `Incl. +${fmtServings(s.suggested.buffer)} for late orders` : `Covers until ${fmtDay(s.suggested.through)}`)}
             {s.freeze && option("freeze", `+ freeze · ${fmtServings(planServings(s, "freeze"))}`, `Extra ${fmtServings(s.freeze.servings)} frozen through ${fmtDay(s.freeze.through)}`)}
             <label style={{
               display: "flex", gap: 6, alignItems: "center", cursor: "pointer", padding: "6px 9px", borderRadius: 8,
@@ -308,6 +310,13 @@ function CookCard({ s, cookDate, choice, onChoice, onPortion, onCloseBatch }: {
           <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12, color: C.muted }}>
             {ingredients.map(i => <span key={i.ingredient_id}>{i.name}: <strong style={{ color: C.primary }}>{fmtQty(i)}</strong></span>)}
           </div>
+          <SeparatePots
+            pots={s.comments.filter(c => c.handling === "separate_pot").map(c => ({
+              c, servings: plan === "must" ? c.servings_must : c.servings_suggested,
+            }))}
+            totalServings={planServings(s, plan, custom)}
+            perServing={s.ingredients_per_serving}
+          />
       </>
 
       {s.stock.length > 0 && (
@@ -360,6 +369,20 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   const [showCovered, setShowCovered] = useState(false);
   const [showAhead, setShowAhead] = useState(false);
   const [showPrep, setShowPrep] = useState(false);
+  const [sorting, setSorting] = useState(false);
+
+  async function sortWithAi() {
+    setError(null);
+    setSorting(true);
+    try {
+      await sortCommentsWithAi(day.cook_date);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't sort the comments.");
+    } finally {
+      setSorting(false);
+    }
+  }
   const [choices, setChoices] = useState<Map<number, Choice>>(new Map());
   const choiceFor = (s: KitchenSubrecipe) => choices.get(s.subrecipe_id) ?? defaultChoice(s);
   function patchChoice(s: KitchenSubrecipe, patch: Partial<Choice>) {
@@ -367,6 +390,7 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   }
 
   const subs = day.subrecipes;
+  const unsortedComments = new Set(subs.flatMap(s => s.comments.filter(c => c.handling == null).map(c => `${c.user_id}|${c.recipe_id ?? 0}|${c.comment}`))).size;
   const needsToday = (s: KitchenSubrecipe) => s.must_cook.servings > 0.01;
   const cook = subs.filter(s => s.prep_type === "cook" && needsToday(s));
   const assemble = subs.filter(s => s.prep_type === "assemble" && needsToday(s));
@@ -422,6 +446,19 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
   return (
     <>
       {error && <p style={{ margin: "0 0 10px", fontSize: 12.5, color: C.error }}>{error}</p>}
+
+      <KitchenSettingsBar settings={day.settings} isCookDay={day.is_cook_day} nextPlanned={day.next_planned_cook_day} fmtDay={fmtDay} />
+
+      {unsortedComments > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fdecea", border: `1px solid ${C.error}30`, borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
+          <span style={{ fontSize: 12.5, color: C.error }}>
+            {unsortedComments} client comment{unsortedComments === 1 ? "" : "s"} not sorted yet: leave out when assembling, or cook in a separate pot?
+          </span>
+          <button onClick={sortWithAi} disabled={sorting} style={{ ...smallBtn, background: C.primary, color: C.white, border: "none" }}>
+            {sorting ? "Sorting…" : "✨ Sort with AI"}
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
@@ -532,6 +569,15 @@ export default function KitchenDayBoard({ day }: { day: KitchenDay }) {
           {showAhead && <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{ahead.map(card)}</div>}
         </>
       )}
+
+      <KitchenAssistant
+        day={day}
+        onApplyPlan={plan => setChoices(prev => {
+          const next = new Map(prev);
+          for (const [id, c] of plan) next.set(id, c);
+          return next;
+        })}
+      />
 
       {panel && (
         <PortioningPanel

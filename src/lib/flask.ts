@@ -907,6 +907,8 @@ export interface KitchenPortionPlan {
 
 export interface KitchenWindowPlan extends KitchenPortionPlan {
   through: string;
+  // Late-order margin already included in servings (kitchen_settings).
+  buffer: number;
   by_date: { date: string; servings: number }[];
 }
 
@@ -949,12 +951,37 @@ export interface KitchenSubrecipe {
   must_cook: KitchenPortionPlan;
   suggested: KitchenWindowPlan;
   freeze: KitchenWindowPlan | null;
-  comments: { user_id: string; name: string; comment: string; date: string; servings: number }[];
+  comments: KitchenComment[];
   ingredients_per_serving: KitchenIngredient[];
+}
+
+export interface KitchenComment {
+  user_id: string;
+  name: string;
+  comment: string;
+  recipe_id: number | null; // null for side-salad notes
+  recipe_name: string | null;
+  date: string;
+  servings: number;
+  handling: "assembly" | "separate_pot" | "ignore" | null;
+  instruction: string | null;
+  decided_by: "ai" | "admin" | null;
+  // This client's open servings of the subrecipe (for a separate pot).
+  servings_must: number;
+  servings_suggested: number;
+}
+
+export interface KitchenSettings {
+  cook_days: number[]; // 0 = Sunday … 6 = Saturday
+  late_order_buffer_pct: number;
 }
 
 export interface KitchenDay {
   cook_date: string;
+  settings: KitchenSettings;
+  // null when no cook days are set (every delivery day is a cook day).
+  is_cook_day: boolean | null;
+  next_planned_cook_day: string | null;
   horizon_end: string;
   // Next date after cook_date with deliveries (within the 7-day horizon).
   next_cook_date: string | null;
@@ -969,5 +996,40 @@ export async function getKitchenDay(date: string): Promise<KitchenDay> {
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`kitchen_day error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export interface KitchenWeekRow {
+  subrecipe_id: number;
+  name: string;
+  prep_type: "cook" | "assemble" | "ready";
+  skill: "chef" | "helper";
+  equipment: "stove" | "oven" | "grill" | "none" | null;
+  fridge_days: number | null;
+  freezer_days: number | null;
+  active_minutes: number | null;
+  total_minutes: number | null;
+  by_date: Record<string, number>;
+  total: number;
+}
+
+export interface KitchenWeek {
+  start: string;
+  end: string;
+  dates: string[];
+  // Dates from here on can still take orders (48h lead time).
+  open_from: string;
+  settings: KitchenSettings;
+  subrecipes: KitchenWeekRow[];
+}
+
+export async function getKitchenWeek(start: string): Promise<KitchenWeek> {
+  const res = await fetch(`${FLASK_URL}/kitchen/week`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`kitchen_week error ${res.status}: ${await res.text()}`);
   return res.json();
 }

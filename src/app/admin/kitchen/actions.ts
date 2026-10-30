@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/requireAdmin";
+import { getKitchenDay } from "@/lib/flask";
+import { sortComments, unsortedCommentGroups } from "@/lib/kitchenAi";
 
 function addDays(iso: string, days: number) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -90,4 +92,82 @@ export async function closeBatch(batchId: number, status: "finished" | "discarde
     .select("id");
   if (error) throw new Error(`Couldn't update the batch: ${error.message} (code ${error.code})`);
   if (!data || data.length === 0) throw new Error("Couldn't update the batch: no matching row.");
+}
+
+export async function saveKitchenSettings(input: { cookDays: number[]; lateOrderBufferPct: number }) {
+  const cook_days = [...new Set(input.cookDays.filter(d => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+  const late_order_buffer_pct = Math.max(0, Math.min(50, Math.round(input.lateOrderBufferPct || 0)));
+  const { supabase } = await requireAdmin();
+  const { error } = await (supabase.from("kitchen_settings") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .upsert({ tenant_id: 1, cook_days, late_order_buffer_pct, updated_at: new Date().toISOString() });
+  if (error) throw new Error(`Couldn't save kitchen settings: ${error.message} (code ${error.code})`);
+}
+
+// How one client comment affects one subrecipe (see kitchen_comment_handling).
+export async function setCommentHandling(input: {
+  userId: string; recipeId: number | null; subrecipeId: number; comment: string;
+  handling: "assembly" | "separate_pot" | "ignore"; instruction?: string | null; decidedBy?: "ai" | "admin";
+}) {
+  const { supabase } = await requireAdmin();
+  await upsertCommentHandling(supabase, [input]);
+}
+
+// No upsert: the unique key is an expression index (coalesce(recipe_id, 0)),
+// which PostgREST's on_conflict can't target — so update, then insert.
+// Not exported: every export of a "use server" file is a callable endpoint,
+// and this one trusts its caller to have checked requireAdmin().
+async function upsertCommentHandling(
+  supabase: Awaited<ReturnType<typeof requireAdmin>>["supabase"],
+  rows: { userId: string; recipeId: number | null; subrecipeId: number; comment: string;
+    handling: "assembly" | "separate_pot" | "ignore"; instruction?: string | null; decidedBy?: "ai" | "admin" }[],
+) {
+  for (const r of rows) {
+    const payload = {
+      handling: r.handling, instruction: r.instruction?.trim() || null,
+      decided_by: r.decidedBy ?? "admin", updated_at: new Date().toISOString(),
+    };
+    let q = (supabase.from("kitchen_comment_handling") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .update(payload).eq("user_id", r.userId).eq("subrecipe_id", r.subrecipeId).eq("comment", r.comment.trim());
+    q = r.recipeId == null ? q.is("recipe_id", null) : q.eq("recipe_id", r.recipeId);
+    const { data, error } = await q.select("id");
+    if (error) throw new Error(`Couldn't save the comment handling: ${error.message} (code ${error.code})`);
+    if (data && data.length > 0) continue;
+    const { error: insErr } = await (supabase.from("kitchen_comment_handling") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+      .insert({ user_id: r.userId, recipe_id: r.recipeId, subrecipe_id: r.subrecipeId, comment: r.comment.trim(), ...payload });
+    if (insErr) throw new Error(`Couldn't save the comment handling: ${insErr.message} (code ${insErr.code})`);
+  }
+}
+
+// Sends the cook date's unsorted comments to Claude and saves its choice for
+// each part of the dish (decided_by 'ai' — the chips on the card override).
+export async function sortCommentsWithAi(cookDate: string) {
+  const { supabase } = await requireAdmin();
+  const groups = unsortedCommentGroups(await getKitchenDay(cookDate));
+  if (groups.length === 0) return { sorted: 0 };
+  const decisions = await sortComments(groups);
+  const byKey = new Map(groups.map(g => [g.key, g]));
+  await upsertCommentHandling(supabase, decisions.map(d => {
+    const g = byKey.get(d.key)!;
+    return {
+      userId: g.userId, recipeId: g.recipeId, subrecipeId: d.subrecipeId, comment: g.comment,
+      handling: d.handling, instruction: d.instruction, decidedBy: "ai" as const,
+    };
+  }));
+  return { sorted: groups.length };
+}
+
+// What the kitchen assistant remembers (shown in its panel).
+export async function listKitchenMemory() {
+  const { supabase } = await requireAdmin();
+  const { data, error } = await (supabase.from("kitchen_ai_memory") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .select("id, content, created_at").eq("active", true).order("created_at");
+  if (error) throw new Error(`Couldn't load the assistant's memory: ${error.message}`);
+  return (data ?? []) as { id: number; content: string; created_at: string }[];
+}
+
+export async function forgetKitchenMemory(id: number) {
+  const { supabase } = await requireAdmin();
+  const { error } = await (supabase.from("kitchen_ai_memory") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .update({ active: false }).eq("id", id);
+  if (error) throw new Error(`Couldn't remove it: ${error.message}`);
 }

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { PageHeader, Section, inputStyle, labelStyle, C } from "@/components/admin/ui";
 import { getKitchenDay } from "@/lib/flask";
 import { beirutISODate } from "@/lib/dates";
@@ -32,7 +33,7 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
   return (
     <div style={{ padding: "24px 20px 60px" }}>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
-        <PageHeader title="Kitchen Day" />
+        <PageHeader title="Kitchen Day" right={<Link href={`/admin/kitchen/week?start=${cookDate}`} style={{ fontSize: 12.5, color: C.tealDark }}>Week view →</Link>} />
 
         <Section>
           <form style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
