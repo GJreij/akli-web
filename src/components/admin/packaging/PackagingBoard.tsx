@@ -117,12 +117,22 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.primary, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           {`${client.name ?? ""} ${client.last_name ?? ""}`.trim() || "Unknown client"}
-                          {client.needs_cutlery && (
+                          {/* Always say it either way, so a missing label is never
+                              mistaken for "no cutlery" (or the reverse). */}
+                          {client.needs_cutlery ? (
                             <span style={{
                               fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
                               padding: "2px 8px", borderRadius: 20, background: C.tealDark, color: C.white,
                             }}>
                               🍴 Add cutlery
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em",
+                              padding: "2px 8px", borderRadius: 20, background: C.offWhite, color: C.muted,
+                              border: `1px solid ${C.border}`,
+                            }}>
+                              🚫 No cutlery
                             </span>
                           )}
                         </p>
