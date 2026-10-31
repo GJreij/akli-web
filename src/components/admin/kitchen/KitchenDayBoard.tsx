@@ -10,7 +10,8 @@ import { C } from "../ui";
 import { CommentLine, SeparatePots } from "./CommentHandling";
 import KitchenSettingsBar from "./KitchenSettingsBar";
 import KitchenAssistant from "./KitchenAssistant";
-import PrepCard from "./PrepCard";
+import PrepCard, { buildTasks, KIND_LABEL } from "./PrepCard";
+import { TeamEditor, WhoDoesWhat } from "./TeamPanel";
 import StockRow from "./StockRow";
 import {
   type Choice, type Plan, choiceCustom, defaultChoice, fmtDay, fmtServings, fmtWeekday, fromSaved,
@@ -253,6 +254,13 @@ function DecideBody({ day, plan, choices, setChoice }: {
     });
   }
 
+  // The same tasks Prep will show, from the amounts picked on screen.
+  const draft: DayPlan = confirmed ? plan : {
+    ...plan, confirmed_at: plan.confirmed_at,
+    choices: Object.fromEntries(dishes.map(s => [String(s.subrecipe_id), toSaved(s, choiceFor(s))])),
+  };
+  const whoTasks = buildTasks(day, draft).map(t => ({ key: t.key, name: t.name, amount: t.amount, type: KIND_LABEL[t.kind] }));
+
   function confirm() {
     const saved: Record<string, SavedChoice> = {};
     for (const s of dishes) saved[String(s.subrecipe_id)] = toSaved(s, choiceFor(s));
@@ -271,10 +279,12 @@ function DecideBody({ day, plan, choices, setChoice }: {
         </div>
       )}
 
+      <TeamEditor cookDate={day.cook_date} team={plan.team} />
+
       {confirmed && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#f1f8f8", border: "1px solid #b9d9d8", borderRadius: 12, padding: "10px 12px" }}>
           <span style={{ fontSize: 13, color: C.primary }}>
-            <strong>✓ Plan confirmed</strong> at {new Date(plan.confirmed_at!).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · your helper sees it too
+            <strong>✓ Plan confirmed</strong> at {new Date(plan.confirmed_at!).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · the whole team sees it
           </span>
           <button onClick={() => run(() => reopenDayPlan(day.cook_date))} disabled={pending} style={{ ...smallBtn, minHeight: 40, background: C.white }}>Change plan</button>
         </div>
@@ -355,6 +365,8 @@ function DecideBody({ day, plan, choices, setChoice }: {
         </div>
       )}
 
+      <WhoDoesWhat cookDate={day.cook_date} team={plan.team} assign={plan.assign} tasks={whoTasks} />
+
       {!confirmed && (
         <div>
           <button onClick={confirm} disabled={pending} style={{
@@ -363,7 +375,7 @@ function DecideBody({ day, plan, choices, setChoice }: {
           }}>
             {pending ? "Saving…" : `✓ Confirm my plan (${fmtServings(total)} servings) → Prep`}
           </button>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: C.muted, textAlign: "center" }}>Saved and shared: your helper sees the same plan on their phone.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: C.muted, textAlign: "center" }}>Saved and shared: everyone sees the same plan on their phone.</p>
         </div>
       )}
     </div>
@@ -481,7 +493,7 @@ export default function KitchenDayBoard({ day, plan, tomorrow, nextDate }: {
         sub={confirmed ? `${doneCount} of ${dishes.length} dishes done${plan.schedule ? " · order of work ready" : ""}` : "Confirm your plan first: Prep is built from it"}
       >
         <PrepCard day={day} plan={plan} onOrganise={() => setAskAssistant({
-          text: "Organise my day from my confirmed plan: a timed order of work for the oven, the burners, me and my helper.",
+          text: "Organise my day from my confirmed plan: a timed order of work for the oven, the burners and each person in today’s team.",
           id: Date.now(),
         })} />
       </DayCard>

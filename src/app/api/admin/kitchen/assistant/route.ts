@@ -19,7 +19,7 @@ const SYSTEM_PROMPT = `You are the kitchen assistant for Akli, a Lebanese meal-p
 
 The kitchen:
 - Equipment: 5 stove burners and 1 home oven (not commercial). The oven is the bottleneck: one oven job at a time; at most 5 stove jobs at once.
-- People: the head cook (chef) plus one helper who does light jobs (assembling salads, dressings, spreads, portioning, washing and cutting). Plan so it still works with more helpers later: assign each task to "chef" or "helper".
+- People: the team for the day is given below with names and hours (arrival–departure). Only schedule someone between their arrival and departure. Tasks the cook already gave to a person stay with that person. Assign every step to one team member by name ("who" = their name). If no team is given, ask who is working and their hours.
 - Dishes are made of subrecipes. Each subrecipe has a type (cook = heat, assemble = no heat, ready = bought, just portion), how many days it keeps in the fridge, and whether it freezes.
 - Cooked batches are tracked: "stock" is what's already cooked, with how much is left and its use-by date. "must_cook" is what today's deliveries still need after stock. Cook-ahead options cover later days while the batch keeps (until the day before the next cook day when cook days are set).
 - Client comments are handled per subrecipe: "assembly" (leave out/add when portioning), "separate_pot" (cook that client's servings apart), or "ignore".
@@ -29,7 +29,7 @@ How to work:
 2. The cook decides amounts in step 1 of the screen and confirms them; the confirmed plan is given below and is what gets cooked. Organising the day: if something you need isn't already in memory or the conversation, ask at most 3 short questions in one message first (e.g. is the helper in today, what time do you start, anything off in the fridge). Then call propose_day_plan once. When the plan is confirmed, its choices must repeat the confirmed amounts (don't change them unless the cook asks) and the schedule covers exactly the confirmed dishes, their separate pots, the side salads and the assembling/ready-made items, skipping what's already done. When nothing is confirmed yet, give a choice for every cook subrecipe that still needs cooking (today_only, through, freeze, or custom with servings). Either way include a timed schedule that respects the oven and burner limits, starts long or oven jobs first, and gives assemble jobs to the helper. Prefer cooking ahead when it keeps, to avoid cooking the same thing every day; prefer freezing portions over leaving a small tail to recook later.
 3. Stock: when the cook describes what's really in the fridge or freezer ("only 1 left", "the rice from Tuesday went off", "used up the chicken"), match it to batch ids from get_kitchen_day and call propose_stock_changes. Ask if it's ambiguous which batch is meant.
 4. Cook days and margins: discuss them using get_kitchen_week; when the cook agrees, call propose_settings.
-5. Memory: call remember for durable facts and decisions the cook tells you (cook days, equipment quirks, how the helper works, preferences, recurring rules). Don't store one-off facts about a single day. Check the memory list below before asking something you may already know. Use forget when something you remembered is no longer true.
+5. Memory: call remember for durable facts and decisions the cook tells you (cook days, equipment quirks, how each team member works, preferences, recurring rules). Don't store one-off facts about a single day. Check the memory list below before asking something you may already know. Use forget when something you remembered is no longer true.
 6. Replies are shown in a small chat panel: keep them short and practical, plain text, short "-" lists at most, no markdown headings or bold. Reply in the language the cook writes in (English, French or Lebanese Arabic).
 7. After a propose_* call, say in one line what you proposed; the cook reviews and applies it on screen.`;
 
@@ -72,9 +72,20 @@ function compactDay(day: KitchenDay) {
   };
 }
 
-function compactPlan(plan: DayPlan) {
-  if (!plan.confirmed_at) return "Confirmed plan: none yet (the cook is still deciding in step 1).";
+function compactTeam(plan: DayPlan) {
+  if (plan.team.length === 0) return "Team today: not set yet.";
+  const name = new Map(plan.team.map(m => [m.id, m.name]));
+  const given = Object.entries(plan.assign).filter(([, id]) => name.has(id));
   return [
+    `Team today: ${plan.team.map(m => `${m.name} (${m.from || "?"}–${m.to || "?"})`).join(", ")}`,
+    given.length ? `Tasks the cook gave to someone (task key: person; dish:<subrecipe_id>, pot:<subrecipe_id>:<client>, salad:<subrecipe_id>, group:assemble|ready):\n${given.map(([k, id]) => `- ${k}: ${name.get(id)}`).join("\n")}` : "",
+  ].filter(Boolean).join("\n");
+}
+
+function compactPlan(plan: DayPlan) {
+  if (!plan.confirmed_at) return `Confirmed plan: none yet (the cook is still deciding in step 1).\n${compactTeam(plan)}`;
+  return [
+    compactTeam(plan),
     `Confirmed plan (confirmed ${plan.confirmed_at}), per subrecipe_id: plan (must = today only, suggested = through the fridge window, freeze = + freezer portions, custom), total servings, of which fridge / freezer:`,
     ...Object.entries(plan.choices).map(([id, c]) => `- ${id}: ${c.plan}, ${c.servings} servings (fridge ${c.fridge}, freezer ${c.freezer})`),
     "A subrecipe is already cooked today when get_kitchen_day shows a stock batch with cooked_on = the cook date.",
@@ -140,7 +151,7 @@ const TOOLS: Anthropic.Beta.BetaTool[] = [
             type: "object",
             properties: {
               time: { type: "string", description: "e.g. 08:00" },
-              who: { type: "string", enum: ["chef", "helper"] },
+              who: { type: "string", description: "Name of the team member doing it." },
               station: { type: "string", enum: ["oven", "stove", "prep", "none"] },
               task: { type: "string" },
             },

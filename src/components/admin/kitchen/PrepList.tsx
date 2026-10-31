@@ -25,8 +25,8 @@ export function buildPrepLines(
       byId.set(i.ingredient_id, line);
     }
   }
-  return [...byId.values()].sort((a, b) =>
-    Number(a.is_staple) - Number(b.is_staple) || b.dishes.length - a.dishes.length || a.name.localeCompare(b.name));
+  // A to Z, with the always-in-stock staples in their own A to Z block at the end.
+  return [...byId.values()].sort((a, b) => Number(a.is_staple) - Number(b.is_staple) || a.name.localeCompare(b.name));
 }
 
 function qty(i: { quantity: number; unit: string | null }) {

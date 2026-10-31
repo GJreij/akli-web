@@ -14,7 +14,7 @@ type Turn = { role: "user" | "assistant"; content: string };
 type DayPlan = {
   summary: string;
   choices: { subrecipe_id: number; option: "today_only" | "through" | "freeze" | "custom"; servings?: number; reason?: string }[];
-  schedule: { time: string; who: "chef" | "helper"; station: string; task: string }[];
+  schedule: { time: string; who: string; station: string; task: string }[];
 };
 type StockChanges = { changes: { batch_id: number; action: "set_left" | "used_up" | "thrown_away"; servings_left?: number; reason?: string }[] };
 type SettingsProposal = { cook_days?: number[]; late_order_buffer_pct?: number; reason?: string };
@@ -87,7 +87,7 @@ function ProposalCard({ p, day, confirmed, onApplyPlan }: { p: Proposal; day: Ki
             {plan.schedule.map((t, i) => (
               <div key={i} style={{ display: "flex", gap: 8, padding: "2px 0" }}>
                 <strong style={{ color: C.primary, width: 42, flexShrink: 0 }}>{t.time}</strong>
-                <span style={{ width: 52, flexShrink: 0, color: t.who === "helper" ? C.tealDark : C.primary }}>{t.who}</span>
+                <span style={{ width: 64, flexShrink: 0, color: C.tealDark, overflow: "hidden", textOverflow: "ellipsis" }}>{t.who}</span>
                 <span style={{ width: 44, flexShrink: 0, color: C.light }}>{t.station}</span>
                 <span>{t.task}</span>
               </div>
@@ -221,7 +221,7 @@ export default function KitchenAssistant({ day, request, confirmed, onApplyPlan 
 
   const quick = [
     { label: confirmed ? "Organise my day" : "Help me decide", text: confirmed
-      ? "Organise my day from my confirmed plan: a timed order of work for the oven, the burners, me and my helper."
+      ? "Organise my day from my confirmed plan: a timed order of work for the oven, the burners and each person in today’s team."
       : `Help me decide how much to cook on ${day.cook_date}.` },
     { label: "Fix my stock", text: "I want to tell you what's really left in the fridge and freezer." },
     { label: "Plan my week", text: `Help me plan my cook days for the week starting ${day.cook_date}.` },
@@ -272,7 +272,7 @@ export default function KitchenAssistant({ day, request, confirmed, onApplyPlan 
         {messages.length === 0 && (
           <div style={{ fontSize: 12.5, color: C.muted }}>
             <p style={{ margin: "0 0 8px" }}>
-              I read today&apos;s orders, the plan you confirmed in step 1, what&apos;s already cooked and your settings. I can organise the day (a timed order of work for your burners, oven and helper), help you decide amounts, fix stock from what you tell me, or help pick cook days. Nothing changes until you tap Apply.
+              I read today&apos;s orders, the plan you confirmed in step 1, what&apos;s already cooked and your settings. I can organise the day (a timed order of work for your burners, oven and team), help you decide amounts, fix stock from what you tell me, or help pick cook days. Nothing changes until you tap Apply.
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {quick.map(q => <button key={q.label} style={ghost} onClick={() => send(q.text)}>{q.label}</button>)}
@@ -298,7 +298,7 @@ export default function KitchenAssistant({ day, request, confirmed, onApplyPlan 
 
       <form onSubmit={e => { e.preventDefault(); void send(input); }} style={{ display: "flex", gap: 6, padding: 10, borderTop: `1px solid ${C.border}`, background: C.white }}>
         <textarea
-          value={input} onChange={e => setInput(e.target.value)} rows={2} placeholder="e.g. Helper is off today, I start at 8"
+          value={input} onChange={e => setInput(e.target.value)} rows={2} placeholder="e.g. Rami leaves at 1 today, I start at 8"
           onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(input); } }}
           style={{ flex: 1, resize: "none", padding: "7px 9px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: "inherit" }}
         />

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { KitchenComment, KitchenDay, KitchenSubrecipe } from "@/lib/flask";
-import type { DayPlan, SavedChoice } from "@/lib/kitchenPlan";
+import type { DayPlan, SavedChoice, TeamMember } from "@/lib/kitchenPlan";
 import { logBatches, saveDaySchedule, setPlanTaskDone } from "@/app/admin/kitchen/actions";
 import PortioningPanel, { type PortionTarget } from "../cooking/PortioningPanel";
 import { C } from "../ui";
@@ -11,13 +11,15 @@ import { potIngredients } from "./CommentHandling";
 import PrepList, { buildPrepLines } from "./PrepList";
 import { classify, FoldHeading } from "./KitchenDayBoard";
 import { fmtQty, fmtServings, fmtWeekday, scaledIngredients, smallBtn, todayBatches } from "./format";
+import { hours, personColor } from "./TeamPanel";
 
 type Kind = "dish" | "pot" | "salad" | "group";
 
-interface Task {
+export const KIND_LABEL: Record<Kind, string> = { dish: "Cook", pot: "Separate pots", salad: "Side salads", group: "Assemble & ready-made" };
+
+export interface Task {
   key: string;
   kind: Kind;
-  who: "Chef" | "Helper";
   name: string;
   sub: string;
   amount: number;
@@ -30,6 +32,7 @@ interface Task {
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
+const az = <T extends { name: string }>(xs: T[]) => [...xs].sort((a, b) => a.name.localeCompare(b.name));
 
 const PLAN_LABEL = (s: KitchenSubrecipe, c: SavedChoice) =>
   c.plan === "must" ? "today only"
@@ -49,7 +52,7 @@ const potKey = (s: KitchenSubrecipe, c: KitchenComment) => `pot:${s.subrecipe_id
 // Everything to make today, from the confirmed plan: a task per dish, per
 // separate pot, per side salad, plus one for assembling and one for
 // ready-made items.
-function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
+export function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
   const { dishes, salads, others } = classify(day, plan);
   const tasks: Task[] = [];
   const doneText = (s: KitchenSubrecipe) => {
@@ -65,7 +68,7 @@ function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
     const done = todayBatches(s, day.cook_date).length > 0;
     const assembly = s.comments.filter(x => x.handling === "assembly");
     tasks.push({
-      key: `dish:${s.subrecipe_id}`, kind: "dish", who: s.skill === "helper" ? "Helper" : "Chef",
+      key: `dish:${s.subrecipe_id}`, kind: "dish",
       name: s.name, amount: c.servings, subs: [s], saved: c, done, doneText: done ? doneText(s) : undefined,
       sub: saved ? PLAN_LABEL(s, c) : "new orders since you confirmed",
       note: [
@@ -74,17 +77,17 @@ function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
         assembly.length ? `When portioning: ${assembly.map(x => `${x.name}: ${x.instruction || x.comment}`).join(" · ")}.` : "",
         s.instructions ? `\n${s.instructions}` : "",
       ].filter(Boolean).join(" "),
-      lines: scaledIngredients(s, main).map(i => ({ name: i.name, qty: fmtQty(i) })),
+      lines: az(scaledIngredients(s, main).map(i => ({ name: i.name, qty: fmtQty(i) }))),
     });
     for (const p of pots) {
       const key = potKey(s, p.c);
       tasks.push({
-        key, kind: "pot", who: "Chef", name: `${s.name} for ${p.c.name}`, amount: p.servings, subs: [s],
+        key, kind: "pot", name: `${s.name} for ${p.c.name}`, amount: p.servings, subs: [s],
         sub: `separate pot · ${p.c.instruction || p.c.comment}`, done: plan.done[key] != null, doneText: "done",
         note: `${p.c.name}: “${p.c.comment}”. Cook apart and label it with their name.`,
-        lines: potIngredients(s.ingredients_per_serving, p.c).map(i => ({
+        lines: az(potIngredients(s.ingredients_per_serving, p.c).map(i => ({
           name: i.name, qty: i.less ? "less" : fmtQty({ quantity: i.quantity * p.servings, unit: i.unit }),
-        })),
+        }))),
       });
     }
   }
@@ -93,11 +96,11 @@ function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
     const n = s.must_cook.servings;
     const done = todayBatches(s, day.cook_date).length > 0 || n <= 0.01;
     tasks.push({
-      key: `salad:${s.subrecipe_id}`, kind: "salad", who: "Helper", name: s.name, amount: done ? s.today.servings : n, subs: [s],
+      key: `salad:${s.subrecipe_id}`, kind: "salad", name: s.name, amount: done ? s.today.servings : n, subs: [s],
       sub: s.comments.length ? s.comments.map(c => `${c.name}: ${c.comment}`).join(" · ") : "side salad",
       done, doneText: done ? (todayBatches(s, day.cook_date).length ? doneText(s) : "done · already made") : undefined,
       note: `For ${fmtServings(n)} people.${s.comments.length ? ` ${s.comments.map(c => `${c.name}: ${c.comment}, make theirs apart`).join(" · ")}.` : ""}`,
-      lines: scaledIngredients(s, n).map(i => ({ name: i.name, qty: fmtQty(i) })),
+      lines: az(scaledIngredients(s, n).map(i => ({ name: i.name, qty: fmtQty(i) }))),
     });
   }
 
@@ -107,7 +110,7 @@ function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
     const open = items.filter(s => s.must_cook.servings > 0.01);
     const short = (s: KitchenSubrecipe) => s.name.replace(/\s*\(.*?\)\s*/g, " ").trim();
     tasks.push({
-      key: `group:${kind}`, kind: "group", who: "Helper",
+      key: `group:${kind}`, kind: "group",
       name: (open.length ? open : items).map(short).join(", "),
       amount: r2(open.reduce((n, s) => n + s.must_cook.servings, 0)), subs: items,
       sub: kind === "ready" ? "ready-made · portion" : "assemble & portion",
@@ -122,17 +125,16 @@ function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
   return tasks;
 }
 
-const pill = (helper: boolean) => ({
-  fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 20,
-  background: helper ? "#e6f2f2" : "#f1ece8", color: helper ? "#2f6a6a" : "#5c3b1e",
+const pill = (col: { bg: string; fg: string }) => ({
+  fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 20, background: col.bg, color: col.fg,
 });
 const actionBtn = (primary: boolean) => ({
   minHeight: 40, padding: "0 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
   border: primary ? "none" : `1px solid ${C.primary}`, background: primary ? C.primary : C.white, color: primary ? C.white : C.primary,
 });
 
-function TaskCard({ t, cookDate, open, onToggle, onPortion }: {
-  t: Task; cookDate: string; open: boolean; onToggle: () => void;
+function TaskCard({ t, cookDate, open, onToggle, onPortion, team, personId }: {
+  t: Task; cookDate: string; open: boolean; onToggle: () => void; team: TeamMember[]; personId?: string;
   onPortion: (targets: PortionTarget[]) => void;
 }) {
   const router = useRouter();
@@ -220,7 +222,7 @@ function TaskCard({ t, cookDate, open, onToggle, onPortion }: {
       }}>
         <span style={{ minWidth: 0 }}>
           <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={pill(t.who === "Helper")}>{t.who}</span>
+            <span style={pill(personColor(team, personId))}>{team.find(m => m.id === personId)?.name ?? "No one yet"}</span>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{t.name}</span>
           </span>
           <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 2 }}>{t.done ? t.doneText : t.sub}</span>
@@ -300,19 +302,53 @@ function TaskCard({ t, cookDate, open, onToggle, onPortion }: {
   );
 }
 
+type View = "person" | "type";
+
+const matches = (t: Task, q: string) =>
+  [t.name, t.sub, t.note, ...t.lines.map(l => l.name)].some(x => x.toLowerCase().includes(q));
+
 export default function PrepCard({ day, plan, onOrganise }: { day: KitchenDay; plan: DayPlan; onOrganise: () => void }) {
   const router = useRouter();
   const [openTask, setOpenTask] = useState<string | null>(null);
   const [showIngr, setShowIngr] = useState(false);
   const [panel, setPanel] = useState<PortionTarget[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [view, setView] = useState<View>("person");
+  const [hideDone, setHideDone] = useState(false);
   const [, startTransition] = useTransition();
+
+  // The section layout is a per-phone preference.
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("akli-prep-view");
+      if (v === "person" || v === "type") setView(v);
+    } catch { /* storage unavailable */ }
+  }, []);
+  function pickView(v: View) {
+    setView(v);
+    try { localStorage.setItem("akli-prep-view", v); } catch { /* ignore */ }
+  }
 
   if (plan.confirmed_at == null) {
     return <p style={{ margin: 0, fontSize: 13, color: C.muted }}>Confirm your plan in step 1 first: the checklist, the ingredients and the assistant all work from it.</p>;
   }
 
+  const team = plan.team.filter(m => m.name.trim());
+  const personOf = (t: Task) => (team.some(m => m.id === plan.assign[t.key]) ? plan.assign[t.key] : undefined);
   const tasks = buildTasks(day, plan);
   const done = tasks.filter(t => t.done).length;
+  const q = query.trim().toLowerCase();
+  const shown = tasks.filter(t => (!q || matches(t, q)) && !(hideDone && t.done));
+
+  // Sections: one per person (then what no one has yet), or one per kind of job.
+  const sections: { id: string; title: string; sub?: string; col?: { bg: string; fg: string }; tasks: Task[] }[] =
+    view === "person" && team.length > 0
+      ? [
+        ...team.map(m => ({ id: m.id, title: m.name, sub: hours(m), col: personColor(team, m.id), tasks: shown.filter(t => personOf(t) === m.id) })),
+        { id: "none", title: "Not given to anyone", sub: "give them out in step 1", tasks: shown.filter(t => !personOf(t)) },
+      ]
+      : (Object.keys(KIND_LABEL) as Kind[]).map(k => ({ id: k, title: KIND_LABEL[k], tasks: shown.filter(t => t.kind === k) }));
+
   // Prep list: every ingredient across today's tasks, at the planned amounts.
   const servingsFor = new Map<number, number>();
   for (const t of tasks) {
@@ -322,6 +358,12 @@ export default function PrepCard({ day, plan, onOrganise }: { day: KitchenDay; p
   }
   const prepSubs = day.subrecipes.filter(s => (servingsFor.get(s.subrecipe_id) ?? 0) > 0);
   const prepLines = buildPrepLines(prepSubs, s => scaledIngredients(s, servingsFor.get(s.subrecipe_id) ?? 0));
+  const prepShown = q ? prepLines.filter(l => l.name.toLowerCase().includes(q) || l.dishes.some(d => d.name.toLowerCase().includes(q))) : prepLines;
+
+  const chip = (on: boolean) => ({
+    minHeight: 36, padding: "0 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+    background: on ? C.primary : C.white, color: on ? C.white : C.primary, border: `1px solid ${on ? C.primary : "#c9c2bb"}`,
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -329,16 +371,18 @@ export default function PrepCard({ day, plan, onOrganise }: { day: KitchenDay; p
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13.5, color: C.primary }}>
             <strong>Kitchen assistant</strong>
-            <span style={{ display: "block", fontSize: 12, color: "#3d5f5f" }}>Sees your confirmed plan · 5 burners · 1 oven · you + helper</span>
+            <span style={{ display: "block", fontSize: 12, color: "#3d5f5f" }}>
+              Sees your confirmed plan · 5 burners · 1 oven · {team.length ? team.map(m => m.name).join(", ") : "add your team in step 1"}
+            </span>
           </span>
           <button onClick={onOrganise} style={{ ...actionBtn(true), minHeight: 44 }}>{plan.schedule ? "Re-plan" : "✨ Organise my day"}</button>
         </div>
         {plan.schedule && (
           <div style={{ marginTop: 10 }}>
             {plan.schedule.map((x, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 58px 1fr", gap: 8, fontSize: 12.5, padding: "5px 0", borderTop: "1px solid #d6e9e8", color: C.primary }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "48px 72px 1fr", gap: 8, fontSize: 12.5, padding: "5px 0", borderTop: "1px solid #d6e9e8", color: C.primary }}>
                 <strong>{x.time}</strong>
-                <span style={{ fontWeight: 600, color: x.who === "helper" ? "#2f6a6a" : "#5c3b1e" }}>{x.who}</span>
+                <span style={{ fontWeight: 600, color: personColor(team, team.find(m => m.name === x.who)?.id).fg, overflow: "hidden", textOverflow: "ellipsis" }}>{x.who}</span>
                 <span>{x.station && x.station !== "none" ? `${x.station}: ` : ""}{x.task}</span>
               </div>
             ))}
@@ -355,19 +399,49 @@ export default function PrepCard({ day, plan, onOrganise }: { day: KitchenDay; p
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.primary }}>Checklist</h2>
           <span style={{ fontSize: 12, color: C.muted }}>{done} of {tasks.length} done · tap a task for its ingredients</span>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {tasks.map(t => (
-            <TaskCard key={t.key} t={t} cookDate={day.cook_date}
-              open={openTask === t.key} onToggle={() => setOpenTask(openTask === t.key ? null : t.key)}
-              onPortion={setPanel} />
+
+        <div style={{ position: "sticky", top: 0, zIndex: 2, background: C.white, paddingBottom: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+          <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search a dish, ingredient or client…"
+            style={{ width: "100%", boxSizing: "border-box", height: 44, padding: "0 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, color: C.primary }} />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: C.muted }}>Sections:</span>
+            <button onClick={() => pickView("person")} style={chip(view === "person")}>By person</button>
+            <button onClick={() => pickView("type")} style={chip(view === "type")}>By job</button>
+            <button onClick={() => setHideDone(v => !v)} style={chip(hideDone)}>Hide done</button>
+          </div>
+        </div>
+
+        {q && shown.length === 0 && <p style={{ margin: "4px 0", fontSize: 12.5, color: C.muted }}>No task matches “{query}”.</p>}
+        {view === "person" && team.length === 0 && (
+          <p style={{ margin: "0 0 8px", fontSize: 12, color: C.muted }}>Add who’s in today in step 1 to see each person’s list.</p>
+        )}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {sections.filter(sec => sec.tasks.length > 0).map(sec => (
+            <section key={sec.id}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, padding: "4px 10px", marginBottom: 6, borderRadius: 8,
+                background: sec.col?.bg ?? C.offWhite, color: sec.col?.fg ?? C.primary }}>
+                <strong style={{ fontSize: 13.5 }}>{sec.title}{sec.sub ? <span style={{ fontWeight: 500, fontSize: 12 }}> · {sec.sub}</span> : null}</strong>
+                <span style={{ fontSize: 12 }}>{sec.tasks.filter(t => t.done).length}/{sec.tasks.length} done</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {sec.tasks.map(t => (
+                  <TaskCard key={t.key} t={t} cookDate={day.cook_date} team={team} personId={personOf(t)}
+                    open={openTask === t.key || (!!q && shown.length <= 3)} onToggle={() => setOpenTask(openTask === t.key ? null : t.key)}
+                    onPortion={setPanel} />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       </div>
 
       {prepLines.length > 0 && (
         <div>
-          <FoldHeading open={showIngr} onToggle={() => setShowIngr(v => !v)}>Ingredients to weigh &amp; cut ({prepLines.length})</FoldHeading>
-          {showIngr && <PrepList lines={prepLines} storageKey={`akli-prep-${day.cook_date}`} />}
+          <FoldHeading open={showIngr || !!q} onToggle={() => setShowIngr(v => !v)}>
+            Ingredients to weigh &amp; cut ({q ? `${prepShown.length} of ${prepLines.length}` : prepLines.length}) · A–Z
+          </FoldHeading>
+          {(showIngr || !!q) && prepShown.length > 0 && <PrepList lines={prepShown} storageKey={`akli-prep-${day.cook_date}`} />}
         </div>
       )}
 

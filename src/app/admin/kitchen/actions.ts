@@ -3,7 +3,7 @@
 import { requireAdmin } from "@/lib/supabase/requireAdmin";
 import { getKitchenDay } from "@/lib/flask";
 import { sortComments, unsortedCommentGroups } from "@/lib/kitchenAi";
-import type { NoteTurn, SavedChoice, ScheduleItem } from "@/lib/kitchenPlan";
+import type { NoteTurn, SavedChoice, ScheduleItem, TeamMember } from "@/lib/kitchenPlan";
 
 function addDays(iso: string, days: number) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -204,6 +204,24 @@ export async function saveDaySchedule(cookDate: string, schedule: ScheduleItem[]
     station: String(s.station).slice(0, 20), task: String(s.task).slice(0, 300),
   })) ?? null;
   await patchDayPlan(cookDate, { schedule: clean });
+}
+
+// Who's in the kitchen today. Saved as soon as it changes.
+export async function saveDayTeam(cookDate: string, team: TeamMember[]) {
+  const hhmm = (t: string) => (/^\d{2}:\d{2}$/.test(t) ? t : "");
+  const clean = team.slice(0, 20)
+    .map(m => ({ id: String(m.id).slice(0, 40), name: String(m.name).trim().slice(0, 40), from: hhmm(m.from), to: hhmm(m.to) }))
+    .filter(m => m.id && m.name);
+  await patchDayPlan(cookDate, { team: clean });
+}
+
+// Who does each Prep task: the whole map (task key -> team member id).
+export async function saveDayAssign(cookDate: string, assign: Record<string, string>) {
+  const clean: Record<string, string> = {};
+  for (const [k, v] of Object.entries(assign).slice(0, 300)) {
+    if (k && v) clean[String(k).slice(0, 120)] = String(v).slice(0, 40);
+  }
+  await patchDayPlan(cookDate, { assign: clean });
 }
 
 // The next-day WhatsApp note and the chat that wrote it.
