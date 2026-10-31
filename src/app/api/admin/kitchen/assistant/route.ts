@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/supabase/requireAdmin";
 import { getKitchenDay, getKitchenWeek, type KitchenDay, type KitchenWeek } from "@/lib/flask";
 import { beirutISODate } from "@/lib/dates";
 import { anthropic, KITCHEN_FALLBACK, KITCHEN_MODEL } from "@/lib/kitchenAi";
+import { loadDayPlan, type DayPlan } from "@/lib/kitchenPlan";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -25,7 +26,7 @@ The kitchen:
 
 How to work:
 1. Every number you mention must come from a tool result. Never estimate servings, stock or ingredient amounts yourself. Call get_kitchen_day (and get_kitchen_week for planning across days) before advising.
-2. Planning a day: if something you need isn't already in memory or the conversation, ask at most 3 short questions in one message first (e.g. is the helper in today, what time do you start, anything off in the fridge). Then call propose_day_plan once with: a choice for every cook/assemble subrecipe that still needs cooking (today_only, through, freeze, or custom with servings), and a timed schedule that respects the oven and burner limits, starts long or oven jobs first, and gives assemble jobs to the helper. Prefer cooking ahead when it keeps, to avoid cooking the same thing every day; prefer freezing portions over leaving a small tail to recook later.
+2. The cook decides amounts in step 1 of the screen and confirms them; the confirmed plan is given below and is what gets cooked. Organising the day: if something you need isn't already in memory or the conversation, ask at most 3 short questions in one message first (e.g. is the helper in today, what time do you start, anything off in the fridge). Then call propose_day_plan once. When the plan is confirmed, its choices must repeat the confirmed amounts (don't change them unless the cook asks) and the schedule covers exactly the confirmed dishes, their separate pots, the side salads and the assembling/ready-made items, skipping what's already done. When nothing is confirmed yet, give a choice for every cook subrecipe that still needs cooking (today_only, through, freeze, or custom with servings). Either way include a timed schedule that respects the oven and burner limits, starts long or oven jobs first, and gives assemble jobs to the helper. Prefer cooking ahead when it keeps, to avoid cooking the same thing every day; prefer freezing portions over leaving a small tail to recook later.
 3. Stock: when the cook describes what's really in the fridge or freezer ("only 1 left", "the rice from Tuesday went off", "used up the chicken"), match it to batch ids from get_kitchen_day and call propose_stock_changes. Ask if it's ambiguous which batch is meant.
 4. Cook days and margins: discuss them using get_kitchen_week; when the cook agrees, call propose_settings.
 5. Memory: call remember for durable facts and decisions the cook tells you (cook days, equipment quirks, how the helper works, preferences, recurring rules). Don't store one-off facts about a single day. Check the memory list below before asking something you may already know. Use forget when something you remembered is no longer true.
@@ -69,6 +70,17 @@ function compactDay(day: KitchenDay) {
       })),
     })),
   };
+}
+
+function compactPlan(plan: DayPlan) {
+  if (!plan.confirmed_at) return "Confirmed plan: none yet (the cook is still deciding in step 1).";
+  return [
+    `Confirmed plan (confirmed ${plan.confirmed_at}), per subrecipe_id: plan (must = today only, suggested = through the fridge window, freeze = + freezer portions, custom), total servings, of which fridge / freezer:`,
+    ...Object.entries(plan.choices).map(([id, c]) => `- ${id}: ${c.plan}, ${c.servings} servings (fridge ${c.fridge}, freezer ${c.freezer})`),
+    "A subrecipe is already cooked today when get_kitchen_day shows a stock batch with cooked_on = the cook date.",
+    Object.keys(plan.done).length ? `Separate pots already done: ${Object.keys(plan.done).join(", ")}` : "",
+    plan.schedule?.length ? `Order of work currently saved:\n${plan.schedule.map(s => `${s.time} ${s.who} ${s.station}: ${s.task}`).join("\n")}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function compactWeek(week: KitchenWeek) {
@@ -219,10 +231,11 @@ async function runTool(name: string, input: Record<string, unknown>, supabase: S
 }
 
 async function runAssistant(history: Turn[], cookDate: string, supabase: Supabase) {
-  const memory = await loadMemory(supabase);
+  const [memory, plan] = await Promise.all([loadMemory(supabase), loadDayPlan(supabase, cookDate)]);
   const context = [
     `Today (Beirut): ${beirutISODate(0)} (${DAYS[new Date(`${beirutISODate(0)}T00:00:00`).getDay()]}). The cook has the Kitchen Day screen open on ${cookDate} (${DAYS[new Date(`${cookDate}T00:00:00`).getDay()]}).`,
     `Orders for ${beirutISODate(2)} and later can still come in (48h lead time).`,
+    compactPlan(plan),
     memory.length
       ? `Memory (id: fact):\n${memory.map(m => `${m.id}: ${m.content}`).join("\n")}`
       : "Memory: nothing saved yet.",

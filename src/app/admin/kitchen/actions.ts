@@ -3,6 +3,7 @@
 import { requireAdmin } from "@/lib/supabase/requireAdmin";
 import { getKitchenDay } from "@/lib/flask";
 import { sortComments, unsortedCommentGroups } from "@/lib/kitchenAi";
+import type { NoteTurn, SavedChoice, ScheduleItem } from "@/lib/kitchenPlan";
 
 function addDays(iso: string, days: number) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -154,6 +155,64 @@ export async function sortCommentsWithAi(cookDate: string) {
     };
   }));
   return { sorted: groups.length };
+}
+
+// ─── Saved day plan (kitchen_day_plan) ──────────────────────────────────────
+
+async function patchDayPlan(cookDate: string, patch: Record<string, unknown>) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cookDate)) throw new Error("Bad cook date.");
+  const { supabase } = await requireAdmin();
+  const { error } = await (supabase.from("kitchen_day_plan") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .upsert({ tenant_id: 1, cook_date: cookDate, ...patch, updated_at: new Date().toISOString() }, { onConflict: "tenant_id,cook_date" });
+  if (error) throw new Error(`Couldn't save the plan: ${error.message} (code ${error.code})`);
+  return supabase;
+}
+
+// "Confirm my plan": the amounts are frozen here, so Prep and the helper's
+// phone show exactly what was decided.
+export async function confirmDayPlan(cookDate: string, choices: Record<string, SavedChoice>) {
+  const clean: Record<string, SavedChoice> = {};
+  for (const [id, c] of Object.entries(choices)) {
+    if (!/^\d+$/.test(id) || !["must", "suggested", "freeze", "custom"].includes(c.plan)) continue;
+    const r = (n: number) => Math.max(0, Math.round((Number(n) || 0) * 100) / 100);
+    clean[id] = { plan: c.plan, servings: r(c.servings), fridge: r(c.fridge), freezer: r(c.freezer) };
+  }
+  const { supabase } = await requireAdmin();
+  const { data: { user } } = await supabase.auth.getUser();
+  await patchDayPlan(cookDate, { choices: clean, confirmed_at: new Date().toISOString(), confirmed_by: user?.id ?? null });
+}
+
+export async function reopenDayPlan(cookDate: string) {
+  await patchDayPlan(cookDate, { confirmed_at: null });
+}
+
+// Done ticks for Prep tasks that aren't a batch of their own (separate pots).
+export async function setPlanTaskDone(cookDate: string, key: string, done: boolean, servings?: number | null) {
+  const { supabase } = await requireAdmin();
+  const { data, error } = await (supabase.from("kitchen_day_plan") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .select("done").eq("tenant_id", 1).eq("cook_date", cookDate).maybeSingle();
+  if (error) throw new Error(`Couldn't load the plan: ${error.message}`);
+  const next = { ...((data?.done as Record<string, unknown>) ?? {}) };
+  if (done) next[key] = { at: new Date().toISOString(), servings: servings ?? null };
+  else delete next[key];
+  await patchDayPlan(cookDate, { done: next });
+}
+
+export async function saveDaySchedule(cookDate: string, schedule: ScheduleItem[] | null) {
+  const clean = schedule?.slice(0, 60).map(s => ({
+    time: String(s.time).slice(0, 10), who: String(s.who).slice(0, 20),
+    station: String(s.station).slice(0, 20), task: String(s.task).slice(0, 300),
+  })) ?? null;
+  await patchDayPlan(cookDate, { schedule: clean });
+}
+
+// The next-day WhatsApp note and the chat that wrote it.
+export async function saveDayNote(cookDate: string, note: string, chat: NoteTurn[], final: boolean) {
+  await patchDayPlan(cookDate, {
+    note: note.slice(0, 4000),
+    note_chat: chat.slice(-40).map(t => ({ role: t.role === "user" ? "user" : "assistant", content: String(t.content).slice(0, 2000) })),
+    note_final: final,
+  });
 }
 
 // What the kitchen assistant remembers (shown in its panel).

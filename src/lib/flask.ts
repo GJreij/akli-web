@@ -909,7 +909,7 @@ export interface KitchenWindowPlan extends KitchenPortionPlan {
   through: string;
   // Late-order margin already included in servings (kitchen_settings).
   buffer: number;
-  by_date: { date: string; servings: number }[];
+  by_date: { date: string; servings: number; mpdr_ids: number[] }[];
 }
 
 export interface KitchenStockBatch {
@@ -927,6 +927,8 @@ export interface KitchenStockBatch {
   allocated_today_servings: number;
   allocated_mpdr_ids: number[];
   allocated_today_mpdr_ids: number[];
+  // allocated_servings split per delivery date ("portion several days").
+  allocated_by_date: { date: string; servings: number; mpdr_ids: number[] }[];
   unallocated: number;
   variant_note: string | null;
   notes: string | null;
@@ -937,6 +939,7 @@ export interface KitchenSubrecipe {
   name: string;
   instructions: string | null;
   prep_type: "cook" | "assemble" | "ready";
+  is_side_salad: boolean;
   skill: "chef" | "helper";
   equipment: "stove" | "oven" | "grill" | "none" | null;
   fridge_days: number | null;

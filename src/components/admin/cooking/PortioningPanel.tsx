@@ -14,6 +14,9 @@ export interface PortionTarget {
   // /portioning/summary filters servings by their parent meal_plan_day_recipe_id.
   // When merging the same subrecipe across multiple recipe cards, this is the union of their ids.
   mpdrIds: number[];
+  // Kitchen Day: the kitchen_batch this subrecipe's portions come from
+  // (overrides the panel-wide batchId).
+  batchId?: number;
 }
 
 function displayName(client: PortioningSummary["clients"][number]["client"]) {
@@ -183,7 +186,7 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId }: 
           row.perTarget[t.subrecipeId].map(entry => ({
             meal_plan_day_recipe_serving_id: entry.servingId,
             weight_after_cooking: Math.round((gramsForServing(row, t.subrecipeId, entry) ?? 0) * 10) / 10,
-            batch_id: batchId,
+            batch_id: t.batchId ?? batchId,
           }))
         )
     );

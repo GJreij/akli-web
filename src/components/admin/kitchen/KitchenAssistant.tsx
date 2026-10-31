@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { KitchenDay } from "@/lib/flask";
 import { closeBatch, correctBatchRemaining, forgetKitchenMemory, listKitchenMemory, saveKitchenSettings } from "@/app/admin/kitchen/actions";
 import { C } from "../ui";
-import type { Choice } from "./KitchenDayBoard";
+import type { ScheduleItem } from "@/lib/kitchenPlan";
+import type { Choice } from "./format";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -39,7 +40,9 @@ function describe(p: Proposal) {
   return "[Proposed new kitchen settings]";
 }
 
-function ProposalCard({ p, day, onApplyPlan }: { p: Proposal; day: KitchenDay; onApplyPlan: (choices: Map<number, Choice>) => void }) {
+type ApplyPlan = (choices: Map<number, Choice>, schedule: ScheduleItem[]) => Promise<void>;
+
+function ProposalCard({ p, day, confirmed, onApplyPlan }: { p: Proposal; day: KitchenDay; confirmed: boolean; onApplyPlan: ApplyPlan }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
@@ -92,17 +95,20 @@ function ProposalCard({ p, day, onApplyPlan }: { p: Proposal; day: KitchenDay; o
           </div>
         )}
         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-          <button style={btn} disabled={done} onClick={() => {
+          <button style={btn} disabled={done || pending} onClick={() => run(async () => {
             const choices = new Map<number, Choice>();
             for (const c of plan.choices) {
               if (!nameOf.has(c.subrecipe_id)) continue;
               const planKey = OPTION_TO_PLAN[c.option];
               choices.set(c.subrecipe_id, { plan: planKey, customText: c.option === "custom" ? String(c.servings ?? 0) : String(nameOf.get(c.subrecipe_id)!.suggested.servings || 1) });
             }
-            onApplyPlan(choices);
-            setDone(true);
-          }}>{done ? "Applied to the cards ✓" : "Apply amounts to the cards"}</button>
+            await onApplyPlan(choices, plan.schedule);
+          })}>{done ? "Applied ✓" : pending ? "Saving…" : confirmed ? "Use this order of work" : "Apply amounts + order of work"}</button>
         </div>
+        {confirmed && plan.choices.length > 0 && (
+          <p style={{ margin: "4px 0 0", color: C.light }}>Your plan is confirmed, so only the order of work is saved. To change amounts, tap Change plan in step 1.</p>
+        )}
+        {error && <p style={{ margin: "4px 0 0", color: C.error }}>{error}</p>}
       </div>
     );
   }
@@ -153,7 +159,13 @@ function ProposalCard({ p, day, onApplyPlan }: { p: Proposal; day: KitchenDay; o
   );
 }
 
-export default function KitchenAssistant({ day, onApplyPlan }: { day: KitchenDay; onApplyPlan: (choices: Map<number, Choice>) => void }) {
+export default function KitchenAssistant({ day, request, confirmed, onApplyPlan }: {
+  day: KitchenDay;
+  // Set by "Organise my day": opens the panel and sends this text.
+  request: { text: string; id: number } | null;
+  confirmed: boolean;
+  onApplyPlan: ApplyPlan;
+}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -164,6 +176,14 @@ export default function KitchenAssistant({ day, onApplyPlan }: { day: KitchenDay
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages, busy]);
+
+  const handled = useRef<number | null>(null);
+  useEffect(() => {
+    if (!request || handled.current === request.id) return;
+    handled.current = request.id;
+    setOpen(true);
+    void send(request.text);
+  }, [request]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function refreshMemory() {
     try { setMemory(await listKitchenMemory()); } catch { /* panel still works without it */ }
@@ -200,7 +220,9 @@ export default function KitchenAssistant({ day, onApplyPlan }: { day: KitchenDay
   }
 
   const quick = [
-    { label: "Plan my day", text: `Plan my cooking for ${day.cook_date}.` },
+    { label: confirmed ? "Organise my day" : "Help me decide", text: confirmed
+      ? "Organise my day from my confirmed plan: a timed order of work for the oven, the burners, me and my helper."
+      : `Help me decide how much to cook on ${day.cook_date}.` },
     { label: "Fix my stock", text: "I want to tell you what's really left in the fridge and freezer." },
     { label: "Plan my week", text: `Help me plan my cook days for the week starting ${day.cook_date}.` },
   ];
@@ -250,7 +272,7 @@ export default function KitchenAssistant({ day, onApplyPlan }: { day: KitchenDay
         {messages.length === 0 && (
           <div style={{ fontSize: 12.5, color: C.muted }}>
             <p style={{ margin: "0 0 8px" }}>
-              I read today&apos;s orders, what&apos;s already cooked and your settings. I can plan the day (amounts for each card plus an order of work for your burners, oven and helper), fix stock from what you tell me, or help pick cook days. Nothing changes until you tap Apply.
+              I read today&apos;s orders, the plan you confirmed in step 1, what&apos;s already cooked and your settings. I can organise the day (a timed order of work for your burners, oven and helper), help you decide amounts, fix stock from what you tell me, or help pick cook days. Nothing changes until you tap Apply.
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {quick.map(q => <button key={q.label} style={ghost} onClick={() => send(q.text)}>{q.label}</button>)}
@@ -265,7 +287,7 @@ export default function KitchenAssistant({ day, onApplyPlan }: { day: KitchenDay
               border: m.role === "user" ? "none" : `1px solid ${C.border}`,
             }}>{m.content}</div>
             {m.proposals?.map((p, j) => (
-              <div key={j} style={{ width: "100%" }}><ProposalCard p={p} day={day} onApplyPlan={onApplyPlan} /></div>
+              <div key={j} style={{ width: "100%" }}><ProposalCard p={p} day={day} confirmed={confirmed} onApplyPlan={onApplyPlan} /></div>
             ))}
           </div>
         ))}

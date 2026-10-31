@@ -76,7 +76,7 @@ export function CommentLine({ c, subrecipeId, dayLabel }: { c: KitchenComment; s
 // pot, or flagged "(less)" when they ask for less of it. Only the client's
 // words: the cook instruction names kept ingredients too ("Roast potatoes
 // without garlic").
-function potIngredients(perServing: KitchenIngredient[], c: KitchenComment) {
+export function potIngredients(perServing: KitchenIngredient[], c: KitchenComment) {
   const text = c.comment.toLowerCase();
   const less = /\bless\b|\bmoins\b|\bshway\b/.test(text);
   return perServing.flatMap(i => {
