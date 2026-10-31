@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KitchenDay, KitchenSubrecipe } from "@/lib/flask";
 import type { DayPlan, SavedChoice, ScheduleItem } from "@/lib/kitchenPlan";
-import { confirmDayPlan, logBatches, reopenDayPlan, saveDaySchedule, sortCommentsWithAi } from "@/app/admin/kitchen/actions";
+import { confirmDayPlan, reopenDayPlan, saveDaySchedule, sortCommentsWithAi } from "@/app/admin/kitchen/actions";
 import { C } from "../ui";
 import { CommentLine, SeparatePots } from "./CommentHandling";
 import KitchenSettingsBar from "./KitchenSettingsBar";
@@ -16,7 +16,7 @@ import StockRow from "./StockRow";
 import AlreadyCooked from "./AlreadyCooked";
 import {
   type Choice, type Plan, choiceCustom, defaultChoice, fmtDay, fmtServings, fmtWeekday, fromSaved,
-  planServings, smallBtn, toSaved, todayBatches,
+  fmtQty, perPortion, planServings, scaledIngredients, smallBtn, toSaved, todayBatches,
 } from "./format";
 
 // Re-exported for older imports.
@@ -64,22 +64,29 @@ export function FoldHeading({ open, onToggle, children }: { open: boolean; onTog
   );
 }
 
-// How the day's subrecipes split across the cards.
+// How the day's subrecipes split across the cards, by catalog type:
+// cook and make (no heat) get an amount to decide; slice items only need
+// what isn't already cut; bought items are always just portioned.
 export function classify(day: KitchenDay, plan: DayPlan) {
   const planned = (s: KitchenSubrecipe) => plan.choices[String(s.subrecipe_id)] != null;
   const needs = (s: KitchenSubrecipe) => s.must_cook.servings > 0.01;
-  const subs = day.subrecipes;
+  // Cut today: covered now, but it stays on the list as done.
+  const cutToday = (s: KitchenSubrecipe) => s.prep_type === "slice" && todayBatches(s, day.cook_date).length > 0;
+  const subs = day.subrecipes.filter(s => !s.is_side_salad);
+  const amount = (type: string) => subs.filter(s => s.prep_type === type && (needs(s) || planned(s)));
   return {
-    dishes: subs.filter(s => !s.is_side_salad && s.prep_type === "cook" && (needs(s) || planned(s))),
-    salads: subs.filter(s => s.is_side_salad && s.today.servings > 0),
-    covered: subs.filter(s => !s.is_side_salad && s.prep_type === "cook" && !needs(s) && s.today.servings > 0 && !planned(s)),
-    others: subs.filter(s => !s.is_side_salad && s.prep_type !== "cook" && s.today.servings > 0),
+    dishes: amount("cook"),
+    makes: amount("assemble"),
+    salads: day.subrecipes.filter(s => s.is_side_salad && s.today.servings > 0),
+    slices: subs.filter(s => s.prep_type === "slice" && (needs(s) || cutToday(s))),
+    portions: subs.filter(s => s.prep_type === "ready" && s.today.servings > 0),
+    covered: subs.filter(s => s.prep_type !== "ready" && !needs(s) && s.today.servings > 0 && !planned(s) && !cutToday(s)),
   };
 }
 
-function DishRow({ s, cookDate, choice, onChoice, locked, saved, open, onToggle, first }: {
+function DishRow({ s, cookDate, choice, onChoice, locked, saved, open, onToggle, first, verb = "cook" }: {
   s: KitchenSubrecipe; cookDate: string; choice: Choice; onChoice: (patch: Partial<Choice>) => void;
-  locked: boolean; saved: SavedChoice | null; open: boolean; onToggle: () => void; first: boolean;
+  locked: boolean; saved: SavedChoice | null; open: boolean; onToggle: () => void; first: boolean; verb?: "cook" | "make";
 }) {
   const hasExtra = s.suggested.servings > s.must_cook.servings + 0.01;
   const nextDays = s.suggested.by_date.filter(d => d.date !== cookDate);
@@ -113,7 +120,7 @@ function DishRow({ s, cookDate, choice, onChoice, locked, saved, open, onToggle,
         </span>
         <span style={{ textAlign: "right", flexShrink: 0 }}>
           <span style={{ display: "block", fontSize: 22, fontWeight: 700, lineHeight: 1 }}>{fmtServings(amount)}</span>
-          <span style={{ display: "block", fontSize: 11, color: C.muted }}>to cook {fold(open)}</span>
+          <span style={{ display: "block", fontSize: 11, color: C.muted }}>to {verb} {fold(open)}</span>
         </span>
       </button>
 
@@ -129,7 +136,7 @@ function DishRow({ s, cookDate, choice, onChoice, locked, saved, open, onToggle,
         )}
       </div>
 
-      <AlreadyCooked s={s} cookDate={cookDate} locked={locked} />
+      <AlreadyCooked s={s} cookDate={cookDate} locked={locked} label={verb === "make" ? "Already made" : "Already cooked"} />
 
       {open && (
         <div style={{ marginTop: 10, background: "#f7f4f2", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -159,65 +166,41 @@ function DishRow({ s, cookDate, choice, onChoice, locked, saved, open, onToggle,
   );
 }
 
-// Assembled or bought items: no amount to decide, but "I already have some"
-// (a jar of honey from last week) is booked as a batch so it's used first.
-function OtherRow({ s, cookDate }: { s: KitchenSubrecipe; cookDate: string }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [open, setOpen] = useState(false);
-  const [have, setHave] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-  const toMake = s.must_cook.servings;
-  const inStock = s.stock.reduce((n, b) => n + Math.max(0, b.remaining), 0);
-
-  function save() {
-    const n = parseFloat(have);
-    if (!Number.isFinite(n) || n <= 0) { setErr("Enter how many servings you have ready."); return; }
-    setErr(null);
-    startTransition(async () => {
-      try {
-        await logBatches({ subrecipeId: s.subrecipe_id, cookedOn: cookDate, batches: [{ servings: n, storage: "fridge" }], notes: "Already had it ready (Kitchen Day)" });
-        setOpen(false);
-        setHave("");
-        router.refresh();
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Couldn't save it.");
-      }
-    });
-  }
-
+// One ingredient cut and portioned (turkey, cheese, fruit): only what isn't
+// already cut is on the list; "Already have" corrects it like a dish.
+function SliceRow({ s, cookDate, locked, first }: { s: KitchenSubrecipe; cookDate: string; locked: boolean; first: boolean }) {
   return (
-    <div style={{ border: `1px solid ${toMake <= 0.01 ? "#b9d9d8" : C.border}`, background: toMake <= 0.01 ? "#f1f8f8" : C.white, borderRadius: 10, padding: "8px 12px" }}>
+    <div style={{ padding: "10px 0", borderTop: first ? "none" : `1px solid ${C.offWhite}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <span style={{ minWidth: 0, fontSize: 13 }}>
-          <strong style={{ color: C.primary }}>{s.name}</strong>
-          <span style={{ display: "block", fontSize: 12, color: C.muted }}>
-            {s.prep_type === "ready" ? "ready-made" : "assemble"} · {fmtServings(s.today.servings)} needed today
-            {inStock > 0.01 && <> · have {fmtServings(inStock)}</>}
-            {toMake <= 0.01 ? ", nothing to make" : inStock > 0.01 ? `, make ${fmtServings(toMake)}` : ""}
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: C.primary }}>{s.name}</span>
+          <span style={{ display: "block", fontSize: 12.5, color: C.muted, marginTop: 2 }}>
+            Today <strong style={{ color: C.primary }}>{fmtServings(s.today.servings)}</strong> portions · {perPortion(s)} each
           </span>
         </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <strong style={{ fontSize: 15, color: C.primary }}>{fmtServings(toMake)}</strong>
-          <button onClick={() => setOpen(v => !v)} style={{ ...smallBtn, minHeight: 40, background: C.white }}>Correct</button>
+        <span style={{ textAlign: "right", flexShrink: 0, color: C.primary }}>
+          <span style={{ display: "block", fontSize: 20, fontWeight: 700, lineHeight: 1 }}>{fmtServings(s.must_cook.servings)}</span>
+          <span style={{ display: "block", fontSize: 11, color: C.muted }}>to slice</span>
         </span>
       </div>
-      {open && (
-        <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-          {s.stock.map(b => <StockRow key={b.batch_id} b={b} />)}
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.muted, flexWrap: "wrap" }}>
-            {s.stock.length ? "Or add: I have another" : "I already have"}
-            <input type="number" step="any" min="0" inputMode="decimal" value={have} onChange={e => setHave(e.target.value)}
-              style={{ width: 80, height: 40, padding: "0 10px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14 }} />
-            servings ready
-            <button onClick={save} disabled={pending} style={{ ...smallBtn, minHeight: 40, background: C.primary, color: C.white, border: "none" }}>
-              {pending ? "Saving…" : "Save"}
-            </button>
-          </label>
-          <span style={{ fontSize: 11.5, color: C.light }}>Saved as a batch made today: the next days use it up first, so you only make what’s missing.</span>
-          {err && <span style={{ fontSize: 12, color: C.error }}>{err}</span>}
-        </div>
-      )}
+      <AlreadyCooked s={s} cookDate={cookDate} locked={locked} label="Already cut" />
+    </div>
+  );
+}
+
+// Bought items: nothing to make, just portion and label.
+function PortionRow({ s, first }: { s: KitchenSubrecipe; first: boolean }) {
+  const total = scaledIngredients(s, s.today.servings).map(i => fmtQty(i)).join(" + ");
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "8px 0", borderTop: first ? "none" : `1px solid ${C.offWhite}` }}>
+      <span style={{ minWidth: 0, fontSize: 13 }}>
+        <strong style={{ color: C.primary }}>{s.name}</strong>
+        <span style={{ display: "block", fontSize: 12, color: C.muted }}>{perPortion(s)} each{total ? ` · ${total} in all` : ""}</span>
+      </span>
+      <span style={{ textAlign: "right", flexShrink: 0, color: C.primary }}>
+        <strong style={{ display: "block", fontSize: 16 }}>{fmtServings(s.today.servings)}</strong>
+        <span style={{ fontSize: 11, color: C.muted }}>portions</span>
+      </span>
     </div>
   );
 }
@@ -229,10 +212,12 @@ function DecideBody({ day, plan, choices, setChoice }: {
   const [pending, startTransition] = useTransition();
   const [openDish, setOpenDish] = useState<number | null>(null);
   const [showCovered, setShowCovered] = useState(false);
-  const [showOthers, setShowOthers] = useState(false);
+  const [showPortions, setShowPortions] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const confirmed = plan.confirmed_at != null;
-  const { dishes, salads, covered, others } = classify(day, plan);
+  const { dishes, makes, salads, slices, portions, covered } = classify(day, plan);
+  // Everything with an amount to decide (and confirm).
+  const decided = [...dishes, ...makes];
   const expired = day.subrecipes.flatMap(s => s.stock.filter(b => b.expired && b.remaining > 0.01).map(b => ({ s, b })));
 
   const choiceFor = (s: KitchenSubrecipe): Choice => {
@@ -240,7 +225,7 @@ function DecideBody({ day, plan, choices, setChoice }: {
     if (confirmed && saved) return fromSaved(saved);
     return choices.get(s.subrecipe_id) ?? (saved ? fromSaved(saved) : defaultChoice(s));
   };
-  const total = dishes.reduce((n, s) => {
+  const total = decided.reduce((n, s) => {
     const saved = plan.choices[String(s.subrecipe_id)];
     return n + (confirmed && saved ? saved.servings : planServings(s, choiceFor(s).plan, choiceCustom(choiceFor(s))));
   }, 0);
@@ -260,13 +245,13 @@ function DecideBody({ day, plan, choices, setChoice }: {
   // The same tasks Prep will show, from the amounts picked on screen.
   const draft: DayPlan = confirmed ? plan : {
     ...plan, confirmed_at: plan.confirmed_at,
-    choices: Object.fromEntries(dishes.map(s => [String(s.subrecipe_id), toSaved(s, choiceFor(s))])),
+    choices: Object.fromEntries(decided.map(s => [String(s.subrecipe_id), toSaved(s, choiceFor(s))])),
   };
   const whoTasks = buildTasks(day, draft).map(t => ({ key: t.key, name: t.name, amount: t.amount, type: KIND_LABEL[t.kind] }));
 
   function confirm() {
     const saved: Record<string, SavedChoice> = {};
-    for (const s of dishes) saved[String(s.subrecipe_id)] = toSaved(s, choiceFor(s));
+    for (const s of decided) saved[String(s.subrecipe_id)] = toSaved(s, choiceFor(s));
     run(() => confirmDayPlan(day.cook_date, saved));
   }
 
@@ -310,6 +295,22 @@ function DecideBody({ day, plan, choices, setChoice }: {
         ))}
       </div>
 
+      {makes.length > 0 && (
+        <div>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.primary }}>To make, no heat ({makes.length})</h2>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Sauces, spreads, dressings: they keep a few days, so you can make ahead.</p>
+          {makes.map((s, i) => (
+            <DishRow
+              key={s.subrecipe_id} s={s} cookDate={day.cook_date} first={i === 0}
+              choice={choiceFor(s)} onChoice={patch => setChoice(s, patch)}
+              locked={confirmed} saved={plan.choices[String(s.subrecipe_id)] ?? null}
+              open={openDish === s.subrecipe_id} onToggle={() => setOpenDish(openDish === s.subrecipe_id ? null : s.subrecipe_id)}
+              verb="make"
+            />
+          ))}
+        </div>
+      )}
+
       {salads.length > 0 && (
         <div>
           <h2 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: C.primary }}>Side salads ({salads.length})</h2>
@@ -335,6 +336,26 @@ function DecideBody({ day, plan, choices, setChoice }: {
         </div>
       )}
 
+      {slices.length > 0 && (
+        <div>
+          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.primary }}>Slice &amp; portion ({slices.length})</h2>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>Cold cuts, cheese, fruit, veg: cut and portion. If some is already cut, correct it.</p>
+          {slices.map((s, i) => <SliceRow key={s.subrecipe_id} s={s} cookDate={day.cook_date} locked={confirmed} first={i === 0} />)}
+        </div>
+      )}
+
+      {portions.length > 0 && (
+        <div>
+          <FoldHeading open={showPortions} onToggle={() => setShowPortions(v => !v)}>Bought, just portion ({portions.length})</FoldHeading>
+          {showPortions && (
+            <>
+              <p style={{ margin: "0 0 4px", fontSize: 12, color: C.muted }}>Nothing to make: each one is a portioning task in Prep.</p>
+              {portions.map((s, i) => <PortionRow key={s.subrecipe_id} s={s} first={i === 0} />)}
+            </>
+          )}
+        </div>
+      )}
+
       {covered.length > 0 && (
         <div>
           <FoldHeading open={showCovered} onToggle={() => setShowCovered(v => !v)}>Already cooked · nothing to do ({covered.length})</FoldHeading>
@@ -351,20 +372,6 @@ function DecideBody({ day, plan, choices, setChoice }: {
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      )}
-
-      {others.length > 0 && (
-        <div>
-          <FoldHeading open={showOthers} onToggle={() => setShowOthers(v => !v)}>Other assembling &amp; ready-made ({others.length})</FoldHeading>
-          {showOthers && (
-            <>
-              <p style={{ margin: "2px 0 8px", fontSize: 12, color: C.muted }}>Made fresh or bought: they show up in Prep to make and portion. If you already have some ready, tap Correct.</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {others.map(s => <OtherRow key={s.subrecipe_id} s={s} cookDate={day.cook_date} />)}
-              </div>
-            </>
           )}
         </div>
       )}
@@ -449,7 +456,7 @@ export default function KitchenDayBoard({ day, plan, tomorrow, nextDate }: {
     router.refresh();
   }
 
-  const { dishes, salads, covered } = classify(day, plan);
+  const { dishes, makes, salads, slices, portions } = classify(day, plan);
   const doneCount = dishes.filter(s => todayBatches(s, day.cook_date).length > 0).length;
   const stepBtn = (n: Step, label: string, sub: string) => (
     <button key={n} onClick={() => go(n)} style={{
@@ -487,7 +494,7 @@ export default function KitchenDayBoard({ day, plan, tomorrow, nextDate }: {
         id="kd-step-1" title="1 · Decide what to cook" open={open[1]} onToggle={() => setOpen(o => ({ ...o, 1: !o[1] }))}
         sub={confirmed
           ? `Plan confirmed · ${dishes.length} dishes${salads.length ? ` + ${salads.length} side salads` : ""}`
-          : `${dishes.length} dishes to cook · ${salads.length} side salads · ${covered.length} already covered`}
+          : `${dishes.length} to cook · ${makes.length} to make · ${salads.length} side salads · ${slices.length + portions.length} to portion`}
       >
         <DecideBody day={day} plan={plan} choices={choices} setChoice={setChoice} />
       </DayCard>

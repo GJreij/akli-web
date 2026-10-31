@@ -10,12 +10,14 @@ import { C } from "../ui";
 import { potIngredients } from "./CommentHandling";
 import PrepList, { buildPrepLines } from "./PrepList";
 import { classify, FoldHeading } from "./KitchenDayBoard";
-import { fmtQty, fmtServings, fmtWeekday, scaledIngredients, smallBtn, todayBatches } from "./format";
+import { fmtQty, fmtServings, fmtWeekday, perPortion, scaledIngredients, smallBtn, todayBatches } from "./format";
 import { hours, personColor } from "./TeamPanel";
 
-type Kind = "dish" | "pot" | "salad" | "group";
+type Kind = "dish" | "make" | "pot" | "salad" | "slice" | "portion";
 
-export const KIND_LABEL: Record<Kind, string> = { dish: "Cook", pot: "Separate pots", salad: "Side salads", group: "Assemble & ready-made" };
+export const KIND_LABEL: Record<Kind, string> = {
+  dish: "Cook", make: "Make, no heat", pot: "Separate pots", salad: "Side salads", slice: "Slice & portion", portion: "Bought: portion",
+};
 
 export interface Task {
   key: string;
@@ -49,18 +51,21 @@ function potsFor(s: KitchenSubrecipe, c: SavedChoice) {
 
 const potKey = (s: KitchenSubrecipe, c: KitchenComment) => `pot:${s.subrecipe_id}:${c.user_id}:${c.recipe_id ?? 0}`;
 
-// Everything to make today, from the confirmed plan: a task per dish, per
-// separate pot, per side salad, plus one for assembling and one for
-// ready-made items.
+// Everything to do today, from the confirmed plan: a task per dish or
+// no-heat recipe, per separate pot, per side salad, per item to slice and
+// per bought item to portion.
 export function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
-  const { dishes, salads, others } = classify(day, plan);
+  const { dishes, makes, salads, slices, portions } = classify(day, plan);
   const tasks: Task[] = [];
   const doneText = (s: KitchenSubrecipe) => {
     const made = todayBatches(s, day.cook_date).reduce((n, b) => n + b.servings_cooked, 0);
     return `done · ${fmtServings(made)} made`;
   };
+  // Grams per portion and in all, one line per catalog ingredient.
+  const portionLines = (s: KitchenSubrecipe, n: number) =>
+    az(s.ingredients_per_serving.map(i => ({ name: i.name, qty: `${fmtQty({ quantity: i.quantity * n, unit: i.unit })} · ${fmtQty(i)} each` })));
 
-  for (const s of dishes) {
+  for (const s of [...dishes, ...makes]) {
     const saved = plan.choices[String(s.subrecipe_id)];
     const c: SavedChoice = saved ?? { plan: "must", servings: s.must_cook.servings, fridge: s.must_cook.servings, freezer: 0 };
     const pots = potsFor(s, c);
@@ -68,11 +73,11 @@ export function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
     const done = todayBatches(s, day.cook_date).length > 0;
     const assembly = s.comments.filter(x => x.handling === "assembly");
     tasks.push({
-      key: `dish:${s.subrecipe_id}`, kind: "dish",
+      key: `dish:${s.subrecipe_id}`, kind: s.prep_type === "assemble" ? "make" : "dish",
       name: s.name, amount: c.servings, subs: [s], saved: c, done, doneText: done ? doneText(s) : undefined,
       sub: saved ? PLAN_LABEL(s, c) : "new orders since you confirmed",
       note: [
-        pots.length ? `Main pot ${fmtServings(main)} servings · ${pots.map(p => `${p.c.name}’s ${fmtServings(p.servings)} cooked apart`).join(" · ")}.` : `For ${fmtServings(c.servings)} servings.`,
+        pots.length ? `Main pot ${fmtServings(main)} servings · ${pots.map(p => `${p.c.name}’s ${fmtServings(p.servings)} made apart`).join(" · ")}.` : `For ${fmtServings(c.servings)} servings.`,
         c.freezer > 0 ? `Fridge ${fmtServings(c.fridge)} · freezer ${fmtServings(c.freezer)}.` : "",
         assembly.length ? `When portioning: ${assembly.map(x => `${x.name}: ${x.instruction || x.comment}`).join(" · ")}.` : "",
         s.instructions ? `\n${s.instructions}` : "",
@@ -84,7 +89,7 @@ export function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
       tasks.push({
         key, kind: "pot", name: `${s.name} for ${p.c.name}`, amount: p.servings, subs: [s],
         sub: `separate pot · ${p.c.instruction || p.c.comment}`, done: plan.done[key] != null, doneText: "done",
-        note: `${p.c.name}: “${p.c.comment}”. Cook apart and label it with their name.`,
+        note: `${p.c.name}: “${p.c.comment}”. Make it apart and label it with their name.`,
         lines: az(potIngredients(s.ingredients_per_serving, p.c).map(i => ({
           name: i.name, qty: i.less ? "less" : fmtQty({ quantity: i.quantity * p.servings, unit: i.unit }),
         }))),
@@ -104,22 +109,25 @@ export function buildTasks(day: KitchenDay, plan: DayPlan): Task[] {
     });
   }
 
-  for (const kind of ["assemble", "ready"] as const) {
-    const items = others.filter(s => s.prep_type === kind);
-    if (items.length === 0) continue;
-    const open = items.filter(s => s.must_cook.servings > 0.01);
-    const short = (s: KitchenSubrecipe) => s.name.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  for (const s of slices) {
+    const done = todayBatches(s, day.cook_date).length > 0;
+    const n = done ? todayBatches(s, day.cook_date).reduce((x, b) => x + b.servings_cooked, 0) : s.must_cook.servings;
     tasks.push({
-      key: `group:${kind}`, kind: "group",
-      name: (open.length ? open : items).map(short).join(", "),
-      amount: r2(open.reduce((n, s) => n + s.must_cook.servings, 0)), subs: items,
-      sub: kind === "ready" ? "ready-made · portion" : "assemble & portion",
-      done: open.length === 0, doneText: "done · nothing left to make",
-      note: kind === "ready" ? "Bought ready: portion and label." : "Only what’s still missing (corrections from step 1 count).",
-      lines: items.map(s => ({
-        name: `${s.name} · ${fmtServings(s.must_cook.servings)}`,
-        qty: s.must_cook.servings <= 0.01 ? "have it" : scaledIngredients(s, s.must_cook.servings).map(i => `${i.name} ${fmtQty(i)}`).join(" · "),
-      })),
+      key: `slice:${s.subrecipe_id}`, kind: "slice", name: s.name, amount: n, subs: [s],
+      sub: `cut into ${fmtServings(n)} portions · ${perPortion(s)} each`, done, doneText: done ? doneText(s) : undefined,
+      note: [`Cut and portion ${fmtServings(n)} portions of ${perPortion(s)}.`, s.instructions ? `\n${s.instructions}` : ""].filter(Boolean).join(" "),
+      lines: portionLines(s, n),
+    });
+  }
+
+  for (const s of portions) {
+    const n = s.today.servings;
+    const key = `portion:${s.subrecipe_id}`;
+    tasks.push({
+      key, kind: "portion", name: s.name, amount: n, subs: [s],
+      sub: `bought · ${fmtServings(n)} × ${perPortion(s)}`, done: plan.done[key] != null, doneText: "done · portioned",
+      note: [`Nothing to make: portion ${fmtServings(n)} × ${perPortion(s)} and label them.`, s.instructions ? `\n${s.instructions}` : ""].filter(Boolean).join(" "),
+      lines: portionLines(s, n),
     });
   }
   return tasks;
@@ -162,16 +170,10 @@ function TaskCard({ t, cookDate, open, onToggle, onPortion, team, personId }: {
   // Done ✓ books the batch at the planned amount (fridge + freezer); a
   // different amount fills the fridge part first, the rest goes to the freezer.
   function markDone(made?: number) {
-    if (t.kind === "pot") return run(() => setPlanTaskDone(cookDate, t.key, true, made ?? t.amount));
-    if (t.kind === "group") {
-      return run(async () => {
-        for (const x of t.subs.filter(x => x.must_cook.servings > 0.01)) {
-          await logBatches({ subrecipeId: x.subrecipe_id, cookedOn: cookDate, batches: [{ servings: x.must_cook.servings, storage: "fridge" }] });
-        }
-      });
-    }
+    // Separate pots and bought items have no batch of their own: a tick on the plan.
+    if (t.kind === "pot" || t.kind === "portion") return run(() => setPlanTaskDone(cookDate, t.key, true, made ?? t.amount));
     const total = made ?? t.amount;
-    const plannedFreezer = t.kind === "dish" ? t.saved?.freezer ?? 0 : 0;
+    const plannedFreezer = t.kind === "dish" || t.kind === "make" ? t.saved?.freezer ?? 0 : 0;
     const fridge = plannedFreezer > 0 ? Math.min(total, t.saved!.fridge) : total;
     const freezer = r2(total - fridge);
     return run(() => logBatches({
@@ -187,14 +189,14 @@ function TaskCard({ t, cookDate, open, onToggle, onPortion, team, personId }: {
     markDone(n);
   }
 
-  const batches = t.kind === "dish" || t.kind === "salad" ? todayBatches(s, cookDate) : [];
+  const batches = t.kind === "pot" || t.kind === "portion" ? [] : todayBatches(s, cookDate);
   const fridgeBatch = batches.find(b => b.storage === "fridge");
   const portionToday = () => {
     const targets = t.subs
       .filter(x => x.today.mpdr_ids.length)
       .map(x => ({
         subrecipeId: x.subrecipe_id, name: x.name, mpdrIds: x.today.mpdr_ids,
-        batchId: (t.kind === "group" ? x.stock.find(b => b.allocated_today_servings > 0) : fridgeBatch)?.batch_id,
+        batchId: fridgeBatch?.batch_id,
       }));
     if (targets.length) onPortion(targets);
   };
@@ -250,10 +252,10 @@ function TaskCard({ t, cookDate, open, onToggle, onPortion, team, personId }: {
         {!t.done && (
           <>
             <button disabled={pending} onClick={() => markDone()} style={actionBtn(true)}>{pending ? "Saving…" : "Done ✓"}</button>
-            {t.kind !== "group" && <button onClick={() => setDiff(v => !v)} style={{ ...actionBtn(false), borderColor: C.border, fontWeight: 600 }}>Made a different amount</button>}
+            {t.kind !== "portion" && <button onClick={() => setDiff(v => !v)} style={{ ...actionBtn(false), borderColor: C.border, fontWeight: 600 }}>Made a different amount</button>}
           </>
         )}
-        {t.done && t.kind === "pot" && (
+        {t.done && (t.kind === "pot" || t.kind === "portion") && (
           <button disabled={pending} onClick={() => run(() => setPlanTaskDone(cookDate, t.key, false))} style={{ ...actionBtn(false), borderColor: C.border, fontWeight: 600 }}>Undo</button>
         )}
         {t.done && t.kind !== "pot" && t.subs.some(x => x.today.mpdr_ids.length) && (
@@ -352,9 +354,9 @@ export default function PrepCard({ day, plan, onOrganise }: { day: KitchenDay; p
   // Prep list: every ingredient across today's tasks, at the planned amounts.
   const servingsFor = new Map<number, number>();
   for (const t of tasks) {
-    if (t.kind === "dish") servingsFor.set(t.subs[0].subrecipe_id, t.amount);
-    if (t.kind === "salad") servingsFor.set(t.subs[0].subrecipe_id, t.subs[0].must_cook.servings);
-    if (t.kind === "group") for (const s of t.subs) servingsFor.set(s.subrecipe_id, s.must_cook.servings);
+    // Bought items aren't weighed or cut: they stay out of this list.
+    if (t.kind === "dish" || t.kind === "make") servingsFor.set(t.subs[0].subrecipe_id, t.amount);
+    if (t.kind === "salad" || t.kind === "slice") servingsFor.set(t.subs[0].subrecipe_id, t.subs[0].must_cook.servings);
   }
   const prepSubs = day.subrecipes.filter(s => (servingsFor.get(s.subrecipe_id) ?? 0) > 0);
   const prepLines = buildPrepLines(prepSubs, s => scaledIngredients(s, servingsFor.get(s.subrecipe_id) ?? 0));

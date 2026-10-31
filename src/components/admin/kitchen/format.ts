@@ -85,3 +85,8 @@ export const ALREADY_HAD_NOTE = "Already had it (Kitchen Day)";
 export function todayBatches(s: KitchenSubrecipe, cookDate: string): KitchenStockBatch[] {
   return s.stock.filter(b => b.cooked_on === cookDate && !b.notes?.startsWith(ALREADY_HAD_NOTE));
 }
+
+// One portion, from the catalog ingredients: "120 g Greek Yogurt".
+export function perPortion(s: KitchenSubrecipe) {
+  return s.ingredients_per_serving.map(i => `${fmtQty(i)} ${i.name}`).join(" + ") || "1 portion";
+}

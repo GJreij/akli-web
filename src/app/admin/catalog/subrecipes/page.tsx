@@ -29,6 +29,12 @@ export default async function SubrecipesPage({ searchParams }: { searchParams: P
           <form action={createSubrecipe} style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             <input name="name" placeholder="Name" required style={{ ...inputStyle, flex: "1 1 200px" }} />
             <input name="prep_time" placeholder="Prep time" style={{ ...inputStyle, flex: "0 1 120px" }} />
+            <select name="prep_type" defaultValue="cook" aria-label="Kitchen type" style={{ ...inputStyle, flex: "1 1 260px" }}>
+              <option value="cook">Cook: with heat (stove, oven, grill)</option>
+              <option value="assemble">Make, no heat: sauces, spreads, dressings, salads</option>
+              <option value="slice">Slice &amp; portion: one ingredient (cold cuts, cheese, fruit, veg)</option>
+              <option value="ready">Bought: just portion (bread, yogurt, hummus)</option>
+            </select>
             <SubmitButton
               pendingText="Creating…"
               style={{ background: C.primary, color: C.white, border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
@@ -36,7 +42,7 @@ export default async function SubrecipesPage({ searchParams }: { searchParams: P
               Create & open
             </SubmitButton>
           </form>
-          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: C.light }}>Opens the new subrecipe so you can add ingredients and macros.</p>
+          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: C.light }}>Opens the new subrecipe so you can add ingredients, macros and kitchen details (fridge/freezer days). The type decides where it shows in Kitchen Day.</p>
         </Section>
 
         <Section>

@@ -938,7 +938,7 @@ export interface KitchenSubrecipe {
   subrecipe_id: number;
   name: string;
   instructions: string | null;
-  prep_type: "cook" | "assemble" | "ready";
+  prep_type: "cook" | "assemble" | "slice" | "ready";
   is_side_salad: boolean;
   skill: "chef" | "helper";
   equipment: "stove" | "oven" | "grill" | "none" | null;
@@ -1005,7 +1005,7 @@ export async function getKitchenDay(date: string): Promise<KitchenDay> {
 export interface KitchenWeekRow {
   subrecipe_id: number;
   name: string;
-  prep_type: "cook" | "assemble" | "ready";
+  prep_type: "cook" | "assemble" | "slice" | "ready";
   skill: "chef" | "helper";
   equipment: "stove" | "oven" | "grill" | "none" | null;
   fridge_days: number | null;

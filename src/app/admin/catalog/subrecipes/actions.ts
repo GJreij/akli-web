@@ -9,14 +9,17 @@ function num(formData: FormData, key: string) {
   return v === null || v === "" ? null : Number(v);
 }
 
-const PREP_TYPES = ["cook", "assemble", "ready"];
+const PREP_TYPES = ["cook", "assemble", "slice", "ready"];
 const EQUIPMENT = ["stove", "oven", "grill", "none"];
 
-// Kitchen Day fields — only on the edit page (marked by a hidden
-// kitchen_fields input), so the create form keeps the column defaults.
-// freezable is derived from freezer_days there, keeping the two in sync.
+// Kitchen Day fields — on the edit page (marked by a hidden kitchen_fields
+// input); the create form only sets the type. freezable is derived from
+// freezer_days, keeping the two in sync.
 function parseKitchenFields(formData: FormData) {
-  if (!formData.has("kitchen_fields")) return {};
+  if (!formData.has("kitchen_fields")) {
+    const t = String(formData.get("prep_type") ?? "");
+    return PREP_TYPES.includes(t) ? { prep_type: t } : {};
+  }
   const pick = (key: string, allowed: string[]) => {
     const v = String(formData.get(key) ?? "");
     return allowed.includes(v) ? v : null;
@@ -24,7 +27,6 @@ function parseKitchenFields(formData: FormData) {
   const freezer_days = num(formData, "freezer_days");
   return {
     prep_type: pick("prep_type", PREP_TYPES) ?? "cook",
-    skill: formData.get("skill") === "helper" ? "helper" : "chef",
     equipment: pick("equipment", EQUIPMENT),
     fridge_days: num(formData, "fridge_days"),
     freezer_days,

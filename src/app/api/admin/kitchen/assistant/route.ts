@@ -78,7 +78,7 @@ function compactTeam(plan: DayPlan) {
   const given = Object.entries(plan.assign).filter(([, id]) => name.has(id));
   return [
     `Team today: ${plan.team.map(m => `${m.name} (${m.from || "?"}–${m.to || "?"})`).join(", ")}`,
-    given.length ? `Tasks the cook gave to someone (task key: person; dish:<subrecipe_id>, pot:<subrecipe_id>:<client>, salad:<subrecipe_id>, group:assemble|ready):\n${given.map(([k, id]) => `- ${k}: ${name.get(id)}`).join("\n")}` : "",
+    given.length ? `Tasks the cook gave to someone (task key: person; dish:<subrecipe_id> for cook and no-heat recipes, pot:<subrecipe_id>:<client>, salad:<subrecipe_id>, slice:<subrecipe_id>, portion:<subrecipe_id> for bought items):\n${given.map(([k, id]) => `- ${k}: ${name.get(id)}`).join("\n")}` : "",
   ].filter(Boolean).join("\n");
 }
 

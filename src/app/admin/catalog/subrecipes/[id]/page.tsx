@@ -91,15 +91,10 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <label style={{ ...labelStyle, flex: "1 1 150px" }}>Type
                 <select name="prep_type" defaultValue={kitchen.prep_type ?? "cook"} style={inputStyle}>
-                  <option value="cook">Cook (heat)</option>
-                  <option value="assemble">Assemble (no heat)</option>
-                  <option value="ready">Ready-made (just portion)</option>
-                </select>
-              </label>
-              <label style={{ ...labelStyle, flex: "1 1 130px" }}>Who
-                <select name="skill" defaultValue={kitchen.skill ?? "chef"} style={inputStyle}>
-                  <option value="chef">Chef</option>
-                  <option value="helper">Helper</option>
+<option value="cook">Cook: with heat (stove, oven, grill)</option>
+                  <option value="assemble">Make, no heat: sauces, spreads, dressings, salads</option>
+                  <option value="slice">Slice &amp; portion: one ingredient (cold cuts, cheese, fruit, veg)</option>
+                  <option value="ready">Bought: just portion (bread, yogurt, hummus)</option>
                 </select>
               </label>
               <label style={{ ...labelStyle, flex: "1 1 130px" }}>Equipment
@@ -130,7 +125,7 @@ export default async function SubrecipeDetailPage({ params }: { params: Promise<
               <input name="prep_ahead" placeholder="e.g. Marinate overnight, soak chickpeas" defaultValue={kitchen.prep_ahead ?? ""} style={inputStyle} />
             </label>
             <p style={{ fontSize: 11.5, color: C.light, margin: "8px 0 0" }}>
-              Fridge days count the cook day as 0 (2 = cook Sunday, serve through Tuesday). Leave freezer days empty if it doesn&apos;t freeze.
+              Type decides where it shows in Kitchen Day: Cook and Make get an amount to decide (with cook-ahead) and a recipe task; Slice &amp; portion and Bought become one portioning task each, with the grams per portion from the ingredients below. Fridge days count the cook day as 0 (2 = cook Sunday, serve through Tuesday). Leave freezer days empty if it doesn&apos;t freeze.
             </p>
           </Section>
 

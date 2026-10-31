@@ -133,7 +133,7 @@ export default function WeekBoard({ week }: { week: KitchenWeek }) {
                   <td style={{ ...td, textAlign: "left", position: "sticky", left: 0, background: C.white, minWidth: 170 }}>
                     <span style={{ color: C.primary, fontWeight: 600 }}>{r.name}</span>
                     <div style={{ fontSize: 10.5, color: C.light }}>
-                      keeps {r.fridge_days ?? 0}d{r.freezer_days != null ? " · freezes" : ""}{r.skill === "helper" ? " · helper" : ""}
+                      keeps {r.fridge_days ?? 0}d{r.freezer_days != null ? " · freezes" : ""}
                     </div>
                     <div style={{ fontSize: 10.5, color: C.tealDark }}>
                       {sessions.map(s => `${label(s.date)}: ${fmt(Math.round(s.servings * 100) / 100)}${s.frozen ? ` (❄️ ${fmt(Math.round(s.frozen * 100) / 100)})` : ""}`).join(" · ")}

@@ -19,7 +19,9 @@ export function earlierStock(s: KitchenSubrecipe, cookDate: string) {
 
 // "Already cooked: fridge 12 · freezer 0 · Correct". Filled from the batches;
 // correcting it sets what's really there, and the amount to cook follows.
-export default function AlreadyCooked({ s, cookDate, locked }: { s: KitchenSubrecipe; cookDate: string; locked: boolean }) {
+export default function AlreadyCooked({ s, cookDate, locked, label = "Already cooked" }: {
+  s: KitchenSubrecipe; cookDate: string; locked: boolean; label?: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const { open, fridge, freezer } = earlierStock(s, cookDate);
@@ -66,7 +68,7 @@ export default function AlreadyCooked({ s, cookDate, locked }: { s: KitchenSubre
     <div style={{ marginTop: 8, background: "#f4f8f8", border: "1px solid #dbe9e8", borderRadius: 10, padding: "6px 10px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12.5, color: C.muted }}>
-          Already cooked: Fridge <strong style={{ color: C.primary }}>{fmtServings(fridge)}</strong>
+          {label}: Fridge <strong style={{ color: C.primary }}>{fmtServings(fridge)}</strong>
           {freezable && <> · ❄️ Freezer <strong style={{ color: C.primary }}>{fmtServings(freezer)}</strong></>}
         </span>
         {!editing && <button onClick={start} style={{ ...smallBtn, minHeight: 36, background: C.white }}>Correct</button>}
@@ -88,7 +90,7 @@ export default function AlreadyCooked({ s, cookDate, locked }: { s: KitchenSubre
           <span style={{ fontSize: 11.5, color: C.light }}>
             {locked
               ? "Your plan is already confirmed: tap Change plan to recount what to cook."
-              : `What you have is used first. If it covers today's ${fmtServings(s.today.servings)}, the dish moves to “nothing to do”.`}
+              : `What you have is used first. If it covers today's ${fmtServings(s.today.servings)}, it moves to “nothing to do”.`}
           </span>
         </div>
       )}
