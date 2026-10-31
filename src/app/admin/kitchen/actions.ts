@@ -80,6 +80,40 @@ export async function correctBatchRemaining(batchId: number, shownRemaining: num
   if (!data || data.length === 0) throw new Error("Couldn't save the correction: no matching row.");
 }
 
+// "I actually have 30 in the fridge": sets the total left in one storage.
+// Less than shown is taken off the oldest batches first. More than shown is
+// booked as its own batch dated on the cook date (earlier days' deliveries
+// would otherwise use it up on paper), marked so Prep doesn't count it as
+// today's cooking.
+export async function setStockLevel(input: {
+  subrecipeId: number;
+  cookDate: string;
+  storage: "fridge" | "freezer";
+  target: number;
+  batches: { id: number; cookedOn: string; remaining: number }[];
+}) {
+  if (!Number.isFinite(input.target) || input.target < 0) throw new Error("Enter how many servings you have.");
+  const batches = [...input.batches].sort((a, b) => a.cookedOn.localeCompare(b.cookedOn));
+  const current = batches.reduce((n, b) => n + Math.max(0, b.remaining), 0);
+  let diff = Math.round((input.target - current) * 100) / 100;
+  if (Math.abs(diff) < 0.01) return;
+
+  if (diff < 0) {
+    for (const b of batches) {
+      if (diff > -0.01) break;
+      const take = Math.min(Math.max(0, b.remaining), -diff);
+      if (take < 0.01) continue;
+      await correctBatchRemaining(b.id, b.remaining, Math.round((b.remaining - take) * 100) / 100);
+      diff += take;
+    }
+    return;
+  }
+  await logBatches({
+    subrecipeId: input.subrecipeId, cookedOn: input.cookDate,
+    batches: [{ servings: diff, storage: input.storage }], notes: "Already had it (Kitchen Day)",
+  });
+}
+
 // finished = used up; discarded = thrown away (counts as waste).
 export async function closeBatch(batchId: number, status: "finished" | "discarded", discardedServings?: number) {
   const { supabase } = await requireAdmin();

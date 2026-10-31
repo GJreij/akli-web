@@ -77,6 +77,11 @@ export function fromSaved(sc: SavedChoice): Choice {
 }
 
 // Batches logged on the cook date: a Prep task counts as done once it has one.
+// Note on batches booked from "Already cooked → Correct": dated on the day
+// they were counted (so earlier days' deliveries don't use them up), but
+// they're not today's cooking.
+export const ALREADY_HAD_NOTE = "Already had it (Kitchen Day)";
+
 export function todayBatches(s: KitchenSubrecipe, cookDate: string): KitchenStockBatch[] {
-  return s.stock.filter(b => b.cooked_on === cookDate);
+  return s.stock.filter(b => b.cooked_on === cookDate && !b.notes?.startsWith(ALREADY_HAD_NOTE));
 }

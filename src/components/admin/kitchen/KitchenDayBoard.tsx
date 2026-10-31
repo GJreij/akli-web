@@ -13,9 +13,10 @@ import KitchenAssistant from "./KitchenAssistant";
 import PrepCard, { buildTasks, KIND_LABEL } from "./PrepCard";
 import { TeamEditor, WhoDoesWhat } from "./TeamPanel";
 import StockRow from "./StockRow";
+import AlreadyCooked from "./AlreadyCooked";
 import {
   type Choice, type Plan, choiceCustom, defaultChoice, fmtDay, fmtServings, fmtWeekday, fromSaved,
-  planServings, smallBtn, toSaved,
+  planServings, smallBtn, toSaved, todayBatches,
 } from "./format";
 
 // Re-exported for older imports.
@@ -127,6 +128,8 @@ function DishRow({ s, cookDate, choice, onChoice, locked, saved, open, onToggle,
           />
         )}
       </div>
+
+      <AlreadyCooked s={s} cookDate={cookDate} locked={locked} />
 
       {open && (
         <div style={{ marginTop: 10, background: "#f7f4f2", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -343,6 +346,7 @@ function DecideBody({ day, plan, choices, setChoice }: {
                     <strong style={{ color: C.primary }}>{s.name}</strong>
                     <span style={{ display: "block", fontSize: 12, color: C.muted }}>Today {fmtServings(s.today.servings)} covered by what’s already cooked</span>
                   </span>
+                  <AlreadyCooked s={s} cookDate={day.cook_date} locked={confirmed} />
                   {s.stock.map(b => <StockRow key={b.batch_id} b={b} />)}
                 </div>
               ))}
@@ -446,7 +450,7 @@ export default function KitchenDayBoard({ day, plan, tomorrow, nextDate }: {
   }
 
   const { dishes, salads, covered } = classify(day, plan);
-  const doneCount = dishes.filter(s => s.stock.some(b => b.cooked_on === day.cook_date)).length;
+  const doneCount = dishes.filter(s => todayBatches(s, day.cook_date).length > 0).length;
   const stepBtn = (n: Step, label: string, sub: string) => (
     <button key={n} onClick={() => go(n)} style={{
       flex: 1, minHeight: 56, borderRadius: 10, border: "none", cursor: "pointer", textAlign: "left", padding: "6px 10px",
