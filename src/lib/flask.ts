@@ -1002,6 +1002,44 @@ export async function getKitchenDay(date: string): Promise<KitchenDay> {
   return res.json();
 }
 
+// ─── /kitchen/simple ─────────────────────────────────────────────────────────
+// The simple Kitchen screen: a week of orders per subrecipe from the cook
+// date, plus today's portioning ids, ingredients and client comments.
+
+export interface KitchenSimpleComment {
+  user_id: string;
+  name: string;
+  comment: string;
+  recipe_id: number | null;
+  recipe_name: string | null;
+  instruction: string | null;
+}
+
+export interface KitchenSimpleRow {
+  subrecipe_id: number;
+  name: string;
+  prep_type: "cook" | "assemble" | "slice" | "ready";
+  is_side_salad: boolean;
+  instructions: string | null;
+  by_date: Record<string, number>;
+  today_mpdr_ids: number[];
+  comments: KitchenSimpleComment[];
+  ingredients_per_serving: KitchenIngredient[];
+}
+
+export interface KitchenSimpleData { cook_date: string; dates: string[]; subrecipes: KitchenSimpleRow[] }
+
+export async function getKitchenSimple(date: string): Promise<KitchenSimpleData> {
+  const res = await fetch(`${FLASK_URL}/kitchen/simple`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`kitchen_simple error ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
 export interface KitchenWeekRow {
   subrecipe_id: number;
   name: string;

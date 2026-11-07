@@ -26,18 +26,39 @@ function displayName(client: PortioningSummary["clients"][number]["client"]) {
 
 type Mode = "total" | "per_serving";
 
-export default function PortioningPanel({ targets, onClose, onSaved, batchId }: {
+export interface PotWeight { id: number; name: string; weight_g: number }
+
+const numIn = (s: string | undefined) => {
+  const n = parseFloat(s ?? "");
+  return Number.isFinite(n) ? n : NaN;
+};
+const fmtG = (g: number) => `${Math.round(g).toLocaleString("en-US")} g`;
+
+export default function PortioningPanel({ targets, onClose, onSaved, batchId, potServings, pots, onAddPot }: {
   targets: PortionTarget[];
   onClose: () => void;
   onSaved: () => void;
   // Kitchen Day: the kitchen_batch these portions are taken from.
   batchId?: number;
+  // Kitchen: servings in the pot being weighed, when it holds more than
+  // today's portions (the rest is put aside).
+  potServings?: number;
+  // Saved pot/tray weights, taken off the weighed total.
+  pots?: PotWeight[];
+  onAddPot?: (name: string, weightG: number) => Promise<PotWeight>;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bySubrecipe, setBySubrecipe] = useState<Record<number, PortioningSummary>>({});
   const [modes, setModes] = useState<Record<number, Mode>>({});
   const [weights, setWeights] = useState<Record<number, string>>({});
+  // Pot/tray weight to take off, and servings in the weighed pot, per subrecipe.
+  const [tares, setTares] = useState<Record<number, string>>({});
+  const [potServ, setPotServ] = useState<Record<number, string>>(() =>
+    potServings != null && targets.length === 1 ? { [targets[0].subrecipeId]: String(Math.round(potServings * 100) / 100) } : {});
+  const [potList, setPotList] = useState<PotWeight[]>(pots ?? []);
+  const [newPot, setNewPot] = useState<{ sid: number; name: string } | null>(null);
+  const [potErr, setPotErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -133,18 +154,38 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId }: 
     return rows.reduce((sum, r) => sum + rowDemand(r, subrecipeId), 0);
   }
 
+  // "Total weight" mode: weighed total − pot weight = food; when the pot
+  // holds more servings than these portions, only their share is portioned
+  // and the rest is put aside.
+  function split(subrecipeId: number) {
+    const weight = numIn(weights[subrecipeId]);
+    if (!(weight > 0)) return null;
+    const tare = numIn(tares[subrecipeId]);
+    const net = weight - (tare > 0 ? tare : 0);
+    if (net <= 0) return null;
+    const td = totalDemand(subrecipeId);
+    const ps = numIn(potServ[subrecipeId]);
+    if (ps > td + 0.01 && td > 0) {
+      const today = net * (td / ps);
+      return { net, today, aside: net - today, asideServings: ps - td, perServing: net / ps };
+    }
+    return { net, today: net, aside: 0, asideServings: 0, perServing: td > 0 ? net / td : 0 };
+  }
+
   // Total grams for this row (across all its serving entries for this subrecipe).
   function gramsFor(row: RowInfo, subrecipeId: number) {
     const entries = row.perTarget[subrecipeId];
     if (!entries || entries.length === 0) return null;
     const mode = modes[subrecipeId] ?? "total";
-    const weight = parseFloat(weights[subrecipeId] ?? "");
-    if (isNaN(weight) || weight <= 0) return null;
     const demand = rowDemand(row, subrecipeId);
+    if (mode === "per_serving") {
+      const weight = numIn(weights[subrecipeId]);
+      return weight > 0 ? weight * demand : null;
+    }
+    const s = split(subrecipeId);
+    if (!s) return null;
     const td = totalDemand(subrecipeId);
-    return mode === "total"
-      ? (td > 0 ? weight * (demand / td) : 0)
-      : weight * demand;
+    return td > 0 ? s.today * (demand / td) : 0;
   }
 
   // Grams for one specific serving row, splitting the row's total grams
@@ -169,8 +210,21 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId }: 
   }
 
   function isValid(subrecipeId: number) {
-    const weight = parseFloat(weights[subrecipeId] ?? "");
-    return !isNaN(weight) && weight > 0;
+    if ((modes[subrecipeId] ?? "total") === "per_serving") return numIn(weights[subrecipeId]) > 0;
+    return split(subrecipeId) != null;
+  }
+
+  async function savePot(sid: number, name: string) {
+    const w = numIn(tares[sid]);
+    if (!onAddPot) return;
+    setPotErr(null);
+    try {
+      const p = await onAddPot(name, w);
+      setPotList(prev => [...prev, p].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewPot(null);
+    } catch (e) {
+      setPotErr(e instanceof Error ? e.message : "Couldn't save the pot.");
+    }
   }
 
   const anyValid = targets.some(t => isValid(t.subrecipeId));
@@ -251,6 +305,63 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId }: 
                       style={{ padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, flex: "1 1 140px" }}
                     />
                   </div>
+                  {(modes[t.subrecipeId] ?? "total") === "total" && (() => {
+                    const sid = t.subrecipeId;
+                    const s = split(sid);
+                    const td = totalDemand(sid);
+                    const field = { padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, width: 110 };
+                    return (
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
+                            Pot / tray (optional)
+                            <input type="number" step="any" min="0" inputMode="decimal" placeholder="g" value={tares[sid] ?? ""}
+                              onChange={e => setTares(prev => ({ ...prev, [sid]: e.target.value }))} style={field} />
+                          </label>
+                          <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
+                            Servings in the pot
+                            <input type="number" step="any" min="0" inputMode="decimal" placeholder={String(Math.round(td * 100) / 100)} value={potServ[sid] ?? ""}
+                              onChange={e => setPotServ(prev => ({ ...prev, [sid]: e.target.value }))} style={{ ...field, width: 90 }} />
+                          </label>
+                        </div>
+                        {(potList.length > 0 || onAddPot) && (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            {potList.map(p => {
+                              const on = numIn(tares[sid]) === p.weight_g;
+                              return (
+                                <button key={p.id} onClick={() => setTares(prev => ({ ...prev, [sid]: on ? "" : String(p.weight_g) }))} style={{
+                                  minHeight: 34, padding: "0 10px", borderRadius: 17, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                  background: on ? C.primary : C.white, color: on ? C.white : C.primary, border: `1px solid ${on ? C.primary : C.border}`,
+                                }}>{p.name} · {fmtG(p.weight_g)}</button>
+                              );
+                            })}
+                            {onAddPot && numIn(tares[sid]) > 0 && !potList.some(p => p.weight_g === numIn(tares[sid])) && (
+                              newPot?.sid === sid ? (
+                                <form onSubmit={e => { e.preventDefault(); void savePot(sid, newPot.name); }} style={{ display: "flex", gap: 6 }}>
+                                  <input autoFocus value={newPot.name} onChange={e => setNewPot({ sid, name: e.target.value })} placeholder="Name, e.g. Big pot"
+                                    style={{ ...field, width: 150 }} />
+                                  <button type="submit" style={{ minHeight: 34, padding: "0 10px", borderRadius: 8, border: "none", background: C.primary, color: C.white, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Save</button>
+                                </form>
+                              ) : (
+                                <button onClick={() => setNewPot({ sid, name: "" })} style={{ background: "none", border: "none", color: C.tealDark, fontSize: 12, textDecoration: "underline", cursor: "pointer" }}>
+                                  Save this pot weight
+                                </button>
+                              )
+                            )}
+                          </div>
+                        )}
+                        {potErr && <span style={{ fontSize: 12, color: C.error }}>{potErr}</span>}
+                        {s && (
+                          <div style={{ background: C.white, borderRadius: 8, padding: "8px 10px", fontSize: 13, color: C.primary, lineHeight: 1.5 }}>
+                            {fmtG(s.net)} of food{numIn(tares[sid]) > 0 ? ` (pot ${fmtG(numIn(tares[sid]))} taken off)` : ""} · {fmtG(s.perServing)} per serving
+                            <br />
+                            <strong>Portion now: {fmtG(s.today)}</strong> for {Math.round(td * 100) / 100} servings
+                            {s.aside > 0.5 && <><br /><strong>Put aside: {fmtG(s.aside)}</strong> ({Math.round(s.asideServings * 100) / 100} servings)</>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
