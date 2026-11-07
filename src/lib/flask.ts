@@ -1022,6 +1022,9 @@ export interface KitchenSimpleRow {
   is_side_salad: boolean;
   instructions: string | null;
   by_date: Record<string, number>;
+  // Clients / meal boxes per day (missing from an older backend).
+  people_by_date?: Record<string, number>;
+  boxes_by_date?: Record<string, number>;
   today_mpdr_ids: number[];
   comments: KitchenSimpleComment[];
   ingredients_per_serving: KitchenIngredient[];

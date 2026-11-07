@@ -37,6 +37,9 @@ export interface PlanRow {
   prep_type: "cook" | "assemble" | "slice" | "ready";
   is_side_salad: boolean;
   by_date: Record<string, number>;
+  // How many clients / meal boxes get it each day.
+  people_by_date: Record<string, number>;
+  boxes_by_date: Record<string, number>;
   // Ordered for the cook date itself.
   need: number;
   // meal_plan_day_recipe ids delivered on the cook date (portioning).
@@ -84,6 +87,9 @@ export function buildRows(
       prep_type: s.prep_type,
       is_side_salad: s.is_side_salad,
       by_date: s.by_date,
+      people_by_date: s.people_by_date ?? {},
+      // Older backend: today's boxes are still known from the mpdr ids.
+      boxes_by_date: s.boxes_by_date ?? { [data.cook_date]: s.today_mpdr_ids.length },
       need: r2(s.by_date[data.cook_date] ?? 0),
       mpdr_ids: s.today_mpdr_ids,
       instructions: s.instructions,

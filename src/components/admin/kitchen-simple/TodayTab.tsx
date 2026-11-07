@@ -259,6 +259,71 @@ function WorkingWindow({ tasks, pins, active, setActive, unpin, open, setOpen, c
   );
 }
 
+// Everything that goes into today's pots, added up per ingredient, with
+// what each part is for: "Chicken breast 5 kg = 2 kg Tawouk + 3 kg Fajita".
+function IngredientsToday({ tasks, open, setOpen }: { tasks: Task[]; open: boolean; setOpen: (v: boolean) => void }) {
+  const [query, setQuery] = useState("");
+  const list = useMemo(() => {
+    const by = new Map<number, { id: number; name: string; unit: string | null; staple: boolean; total: number; uses: { name: string; servings: number; qty: number }[] }>();
+    for (const t of tasks) {
+      if (t.kind !== "item" || t.item.cook <= 0) continue;
+      const servings = cookedAmount(t.item);
+      if (servings <= 0) continue;
+      for (const ing of t.row.ingredients_per_serving) {
+        const q = ing.quantity * servings;
+        if (!(q > 0)) continue;
+        const e = by.get(ing.ingredient_id) ?? { id: ing.ingredient_id, name: ing.name, unit: ing.unit, staple: ing.is_staple, total: 0, uses: [] };
+        e.total += q;
+        e.uses.push({ name: t.name, servings, qty: q });
+        by.set(ing.ingredient_id, e);
+      }
+    }
+    return [...by.values()]
+      .map(e => ({ ...e, uses: e.uses.sort((a, b) => b.qty - a.qty) }))
+      .sort((a, b) => Number(a.staple) - Number(b.staple) || a.name.localeCompare(b.name));
+  }, [tasks]);
+  if (list.length === 0) return null;
+  const shown = list.filter(e => matchesQuery(e.name, query));
+
+  return (
+    <section style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "4px 14px", marginBottom: 10 }}>
+      <button onClick={() => setOpen(!open)} style={{
+        width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 48,
+        background: "none", border: "none", padding: 0, cursor: "pointer", color: C.primary, textAlign: "left",
+      }}>
+        <span>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>🧺 Ingredients for today ({list.length})</span>
+          <span style={{ display: "block", fontSize: 12, color: C.muted }}>Total of each, and what it&apos;s for</span>
+        </span>
+        <span style={{ fontSize: 18, color: C.muted }}>{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <div style={{ paddingBottom: 10 }}>
+          {list.length > 8 && (
+            <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Find an ingredient…"
+              style={{ width: "100%", boxSizing: "border-box", height: 40, padding: "0 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14, color: C.primary, marginBottom: 4 }} />
+          )}
+          {shown.map((e, i) => (
+            <div key={e.id} style={{ padding: "8px 0", borderTop: i === 0 ? "none" : `1px solid ${C.offWhite}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 14.5 }}>
+                <span style={{ color: C.primary, fontWeight: 700 }}>{e.name}{e.staple && <span style={{ fontWeight: 400, fontSize: 11.5, color: C.light }}> · staple</span>}</span>
+                <strong style={{ color: C.primary, whiteSpace: "nowrap" }}>{qty(e.total, e.unit)}</strong>
+              </div>
+              {e.uses.map(u => (
+                <div key={u.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, color: C.muted, paddingLeft: 10, marginTop: 2 }}>
+                  <span>{u.name} <span style={{ color: C.light }}>({fmt(u.servings)} serv.)</span></span>
+                  <span style={{ whiteSpace: "nowrap" }}>{qty(u.qty, e.unit)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          {shown.length === 0 && <p style={{ margin: "6px 0", fontSize: 13, color: C.muted }}>No match.</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 type Who = Person | "all";
 
 export default function TodayTab({ cookDate, rows, items, steps, equipment, onPlan }: {
@@ -268,6 +333,7 @@ export default function TodayTab({ cookDate, rows, items, steps, equipment, onPl
   const [whoPref, pickWho] = usePref<string>("akli-kitchen-who", "all");
   const [sort, setSort] = usePref<Sort>("akli-kitchen-sort", "amount");
   const [hideDone, setHideDone] = usePref<boolean>("akli-kitchen-today-hide-done", true);
+  const [ingOpen, setIngOpen] = usePref<boolean>("akli-kitchen-ingredients-open", false);
   const [query, setQuery] = useState("");
   const [pins, setPins] = useState<string[]>([]);
   const [active, setActive] = useState<string | null>(null);
@@ -342,6 +408,8 @@ export default function TodayTab({ cookDate, rows, items, steps, equipment, onPl
         {people.filter(p => p.active || tasks.some(t => t.who === p.id)).map(p => chip(p.id, p.name))}
         {chip("all", "Everyone")}
       </div>
+
+      <IngredientsToday tasks={tasks.filter(t => who === "all" || t.who === who)} open={ingOpen} setOpen={setIngOpen} />
 
       <ListTools query={query} setQuery={setQuery} sort={sort} setSort={setSort} hideDone={hideDone} setHideDone={setHideDone} doneCount={doneCount} />
 

@@ -39,6 +39,9 @@ function WeekStrip({ row, dates, cookDate }: { row: PlanRow; dates: string[]; co
           }}>
             <span style={{ display: "block", fontSize: 10, opacity: 0.8 }}>{weekday(d)}</span>
             <strong>{n > 0 ? fmt(n) : "–"}</strong>
+            {n > 0 && (row.people_by_date[d] ?? 0) > 0 && (
+              <span style={{ display: "block", fontSize: 10, opacity: 0.85 }}>👤 {row.people_by_date[d]}</span>
+            )}
           </span>
         );
       })}
@@ -50,6 +53,20 @@ function WeekStrip({ row, dates, cookDate }: { row: PlanRow; dates: string[]; co
         <strong>{fmt(weekTotal(row))}</strong>
       </span>
     </div>
+  );
+}
+
+// Who it's for today: clients, and meal boxes when someone has it twice.
+function TodayPeople({ row, cookDate }: { row: PlanRow; cookDate: string }) {
+  const people = row.people_by_date[cookDate] ?? 0;
+  const boxes = row.boxes_by_date[cookDate] ?? 0;
+  if (!people && !boxes) return null;
+  return (
+    <span style={{ display: "block", marginTop: 6, fontSize: 13, color: C.primary }}>
+      Today: <strong>{fmt(row.need)} servings</strong>
+      {people > 0 && <> for <strong>{people} {people === 1 ? "person" : "people"}</strong></>}
+      {boxes > 0 && boxes !== people && <> · {boxes} boxes</>}
+    </span>
   );
 }
 
@@ -70,6 +87,7 @@ function RowCard({ row, line, onLine, dates, cookDate, first, done }: {
         <WhoChip who={line.assignee} onChange={p => onLine({ assignee: p })} />
       </div>
       <WeekStrip row={row} dates={dates} cookDate={cookDate} />
+      {row.need > 0 && <TodayPeople row={row} cookDate={cookDate} />}
       <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
         <NumberBox label="I have" value={line.have} onChange={v => onLine({ have: v })} />
         <span style={{ fontSize: 18, color: C.light, paddingBottom: 10 }}>+</span>
@@ -298,7 +316,7 @@ export default function PlanTab({ cookDate, dates, rows, items, steps, onSaved }
           {visible(bought).map((r, i) => (
             <div key={r.subrecipe_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "10px 0", borderTop: i === 0 ? "none" : `1px solid ${C.offWhite}` }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: C.primary }}>
-                {isDone(r) && <span style={{ color: "#1f6f50" }}>✓ </span>}<strong>{r.name}</strong> · {fmt(r.need)} today · {fmt(weekTotal(r))} this week
+                {isDone(r) && <span style={{ color: "#1f6f50" }}>✓ </span>}<strong>{r.name}</strong> · {fmt(r.need)} today{(r.people_by_date[cookDate] ?? 0) > 0 ? ` (👤 ${r.people_by_date[cookDate]})` : ""} ·{fmt(weekTotal(r))} this week
               </span>
               <WhoChip who={lineFor(r).assignee} onChange={p => setLine(r, { assignee: p })} />
             </div>
