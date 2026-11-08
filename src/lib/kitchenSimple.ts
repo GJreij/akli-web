@@ -46,6 +46,8 @@ export interface PlanRow {
   mpdr_ids: number[];
   instructions: string | null;
   comments: KitchenSimpleComment[];
+  // Notes for later days, shown when today's pot reaches those days.
+  upcoming_comments: (KitchenSimpleComment & { date: string })[];
   ingredients_per_serving: KitchenIngredient[];
   // Left over from the last saved day, if any.
   suggested_have: number | null;
@@ -94,6 +96,7 @@ export function buildRows(
       mpdr_ids: s.today_mpdr_ids,
       instructions: s.instructions,
       comments: s.comments,
+      upcoming_comments: s.upcoming_comments ?? [],
       ingredients_per_serving: s.ingredients_per_serving,
       suggested_have: prev ? leftover(prev.item) : null,
       suggested_from: prev?.cook_date ?? null,
@@ -113,6 +116,22 @@ export function coversThrough(row: PlanRow, dates: string[], total: number) {
     last = d;
   }
   return { last, left: r2(left), short: false };
+}
+
+// Notes for later days that a pot of `total` servings reaches (walking the
+// week's orders from the cook date; a day only partly covered counts).
+export function notesAhead(row: Pick<PlanRow, "by_date" | "upcoming_comments">, cookDate: string, total: number) {
+  if (row.upcoming_comments.length === 0) return [];
+  let left = total;
+  const reached = new Set<string>();
+  for (const d of Object.keys(row.by_date).sort()) {
+    const n = row.by_date[d] ?? 0;
+    if (n <= 0) continue;
+    if (left <= 0.01) break;
+    if (d > cookDate) reached.add(d);
+    left -= n;
+  }
+  return row.upcoming_comments.filter(c => reached.has(c.date));
 }
 
 // Side salads go to Guitta, everything else to Georges (or the first person

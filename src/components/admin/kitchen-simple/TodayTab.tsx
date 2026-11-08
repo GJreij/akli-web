@@ -6,7 +6,7 @@ import { unwrap, weekTotal, type Equipment, type Person, type PlanItem, type Pla
 import { addEquipment, setItemAssignee, setItemDone, setItemPortioned, updateStep } from "@/app/admin/kitchen/simple-actions";
 import PortioningPanel from "../cooking/PortioningPanel";
 import { C } from "../ui";
-import { bigBtn, byName, decimalInput, fmt, linkBtn, ListTools, matchesQuery, qty, r2, usePref, WhoChip, type Sort } from "./shared";
+import { bigBtn, byName, ClientNotes, decimalInput, fmt, linkBtn, ListTools, matchesQuery, qty, r2, usePref, WhoChip, type Sort } from "./shared";
 
 const now = () => new Date().toISOString();
 const cookPatch = (sid: number, done: boolean, cooked: number | null = null) =>
@@ -71,24 +71,14 @@ function TaskRow({ t, cookDate, pinned, onPin }: { t: Task; cookDate: string; pi
           </>
         )}
       </div>
-      {t.kind === "item" && t.row.comments.length > 0 && <ClientNotes row={t.row} />}
+      {t.kind === "item" && <ClientNotes row={t.row} cookDate={cookDate} total={potTotal(t.item)} />}
       {err && <span style={{ fontSize: 12, color: C.error }}>{err}</span>}
     </div>
   );
 }
 
-// Client notes for today's boxes, right on the task (no need to open it).
-function ClientNotes({ row }: { row: PlanRow }) {
-  return (
-    <div style={{ background: "#fff3dc", borderRadius: 10, padding: "6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>
-      {row.comments.map(c => (
-        <span key={`${c.user_id}-${c.recipe_id}-${c.comment}`} style={{ fontSize: 13, color: "#5c3d00" }}>
-          💬 <strong>{c.name}</strong>{c.recipe_name && c.recipe_name !== row.name ? ` (${c.recipe_name})` : ""}: {c.instruction || c.comment}
-        </span>
-      ))}
-    </div>
-  );
-}
+// Servings in today's pot: what I had + what I cook(ed).
+const potTotal = (i: PlanItem) => r2(i.have + (i.cook > 0 ? cookedAmount(i) : 0));
 
 // What's open in the working window for one dish.
 function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item" }>; cookDate: string; equipment: Equipment[] }) {
@@ -170,7 +160,7 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
       )}
       {err && <span style={{ fontSize: 12.5, color: C.error }}>{err}</span>}
 
-      {row.comments.length > 0 && <ClientNotes row={row} />}
+<ClientNotes row={row} cookDate={cookDate} total={total} />
 
       {item.cook > 0 && ingredients.length > 0 && (
         <div>

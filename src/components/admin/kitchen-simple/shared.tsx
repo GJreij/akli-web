@@ -1,11 +1,41 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { KitchenPerson, Person } from "@/lib/kitchenSimple";
+import { notesAhead, type KitchenPerson, type Person, type PlanRow } from "@/lib/kitchenSimple";
 import { C } from "../ui";
 import { useKitchen } from "./live";
 
 export const r2 = (n: number) => Math.round(n * 100) / 100;
+
+// Client notes for today's boxes, plus a heads-up for later days the pot
+// (`total` servings) also covers: a "no garlic" on Monday matters when
+// Monday's portions are cooked today.
+export function ClientNotes({ row, cookDate, total }: { row: PlanRow; cookDate: string; total: number }) {
+  const ahead = notesAhead(row, cookDate, total);
+  if (row.comments.length === 0 && ahead.length === 0) return null;
+  const who = (c: PlanRow["comments"][number]) => (
+    <><strong>{c.name}</strong>{c.recipe_name && c.recipe_name !== row.name ? ` (${c.recipe_name})` : ""}: {c.instruction || c.comment}</>
+  );
+  return (
+    <div style={{ background: "#fff3dc", borderRadius: 10, padding: "6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>
+      {row.comments.map(c => (
+        <span key={`${c.user_id}-${c.recipe_id}-${c.comment}`} style={{ fontSize: 13, color: "#5c3d00" }}>💬 {who(c)}</span>
+      ))}
+      {ahead.length > 0 && (
+        <>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: "#8a5a00", marginTop: row.comments.length ? 3 : 0 }}>
+            ⏭ This pot also covers later days, check:
+          </span>
+          {ahead.map(c => (
+            <span key={`${c.date}-${c.user_id}-${c.recipe_id}-${c.comment}`} style={{ fontSize: 12.5, color: "#7a5a20" }}>
+              <strong>{weekday(c.date)}</strong> · {who(c)}
+            </span>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
 
 export function fmt(n: number) {
   const r = r2(n);

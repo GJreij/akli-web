@@ -6,7 +6,7 @@ import { coversThrough, defaultAssignee, saveError, unwrap, weekTotal, type Kitc
 import { addPerson, addStep, deleteStep, removePerson, savePlan, updateStep } from "@/app/admin/kitchen/simple-actions";
 import { C } from "../ui";
 import {
-  bigBtn, byName, fmt, linkBtn, ListTools, matchesQuery, NumberBox, personColor, r2, usePref, weekday, WhoChip, type Sort,
+  bigBtn, byName, ClientNotes, fmt, linkBtn, ListTools, matchesQuery, NumberBox, personColor, r2, usePref, weekday, WhoChip, type Sort,
 } from "./shared";
 
 interface Line { have: string; cook: string; assignee: Person }
@@ -130,6 +130,7 @@ function RowCard({ row, line, onLine, dates, cookDate, first, done, onAddStep }:
               : reach.last ? <> · covers to {weekday(reach.last)}</> : null}
         </span>
       </div>
+      <div style={{ marginTop: 8 }}><ClientNotes row={row} cookDate={cookDate} total={total} /></div>
       {row.suggested_from && (
         <span style={{ display: "block", fontSize: 11.5, color: C.light, marginTop: 4 }}>
           Left from {weekday(row.suggested_from)}: {fmt(row.suggested_have ?? 0)}

@@ -1027,6 +1027,8 @@ export interface KitchenSimpleRow {
   boxes_by_date?: Record<string, number>;
   today_mpdr_ids: number[];
   comments: KitchenSimpleComment[];
+  // Same, for the days after the cook date (missing from an older backend).
+  upcoming_comments?: (KitchenSimpleComment & { date: string })[];
   ingredients_per_serving: KitchenIngredient[];
 }
 
