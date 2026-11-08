@@ -34,8 +34,10 @@ const numIn = (s: string | undefined) => {
 };
 const fmtG = (g: number) => `${Math.round(g).toLocaleString("en-US")} g`;
 
-export default function PortioningPanel({ targets, onClose, onSaved, batchId, potServings, pots, onAddPot }: {
+export default function PortioningPanel({ targets, onClose, onSaved, batchId, potServings, pots, onAddPot, notes }: {
   targets: PortionTarget[];
+  // Client notes by user id, shown under the client's name.
+  notes?: Record<string, string[]>;
   onClose: () => void;
   onSaved: () => void;
   // Kitchen Day: the kitchen_batch these portions are taken from.
@@ -104,7 +106,7 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
   // measure in case a subrecipe genuinely appears twice within one meal.
   type ServingEntry = { servingId: number; demand: number; savedWeight: number | null };
   type RowInfo = {
-    key: string; name: string; date: string | null; mealType: string | null; mealLabel: string | null;
+    key: string; clientId: string | null; name: string; date: string | null; mealType: string | null; mealLabel: string | null;
     perTarget: Record<number, ServingEntry[]>;
     // Union across every subrecipe portioned into this one physical meal —
     // e.g. a sandwich's bread + filling are portioned together but both
@@ -125,7 +127,7 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
       let row = rowByKey.get(key);
       if (!row) {
         const mealLabel = [c.meal_type ? capitalize(c.meal_type) : null, c.recipe_name].filter(Boolean).join(" · ") || null;
-        row = { key, name: displayName(c.client), date: c.delivery_date, mealType: c.meal_type ?? null, mealLabel, perTarget: {}, allergens: new Set() };
+        row = { key, clientId: c.client?.id ?? null, name: displayName(c.client), date: c.delivery_date, mealType: c.meal_type ?? null, mealLabel, perTarget: {}, allergens: new Set() };
         rowByKey.set(key, row);
         rows.push(row);
       }
@@ -401,6 +403,9 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                           ⚠️
                         </span>
                       )}
+                      {row.clientId && notes?.[row.clientId]?.map(n => (
+                        <span key={n} style={{ display: "block", marginTop: 2, fontSize: 12, fontWeight: 600, color: "#8a5a00" }}>💬 {n}</span>
+                      ))}
                     </td>
                     <td style={{ padding: "6px 6px", color: C.muted, whiteSpace: "nowrap" }}>{row.date ?? "—"}</td>
                     <td style={{ padding: "6px 6px", color: C.muted, whiteSpace: "nowrap" }}>{row.mealLabel ?? "—"}</td>

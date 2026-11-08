@@ -71,7 +71,21 @@ function TaskRow({ t, cookDate, pinned, onPin }: { t: Task; cookDate: string; pi
           </>
         )}
       </div>
+      {t.kind === "item" && t.row.comments.length > 0 && <ClientNotes row={t.row} />}
       {err && <span style={{ fontSize: 12, color: C.error }}>{err}</span>}
+    </div>
+  );
+}
+
+// Client notes for today's boxes, right on the task (no need to open it).
+function ClientNotes({ row }: { row: PlanRow }) {
+  return (
+    <div style={{ background: "#fff3dc", borderRadius: 10, padding: "6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>
+      {row.comments.map(c => (
+        <span key={`${c.user_id}-${c.recipe_id}-${c.comment}`} style={{ fontSize: 13, color: "#5c3d00" }}>
+          💬 <strong>{c.name}</strong>{c.recipe_name && c.recipe_name !== row.name ? ` (${c.recipe_name})` : ""}: {c.instruction || c.comment}
+        </span>
+      ))}
     </div>
   );
 }
@@ -94,6 +108,12 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
     () => [{ subrecipeId: row.subrecipe_id, name: row.name, mpdrIds: row.mpdr_ids }],
     [row.subrecipe_id, row.name, row.mpdr_ids],
   );
+  // Notes per client, shown next to their name while weighing.
+  const notes = useMemo(() => {
+    const m: Record<string, string[]> = {};
+    for (const c of row.comments) (m[c.user_id] ??= []).push(c.instruction || c.comment);
+    return m;
+  }, [row.comments]);
 
   const box = (label: string, value: string, strong = false, color: string = C.primary) => (
     <div style={{ flex: "1 1 80px", background: strong ? "#f1f8f8" : "#f7f4f2", borderRadius: 10, padding: "8px 10px" }}>
@@ -150,16 +170,7 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
       )}
       {err && <span style={{ fontSize: 12.5, color: C.error }}>{err}</span>}
 
-      {row.comments.length > 0 && (
-        <div style={{ background: "#fff3dc", borderRadius: 10, padding: "8px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <strong style={{ fontSize: 12.5, color: "#8a5a00" }}>Client notes</strong>
-          {row.comments.map(c => (
-            <span key={`${c.user_id}-${c.recipe_id}-${c.comment}`} style={{ fontSize: 13, color: "#5c3d00" }}>
-              <strong>{c.name}</strong>{c.recipe_name ? ` (${c.recipe_name})` : ""}: {c.instruction || c.comment}
-            </span>
-          ))}
-        </div>
-      )}
+      {row.comments.length > 0 && <ClientNotes row={row} />}
 
       {item.cook > 0 && ingredients.length > 0 && (
         <div>
@@ -180,6 +191,7 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
       {weighing && (
         <PortioningPanel
           targets={targets}
+          notes={notes}
           potServings={potServings > item.need ? potServings : undefined}
           pots={equipment}
           onAddPot={async (n, w) => unwrap(await addEquipment(n, w))}
