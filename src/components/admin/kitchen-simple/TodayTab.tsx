@@ -6,7 +6,7 @@ import { unwrap, weekTotal, type Equipment, type Person, type PlanItem, type Pla
 import { addEquipment, setItemAssignee, setItemDone, setItemPortioned, updateStep } from "@/app/admin/kitchen/simple-actions";
 import PortioningPanel from "../cooking/PortioningPanel";
 import { C } from "../ui";
-import { bigBtn, byName, fmt, linkBtn, ListTools, matchesQuery, qty, r2, usePref, WhoChip, type Sort } from "./shared";
+import { bigBtn, byName, decimalInput, fmt, linkBtn, ListTools, matchesQuery, qty, r2, usePref, WhoChip, type Sort } from "./shared";
 
 const now = () => new Date().toISOString();
 const cookPatch = (sid: number, done: boolean, cooked: number | null = null) =>
@@ -162,7 +162,7 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
         }}
           style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 14, color: C.muted }}>
           I cooked
-          <input type="number" step="any" min="0" inputMode="decimal" value={made} onChange={e => setMade(e.target.value)} onFocus={e => e.target.select()}
+          <input type="text" inputMode="decimal" value={made} onChange={e => setMade(decimalInput(e.target.value))} onFocus={e => e.target.select()}
             style={{ width: 80, height: 44, padding: "0 10px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 16, fontWeight: 700 }} />
           servings
           <button type="submit" disabled={!(parseFloat(made) >= 0)} style={{ ...bigBtn(true), opacity: parseFloat(made) >= 0 ? 1 : 0.5 }}>Save</button>

@@ -25,24 +25,30 @@ function initialLine(row: PlanRow, item: PlanItem | undefined, people: KitchenPe
 // A line counts as done once it's cooked (or portioned, when nothing was cooked).
 const lineDone = (i: PlanItem | undefined) => !!i && (i.cook > 0 ? i.done_at != null : i.portioned_at != null);
 
-function WeekStrip({ row, dates, cookDate }: { row: PlanRow; dates: string[]; cookDate: string }) {
+// Day boxes are buttons: tap the days you want this pot to cover.
+function WeekStrip({ row, dates, cookDate, picked, onPick }: {
+  row: PlanRow; dates: string[]; cookDate: string; picked: Set<string>; onPick: (d: string) => void;
+}) {
   return (
     <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
       {dates.map(d => {
         const n = row.by_date[d] ?? 0;
         const today = d === cookDate;
+        const on = picked.has(d);
         return (
-          <span key={d} style={{
-            minWidth: 44, textAlign: "center", padding: "3px 4px", borderRadius: 6, fontSize: 11.5, lineHeight: 1.25,
-            background: today ? C.primary : n > 0 ? "#eef6f6" : "transparent",
-            color: today ? C.white : n > 0 ? C.primary : C.border, border: today || n > 0 ? "none" : `1px dashed ${C.border}`,
+          <button key={d} type="button" disabled={n <= 0} onClick={() => onPick(d)} style={{
+            minWidth: 44, textAlign: "center", padding: "3px 4px", borderRadius: 6, fontSize: 11.5, lineHeight: 1.25, font: "inherit",
+            cursor: n > 0 ? "pointer" : "default",
+            background: on ? "#f2b84b" : today ? C.primary : n > 0 ? "#eef6f6" : "transparent",
+            color: on ? "#3d2700" : today ? C.white : n > 0 ? C.primary : C.border,
+            border: on ? "2px solid #c98a10" : today || n > 0 ? "2px solid transparent" : `1px dashed ${C.border}`,
           }}>
-            <span style={{ display: "block", fontSize: 10, opacity: 0.8 }}>{weekday(d)}</span>
+            <span style={{ display: "block", fontSize: 10, opacity: 0.8 }}>{on ? "✓ " : ""}{weekday(d)}</span>
             <strong>{n > 0 ? fmt(n) : "–"}</strong>
             {n > 0 && (row.people_by_date[d] ?? 0) > 0 && (
               <span style={{ display: "block", fontSize: 10, opacity: 0.85 }}>👤 {row.people_by_date[d]}</span>
             )}
-          </span>
+          </button>
         );
       })}
       <span style={{
@@ -70,23 +76,46 @@ function TodayPeople({ row, cookDate }: { row: PlanRow; cookDate: string }) {
   );
 }
 
-function RowCard({ row, line, onLine, dates, cookDate, first, done }: {
+function RowCard({ row, line, onLine, dates, cookDate, first, done, onAddStep }: {
   row: PlanRow; line: Line; onLine: (patch: Partial<Line>) => void; dates: string[]; cookDate: string; first: boolean; done: boolean;
+  onAddStep: () => void;
 }) {
   const have = num(line.have);
   const cook = num(line.cook);
   const total = r2(have + cook);
   const reach = coversThrough(row, dates, total);
   const shortToday = total + 0.01 < row.need;
+  // Days tapped on the strip: I cook = their total − what I have.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const pickedSum = r2([...picked].reduce((n, d) => n + (row.by_date[d] ?? 0), 0));
+  function pick(d: string) {
+    const next = new Set(picked);
+    if (next.has(d)) next.delete(d); else next.add(d);
+    setPicked(next);
+    if (next.size > 0) {
+      const sum = [...next].reduce((n, x) => n + (row.by_date[x] ?? 0), 0);
+      onLine({ cook: fmt(Math.max(0, r2(sum - have))) });
+    }
+  }
   return (
-    <div style={{ padding: "12px 0", borderTop: first ? "none" : `1px solid ${C.offWhite}`, opacity: done ? 0.6 : 1 }}>
+    <div id={`plan-row-${row.subrecipe_id}`} style={{ padding: "12px 0", borderTop: first ? "none" : `1px solid ${C.offWhite}`, opacity: done ? 0.6 : 1, scrollMarginTop: 130 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: C.primary, minWidth: 0 }}>
           {done && <span style={{ color: "#1f6f50" }}>✓ </span>}{row.name}
         </span>
+        <button type="button" onClick={onAddStep} title="Add an extra step" style={{
+          height: 36, padding: "0 10px", borderRadius: 18, border: `1px solid ${C.border}`, background: C.white, color: C.primary, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+        }}>+ step</button>
         <WhoChip who={line.assignee} onChange={p => onLine({ assignee: p })} />
       </div>
-      <WeekStrip row={row} dates={dates} cookDate={cookDate} />
+      <WeekStrip row={row} dates={dates} cookDate={cookDate} picked={picked} onPick={pick} />
+      {picked.size > 0 && (
+        <span style={{ display: "block", marginTop: 6, fontSize: 13, color: "#8a5a00" }}>
+          {dates.filter(d => picked.has(d)).map(d => `${weekday(d)} ${fmt(row.by_date[d] ?? 0)}`).join(" + ")} = <strong>{fmt(pickedSum)}</strong>
+          {have > 0 && <> − {fmt(have)} I have = <strong>{fmt(Math.max(0, r2(pickedSum - have)))}</strong></>}
+          {" "}→ I cook · <button onClick={() => setPicked(new Set())} style={{ ...linkBtn, fontSize: 12.5 }}>clear</button>
+        </span>
+      )}
       {row.need > 0 && <TodayPeople row={row} cookDate={cookDate} />}
       <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginTop: 8 }}>
         <NumberBox label="I have" value={line.have} onChange={v => onLine({ have: v })} />
@@ -113,11 +142,11 @@ function RowCard({ row, line, onLine, dates, cookDate, first, done }: {
   );
 }
 
-function Group({ title, sub, count, open, onToggle, children }: {
-  title: string; sub?: string; count: number; open: boolean; onToggle?: () => void; children: React.ReactNode;
+function Group({ id, title, sub, count, open, onToggle, children }: {
+  id?: string; title: string; sub?: string; count: number; open: boolean; onToggle?: () => void; children: React.ReactNode;
 }) {
   return (
-    <section style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "4px 14px 10px", marginBottom: 12 }}>
+    <section id={id} style={{ scrollMarginTop: 130, background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "4px 14px 10px", marginBottom: 12 }}>
       <button onClick={onToggle} tabIndex={onToggle ? 0 : -1} style={{
         width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 48,
         background: "none", border: "none", padding: 0, cursor: onToggle ? "pointer" : "default", color: C.primary, textAlign: "left",
@@ -168,7 +197,7 @@ function Team() {
   );
 }
 
-function Steps({ cookDate, steps }: { cookDate: string; steps: PlanStep[] }) {
+function Steps({ cookDate, steps, onAdded }: { cookDate: string; steps: PlanStep[]; onAdded?: () => void }) {
   const { people, patch } = useKitchen();
   const [text, setText] = useState("");
   const [who, setWho] = useState<Person>(() => people.find(p => p.active)?.id ?? "georges");
@@ -187,9 +216,10 @@ function Steps({ cookDate, steps }: { cookDate: string; steps: PlanStep[] }) {
         const s = unwrap(await addStep(cookDate, t, who));
         patch(l => (l.steps.some(x => x.id === s.id) ? l : { ...l, steps: [...l.steps, s] }));
         setText("");
+        onAdded?.();
       }); }}
         style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
-        <input value={text} onChange={e => setText(e.target.value)} placeholder="e.g. Cook kafta and freeze for Thursday"
+        <input id="plan-step-input" value={text} onChange={e => setText(e.target.value)} placeholder="e.g. Cook kafta and freeze for Thursday"
           style={{ flex: 1, minWidth: 0, height: 44, padding: "0 12px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 14 }} />
         <WhoChip who={who} onChange={setWho} />
         <button type="submit" disabled={pending || !text.trim()} style={{ ...bigBtn(true), opacity: pending || !text.trim() ? 0.5 : 1 }}>Add</button>
@@ -272,13 +302,30 @@ export default function PlanTab({ cookDate, dates, rows, items, steps, onSaved }
     });
   }
 
+  // "+ step" on a dish: jump down to extra steps, then a button brings you back.
+  const [returnTo, setReturnTo] = useState<{ id: number; name: string } | null>(null);
+  function jumpToSteps(r: PlanRow) {
+    setReturnTo({ id: r.subrecipe_id, name: r.name });
+    document.getElementById("plan-steps")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Focus without a second jump; the keyboard opens on the step box.
+    setTimeout(() => (document.getElementById("plan-step-input") as HTMLInputElement | null)?.focus({ preventScroll: true }), 350);
+  }
+  function goBack() {
+    if (!returnTo) return;
+    const el = document.getElementById(`plan-row-${returnTo.id}`);
+    (document.activeElement as HTMLElement | null)?.blur();
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setReturnTo(null);
+  }
+
   const totalCook = notBought.reduce((n, r) => n + num(lineFor(r).cook), 0);
   const dishCount = notBought.filter(r => num(lineFor(r).cook) > 0).length;
   const cards = (list: PlanRow[]) => {
     const shown = visible(list);
     if (shown.length === 0) return <p style={{ margin: "4px 0 8px", fontSize: 13, color: C.muted }}>{searching ? "No match." : hideDone ? "All done here." : "Nothing here."}</p>;
     return shown.map((r, i) => (
-      <RowCard key={r.subrecipe_id} row={r} line={lineFor(r)} onLine={p => setLine(r, p)} dates={dates} cookDate={cookDate} first={i === 0} done={isDone(r)} />
+      <RowCard key={r.subrecipe_id} row={r} line={lineFor(r)} onLine={p => setLine(r, p)} dates={dates} cookDate={cookDate} first={i === 0} done={isDone(r)}
+        onAddStep={() => jumpToSteps(r)} />
     ));
   };
   const count = (list: PlanRow[]) => visible(list).length;
@@ -324,8 +371,8 @@ export default function PlanTab({ cookDate, dates, rows, items, steps, onSaved }
         </Group>
       )}
 
-      <Group title="My extra steps" sub="Things that aren't a subrecipe, saved right away" count={steps.length} open>
-        <Steps cookDate={cookDate} steps={steps} />
+      <Group id="plan-steps" title="My extra steps" sub="Things that aren't a subrecipe, saved right away" count={steps.length} open>
+        <Steps cookDate={cookDate} steps={steps} onAdded={returnTo ? goBack : undefined} />
       </Group>
 
       <Group title="Team" sub="Who can be given tasks" count={people.filter(p => p.active).length} open={open.team} onToggle={() => setOpen(o => ({ ...o, team: !o.team }))}>
@@ -336,6 +383,12 @@ export default function PlanTab({ cookDate, dates, rows, items, steps, onSaved }
         position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 20, background: C.white, borderTop: `1px solid ${C.border}`,
         padding: "10px 16px calc(10px + env(safe-area-inset-bottom))",
       }}>
+        {returnTo && (
+          <button onClick={goBack} style={{
+            display: "block", width: "100%", maxWidth: 760, margin: "0 auto 8px", minHeight: 44, borderRadius: 12, border: "none",
+            background: "#f2b84b", color: "#3d2700", fontSize: 14, fontWeight: 800, cursor: "pointer",
+          }}>↩ Back to {returnTo.name}</button>
+        )}
         <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", gap: 10, alignItems: "center" }}>
           <span style={{ flex: 1, fontSize: 12.5, color: err ? C.error : C.muted }}>
             {err ?? (savedAt && !dirty ? `Saved at ${savedAt}` : `${dishCount} to cook · ${fmt(totalCook)} servings${dirty ? " · not saved yet" : ""}`)}

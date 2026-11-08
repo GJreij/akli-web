@@ -73,6 +73,14 @@ export function WhoChip({ who, onChange, disabled }: { who: Person; onChange?: (
   );
 }
 
+// Number boxes are text boxes: phones with a comma keypad ("1,5") can't type
+// into type="number". Comma becomes a dot, anything else but digits is dropped.
+export function decimalInput(raw: string) {
+  const s = raw.replace(/,/g, ".").replace(/[^0-9.]/g, "");
+  const i = s.indexOf(".");
+  return i < 0 ? s : s.slice(0, i + 1) + s.slice(i + 1).replace(/\./g, "");
+}
+
 export function NumberBox({ value, onChange, label, width = 74, disabled }: {
   value: string; onChange: (v: string) => void; label: string; width?: number; disabled?: boolean;
 }) {
@@ -80,8 +88,8 @@ export function NumberBox({ value, onChange, label, width = 74, disabled }: {
     <label style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11, color: C.muted, fontWeight: 600 }}>
       {label}
       <input
-        type="number" step="any" min="0" inputMode="decimal" value={value} disabled={disabled}
-        onChange={e => onChange(e.target.value)} onFocus={e => e.target.select()}
+        type="text" inputMode="decimal" value={value} disabled={disabled}
+        onChange={e => onChange(decimalInput(e.target.value))} onFocus={e => e.target.select()}
         style={{ width, height: 44, padding: "0 10px", border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 17, fontWeight: 700, color: C.primary }}
       />
     </label>
