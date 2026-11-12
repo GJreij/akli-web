@@ -12,9 +12,12 @@ import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
 import {
   generateMealPlan, getCheckoutSummary, confirmOrder, updateMealPlan, simplePriceSimulator,
+  applyAdvancedPlanning,
   type GenerateMealPlanResponse, type CheckoutSummaryResponse, type PlanDay, type Meal, type ChangeLog,
-  type PlanSummaryPeriod,
+  type PlanSummaryPeriod, type ServingChange,
 } from "@/lib/flask";
+import type { AdvancedPlanningAccess } from "@/lib/advancedPlanning";
+import AdvancedPlanningSheet, { type DraftServings } from "@/components/AdvancedPlanningSheet";
 import { type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
 import { conflictingAllergens, emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
@@ -1621,7 +1624,7 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
   cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [], recipeAllergens = {}, allowWeekendToggle = false,
-  initialNeedsCutlery = false,
+  initialNeedsCutlery = false, advancedPlanning,
 }: {
   userId: string;
   profile: UserRow | null;
@@ -1644,6 +1647,8 @@ export default function OrderFlow({
   // The client's last checkout choice (user_delivery_preference.needs_cutlery)
   // — pre-selects the cutlery toggle. Off for anyone who never chose.
   initialNeedsCutlery?: boolean;
+  // Beta: "Advanced planning" (hand-set servings of flexible subrecipes).
+  advancedPlanning?: AdvancedPlanningAccess;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
@@ -1756,6 +1761,78 @@ export default function OrderFlow({
     if (!originalPlan) return;
     setPlan(originalPlan);
     setPlanHistory([]);
+    setAutoDays({});
+  }
+
+  // ── Advanced planning (beta) ──────────────────────────────────────────────────
+  const advEnabled = !!advancedPlanning?.enabled;
+  const flexibleIds = new Set(advancedPlanning?.flexibleSubrecipeIds ?? []);
+  const mainPairs = new Set(advancedPlanning?.mainPairs ?? []);
+  const [advOpen, setAdvOpen]     = useState(false);
+  const [advDraft, setAdvDraft]   = useState<DraftServings>({});
+  const [advSaving, setAdvSaving] = useState(false);
+  const [advError, setAdvError]   = useState<string | null>(null);
+  // The automatic (solver) version of each day the client re-portioned by
+  // hand — what "Back to automatic" restores. Captured on the first manual
+  // save of that day; dropped when a normal edit re-solves the day.
+  const [autoDays, setAutoDays]   = useState<Record<string, PlanDay>>({});
+  const manualDates = new Set((plan?.days ?? []).filter(d => d.manual_servings).map(d => d.date));
+
+  function withAdvancedFlag(p: GenerateMealPlanResponse): GenerateMealPlanResponse {
+    const anyManual = p.days.some(d => d.manual_servings);
+    const next = { ...p };
+    if (anyManual) next.advanced_planning = true; else delete next.advanced_planning;
+    return next;
+  }
+
+  function closeAdvanced() {
+    setAdvOpen(false);
+    setAdvDraft({});
+    setAdvError(null);
+  }
+
+  function resetAdvancedDays(dates: string[]) {
+    if (!plan) return;
+    const dateSet = new Set(dates);
+    setAdvDraft(d => Object.fromEntries(Object.entries(d).filter(([k]) => !dateSet.has(k.split("|")[0]))));
+    const restorable = dates.filter(dt => manualDates.has(dt) && autoDays[dt]);
+    if (restorable.length === 0) return;
+    pushHistory();
+    setPlan(withAdvancedFlag({
+      ...plan,
+      days: plan.days.map(d => (restorable.includes(d.date) ? autoDays[d.date] : d)),
+    }));
+    track("advanced_planning_reset", { days: restorable.length }, "order");
+  }
+
+  async function saveAdvanced() {
+    if (!plan) return;
+    const changes: ServingChange[] = Object.entries(advDraft).map(([k, servings]) => {
+      const [date, meal_key, sid] = k.split("|");
+      return { date, meal_key, subrecipe_id: Number(sid), servings };
+    });
+    if (changes.length === 0) { closeAdvanced(); return; }
+    setAdvSaving(true);
+    setAdvError(null);
+    try {
+      const updated = await applyAdvancedPlanning(userId, plan, changes);
+      const changedDates = new Set(changes.map(c => c.date));
+      setAutoDays(prev => {
+        const next = { ...prev };
+        for (const d of plan.days) {
+          if (changedDates.has(d.date) && !d.manual_servings) next[d.date] = d;
+        }
+        return next;
+      });
+      pushHistory();
+      setPlan(updated);
+      track("advanced_planning_saved", { changes: changes.length, days: changedDates.size }, "order");
+      closeAdvanced();
+    } catch (e) {
+      setAdvError(e instanceof Error ? e.message : "Couldn't save your changes. Please try again.");
+    } finally {
+      setAdvSaving(false);
+    }
   }
 
   type RemoveTarget  = { date: string; meal: Meal };
@@ -1913,6 +1990,7 @@ export default function OrderFlow({
       setPlan(result);
       setOriginalPlan(result);
       setPlanHistory([]);
+      setAutoDays({});
       setStep("review");
       track("order_step", { step: "review", day_count: result.days.length }, "order");
     } catch (e) {
@@ -1934,7 +2012,16 @@ export default function OrderFlow({
     if (!plan) return;
     pushHistory();
     setUpdating(true);
-    try { setPlan(await updateMealPlan(plan, logs)); }
+    try {
+      const updated = await updateMealPlan(plan, logs);
+      // A normal edit re-solves its day automatically, which replaces any
+      // hand-set servings there — that re-solved day is the new "automatic".
+      const touched = new Set(logs.map(l => l.date));
+      if (Object.keys(autoDays).some(d => touched.has(d))) {
+        setAutoDays(prev => Object.fromEntries(Object.entries(prev).filter(([d]) => !touched.has(d))));
+      }
+      setPlan(withAdvancedFlag(updated));
+    }
     catch { /* keep existing */ }
     finally { setUpdating(false); }
   }
@@ -2491,6 +2578,33 @@ export default function OrderFlow({
             </button>
           )}
 
+          {advEnabled && plan.days.length > 0 && (
+            <button
+              onClick={() => {
+                setAdvDraft({}); setAdvError(null); setAdvOpen(true);
+                track("advanced_planning_opened", { days: plan.days.length, manual_days: manualDates.size }, "order");
+              }}
+              disabled={updatingPlan}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, width: "100%",
+                margin: "0 0 14px", background: C.white, border: `1px solid ${C.teal}`, borderRadius: 14,
+                padding: "12px 14px", cursor: "pointer", textAlign: "left",
+              }}
+            >
+              <span>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: C.primary }}>
+                  Advanced planning <span style={{ fontSize: 10, fontWeight: 600, color: C.tealDark, border: `1px solid ${C.teal}`, borderRadius: 6, padding: "1px 5px", marginLeft: 4, verticalAlign: "middle" }}>BETA</span>
+                </span>
+                <span style={{ display: "block", fontSize: 12, color: C.muted, marginTop: 3 }}>
+                  {manualDates.size > 0
+                    ? `${manualDates.size} day${manualDates.size !== 1 ? "s" : ""} adjusted by you · tap to change or go back to automatic`
+                    : "Choose how much rice, chicken and more you get each day"}
+                </span>
+              </span>
+              <IconArrowRight size={16} color={C.tealDark} style={{ flexShrink: 0 }} />
+            </button>
+          )}
+
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
@@ -2563,6 +2677,22 @@ export default function OrderFlow({
             }
             onClose={() => setReplaceTarget(null)}
             onSelect={handleReplaceMeal}
+          />
+        )}
+        {advOpen && (
+          <AdvancedPlanningSheet
+            plan={plan}
+            flexibleIds={flexibleIds}
+            mainPairs={mainPairs}
+            draft={advDraft}
+            onDraftChange={setAdvDraft}
+            manualDates={manualDates}
+            onResetDay={date => resetAdvancedDays([date])}
+            onResetAll={() => resetAdvancedDays(plan.days.map(d => d.date))}
+            onClose={closeAdvanced}
+            onSave={saveAdvanced}
+            saving={advSaving}
+            error={advError}
           />
         )}
         {addTarget && (

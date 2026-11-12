@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/supabase/requireAdmin";
 import OrderFlow from "@/components/OrderFlow";
+import { getAdvancedPlanningAccess } from "@/lib/advancedPlanning";
 import type { Database } from "@/lib/supabase/types";
 import { parsePref, type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
@@ -174,6 +175,8 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
     }
   }
 
+  const advancedPlanning = await getAdvancedPlanningAccess(supabase, targetUserId);
+
   return (
     <div>
       <div style={{ padding: "12px 20px 0", maxWidth: 480, margin: "0 auto" }}>
@@ -185,6 +188,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
         </p>
       </div>
       <OrderFlow
+        advancedPlanning={advancedPlanning}
         userId={targetUserId}
         profile={profile}
         macroTarget={macroTarget}

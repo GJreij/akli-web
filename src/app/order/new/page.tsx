@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import OrderFlow from "@/components/OrderFlow";
+import { getAdvancedPlanningAccess } from "@/lib/advancedPlanning";
 import type { Database } from "@/lib/supabase/types";
 import { parsePref, type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
@@ -136,8 +137,11 @@ export default async function OrderNewPage() {
     }
   }
 
+  const advancedPlanning = await getAdvancedPlanningAccess(supabase, user.id);
+
   return (
     <OrderFlow
+      advancedPlanning={advancedPlanning}
       userId={user.id}
       profile={profileRes.data as Database["public"]["Tables"]["user"]["Row"] | null}
       macroTarget={macroRes.data as Database["public"]["Tables"]["daily_macro_target"]["Row"] | null}

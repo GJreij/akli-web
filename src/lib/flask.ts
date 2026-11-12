@@ -102,6 +102,10 @@ export interface PlanDay {
   macro_error: number;
   totals: SubrecipeMacros;
   meals: Meal[];
+  // The day's carryover-adjusted solver target (Flask always sends it).
+  adjusted_target?: { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
+  // Advanced planning (beta): servings on this day were set by hand.
+  manual_servings?: boolean;
 }
 
 export interface PlanSummaryUsedRecipe {
@@ -132,6 +136,8 @@ export interface GenerateMealPlanResponse {
   excluded_dates: string[];
   days: PlanDay[];
   plan_summary: PlanSummaryPeriod[];
+  // Advanced planning (beta) was used on at least one day.
+  advanced_planning?: boolean;
 }
 
 export async function generateMealPlan(
@@ -144,6 +150,33 @@ export async function generateMealPlan(
   });
   if (!res.ok) throw new Error(`generate_meal_plan error ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+// ─── /advanced_planning/apply (beta) ─────────────────────────────────────────
+// Servings only — Flask recomputes every touched day's macros from the DB, so
+// the plan sent on to /checkout_summary is priced by the normal rules.
+
+export interface ServingChange {
+  date: string;
+  meal_key: string;
+  subrecipe_id: number;
+  servings: number;
+}
+
+export async function applyAdvancedPlanning(
+  user_id: string,
+  plan: GenerateMealPlanResponse,
+  changes: ServingChange[]
+): Promise<GenerateMealPlanResponse> {
+  const res = await fetch(`${FLASK_URL}/advanced_planning/apply`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id, plan, changes }),
+  });
+  const json = await safeJson(res);
+  if (!res.ok) throw new Error(json?.error ?? `advanced_planning error ${res.status}`);
+  if (!json) throw new Error("Unexpected response from server");
+  return json;
 }
 
 // ─── /check_meal_plan_conflict ───────────────────────────────────────────────
