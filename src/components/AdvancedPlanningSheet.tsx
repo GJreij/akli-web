@@ -48,16 +48,41 @@ function perServing(sub: { servings: number; macros: Macros }): Macros {
 export type DraftServings = Record<string, number>; // key: date|meal_key|subrecipe_id
 export const draftKey = (date: string, mealKey: string, subId: number) => `${date}|${mealKey}|${subId}`;
 
+// Live totals with the draft applied — every item counts, listed or not.
+function mealTotals(date: string, meal: PlanDay["meals"][number], draft: DraftServings): Macros {
+  const t: Macros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+  for (const sub of meal.subrecipes) {
+    const ps = perServing(sub);
+    const servings = draft[draftKey(date, meal.meal_key, sub.subrecipe_id)] ?? sub.servings;
+    for (const k of MACRO_KEYS) t[k] += ps[k] * servings;
+  }
+  return t;
+}
+
 function dayTotals(day: PlanDay, draft: DraftServings): Macros {
   const t: Macros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
   for (const meal of day.meals) {
-    for (const sub of meal.subrecipes) {
-      const ps = perServing(sub);
-      const servings = draft[draftKey(day.date, meal.meal_key, sub.subrecipe_id)] ?? sub.servings;
-      for (const k of MACRO_KEYS) t[k] += ps[k] * servings;
-    }
+    const m = mealTotals(day.date, meal, draft);
+    for (const k of MACRO_KEYS) t[k] += m[k];
   }
   return t;
+}
+
+function MealMacros({ m }: { m: Macros }) {
+  const item = (label: string, v: number, unit = "g") => (
+    <span style={{ whiteSpace: "nowrap" }}>
+      <span style={{ color: C.light }}>{label} </span>
+      <span style={{ fontWeight: 600, color: C.primary }}>{Math.round(v)}{unit}</span>
+    </span>
+  );
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", fontSize: 11.5, margin: "3px 0 8px" }}>
+      <span style={{ whiteSpace: "nowrap", fontWeight: 700, color: C.primary }}>{Math.round(m.kcal)} kcal</span>
+      {item("P", m.protein)}
+      {item("C", m.carbs)}
+      {item("F", m.fat)}
+    </div>
+  );
 }
 
 function ServingInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
@@ -226,13 +251,17 @@ export default function AdvancedPlanningSheet({
               </div>
 
               {meals.map(meal => {
-                // Only the adjustable items are listed; a meal with none is left out.
+                // Only the adjustable items are listed; every meal still shows
+                // its live macros (all items counted) so they add up to the day.
                 const flexSubs = meal.subrecipes.filter(s => isAdjustable({ flexibleIds, mainPairs }, meal.recipe_id, s));
-                if (flexSubs.length === 0) return null;
                 return (
                   <div key={meal.meal_key} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0 4px", marginTop: -1 }}>
                     <p style={{ fontSize: 11, color: C.light, margin: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>{MEAL_LABELS[meal.meal_type] ?? meal.meal_type}</p>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: C.primary, margin: "2px 0 8px" }}>{meal.recipe_name}</p>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: C.primary, margin: "2px 0 0" }}>{meal.recipe_name}</p>
+                    <MealMacros m={mealTotals(day.date, meal, draft)} />
+                    {flexSubs.length === 0 && (
+                      <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 6px" }}>Nothing to adjust in this meal.</p>
+                    )}
                     {flexSubs.map(sub => {
                       const key = draftKey(day.date, meal.meal_key, sub.subrecipe_id);
                       const value = draft[key] ?? sub.servings;

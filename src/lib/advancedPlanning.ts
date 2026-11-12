@@ -43,10 +43,16 @@ export async function getAdvancedPlanningAccess(
     .eq("feature", "advanced_planning")
     .maybeSingle();
   if (!flag) return { enabled: false, flexibleSubrecipeIds: [], mainPairs: [] };
-  const [{ data: subs }, { data: mains }] = await Promise.all([
+  // A failed read must not silently hide items — retry once before giving up.
+  const load = () => Promise.all([
     sb.from("subrecipe").select("id").eq("is_flexible", true),
     sb.from("recipe_subrecipe").select("recipe_id, subrecipe_id").eq("is_main", true),
   ]);
+  let [{ data: subs, error: subsErr }, { data: mains, error: mainsErr }] = await load();
+  if (subsErr || mainsErr || !subs || !mains) {
+    [{ data: subs, error: subsErr }, { data: mains, error: mainsErr }] = await load();
+    if (subsErr || mainsErr) console.error("[advancedPlanning] couldn't load adjustable items", subsErr ?? mainsErr);
+  }
   return {
     enabled: true,
     flexibleSubrecipeIds: (subs ?? []).map((s: { id: number }) => s.id),
