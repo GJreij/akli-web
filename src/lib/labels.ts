@@ -20,6 +20,9 @@ export interface LabelData {
   recipe_id: number | null;
   user_id: string;
   consumption_date: string; // ISO
+  // Set only when this bag holds more than one day for the client (e.g.
+  // "Tuesday"), so they know which box to eat when. Null for normal bags.
+  eat_day: string | null;
 }
 
 export interface ClientOption {
@@ -61,17 +64,38 @@ function datesInRange(startDate: string, endDate: string): string[] {
 }
 
 type MealPlanDayRow = { id: number; date: string | null; meal_plan_id: number | null; status: string | null };
+type DeliveryRow = { meal_plan_day_id: number | null; delivery_date: string | null };
 
+type LabelDay = { meal_plan_day_id: number; consumption_date: string; production_date: string; user_id: string };
+
+// The range is in "eat dates" for a normal one-day bag: picking the 17th gives
+// the bags cooked and delivered on the 16th. A label belongs to the night its
+// bag is cooked and delivered (deliveries.delivery_date), not to the day it's
+// eaten — a client can get two days in one bag, and both days' labels must
+// print together and carry the real production date.
 async function fetchMealPlanDaysInRange(
   supabase: SupabaseServerClient,
   startDate: string,
   endDate: string
-): Promise<{ meal_plan_day_id: number; consumption_date: string; user_id: string }[]> {
-  const dates = datesInRange(startDate, endDate);
+): Promise<LabelDay[]> {
+  const deliveryDates = datesInRange(isoAddDays(startDate, -1), isoAddDays(endDate, -1));
+
+  const delRes = await (supabase.from("deliveries") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
+    .select("meal_plan_day_id, delivery_date")
+    .in("delivery_date", deliveryDates)
+    .not("status", "in", "(cancelled,cancellation_pending)")
+    .not("meal_plan_day_id", "is", null);
+  const productionByMpd = new Map<number, string>();
+  for (const d of (delRes.data ?? []) as DeliveryRow[]) {
+    if (d.meal_plan_day_id == null || !d.delivery_date) continue;
+    const prev = productionByMpd.get(d.meal_plan_day_id);
+    if (!prev || d.delivery_date < prev) productionByMpd.set(d.meal_plan_day_id, d.delivery_date.slice(0, 10));
+  }
+  if (productionByMpd.size === 0) return [];
 
   const mpdRes = await (supabase.from("meal_plan_day") as any) // eslint-disable-line @typescript-eslint/no-explicit-any
     .select("id, date, meal_plan_id, status")
-    .in("date", dates);
+    .in("id", [...productionByMpd.keys()]);
   const mpdRows = ((mpdRes.data ?? []) as MealPlanDayRow[]).filter(
     (row) => !["cancelled", "cancellation_pending"].includes(row.status ?? "")
   );
@@ -90,9 +114,10 @@ async function fetchMealPlanDaysInRange(
     .map((row) => ({
       meal_plan_day_id: row.id,
       consumption_date: row.date as string,
+      production_date: productionByMpd.get(row.id) as string,
       user_id: userIdByMealPlanId.get(row.meal_plan_id as number) ?? null,
     }))
-    .filter((row): row is { meal_plan_day_id: number; consumption_date: string; user_id: string } => row.user_id != null);
+    .filter((row): row is LabelDay => row.user_id != null);
 }
 
 export async function fetchClientsInRange(
@@ -193,13 +218,24 @@ export async function fetchLabelsForRange(
     mpdrByMealPlanDayId.set(key, list);
   }
 
+  // Bags (client + delivery night) that carry more than one eating day.
+  const daysPerBag = new Map<string, number>();
+  for (const r of mpdRows) {
+    const k = `${r.user_id}|${r.production_date}`;
+    daysPerBag.set(k, (daysPerBag.get(k) ?? 0) + 1);
+  }
+  const multiDayBag = new Set([...daysPerBag].filter(([, n]) => n > 1).map(([k]) => k));
+
   const labels: LabelData[] = [];
 
   for (const mpdRow of mpdRows) {
     const user = userById.get(mpdRow.user_id);
     if (!user) continue;
 
-    const productionDateIso = isoAddDays(mpdRow.consumption_date, -1);
+    const productionDateIso = mpdRow.production_date;
+    const eatDay = multiDayBag.has(`${mpdRow.user_id}|${productionDateIso}`)
+      ? parseIso(mpdRow.consumption_date).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" })
+      : null;
     const productionDate = isoToUnpaddedDMY(productionDateIso);
     const batchCode = `${isoToYyyymmdd(productionDateIso)}-${mpdRow.meal_plan_day_id}`;
 
@@ -221,16 +257,18 @@ export async function fetchLabelsForRange(
         fat: Math.round(macros.fat),
         production_date: productionDate,
         batch_code: batchCode,
+        eat_day: eatDay,
       });
     }
   }
 
-  // Array.prototype.sort is stable (ES2019+/Node), so sorting only on name+meal
-  // order preserves the consumption_date grouping already produced above.
+  // Grouped by production night, then client, then eating day, then meal —
+  // so a client's two-day bag prints as one run of labels.
   labels.sort((a, b) => {
-    if (a.consumption_date !== b.consumption_date) return a.consumption_date < b.consumption_date ? -1 : 1;
+    if (a.batch_code.slice(0, 8) !== b.batch_code.slice(0, 8)) return a.batch_code < b.batch_code ? -1 : 1;
     const nameCompare = `${a.client_name} ${a.client_last_name}`.localeCompare(`${b.client_name} ${b.client_last_name}`);
     if (nameCompare !== 0) return nameCompare;
+    if (a.consumption_date !== b.consumption_date) return a.consumption_date < b.consumption_date ? -1 : 1;
     const orderA = MEAL_ORDER[a.meal_type.toLowerCase()] ?? 99;
     const orderB = MEAL_ORDER[b.meal_type.toLowerCase()] ?? 99;
     return orderA - orderB;

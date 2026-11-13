@@ -12,15 +12,36 @@ function fmtSlot(slot: { start_time: string | null; end_time: string | null } | 
   return `${slot.start_time?.slice(0, 5) ?? "?"}–${slot.end_time?.slice(0, 5) ?? "?"}`;
 }
 
-function sortedRecipes(client: PackagingClient) {
-  return [...client.recipes].sort((a, b) =>
+function sortedRecipes(recipes: PackagingRecipe[]) {
+  return [...recipes].sort((a, b) =>
     mealTypeRank(a.meal_type) - mealTypeRank(b.meal_type) || (a.recipe_name ?? "").localeCompare(b.recipe_name ?? "")
   );
 }
 
-function groupByMealType(client: PackagingClient) {
-  const groups = new Map<string, typeof client.recipes>();
-  for (const recipe of sortedRecipes(client)) {
+// A client can get several days in one bag (several deliveries on the same
+// night). Split their meals by the day they're eaten so the packer never mixes
+// up Monday's and Tuesday's boxes. One-day clients get a single group.
+function groupByEatDay(client: PackagingClient): [string, PackagingRecipe[]][] {
+  const groups = new Map<string, PackagingRecipe[]>();
+  for (const r of client.recipes) {
+    const key = r.eat_date ?? "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(r);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([day, rs]) => [day, sortedRecipes(rs)]);
+}
+
+function fmtEatDay(iso: string) {
+  if (!iso) return "Day ?";
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
+}
+
+function groupByMealType(recipes: PackagingRecipe[]) {
+  const groups = new Map<string, PackagingRecipe[]>();
+  for (const recipe of sortedRecipes(recipes)) {
     const key = recipe.meal_type ?? "other";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(recipe);
@@ -28,10 +49,11 @@ function groupByMealType(client: PackagingClient) {
   return [...groups.entries()].sort((a, b) => mealTypeRank(a[0]) - mealTypeRank(b[0]));
 }
 
-function DayCombination({ client }: { client: PackagingClient }) {
-  const groups = groupByMealType(client);
+function DayCombination({ recipes, dayLabel }: { recipes: PackagingRecipe[]; dayLabel?: string }) {
+  const groups = groupByMealType(recipes);
   return (
     <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
+      {dayLabel && <div style={{ fontSize: 11.5, fontWeight: 800, color: C.primary }}>{dayLabel}</div>}
       {groups.map(([mealType, recipes]) => (
         <div key={mealType} style={{ fontSize: 11.5 }}>
           <span style={{ fontWeight: 700, color: C.muted, textTransform: "capitalize" }}>{mealType}: </span>
@@ -260,11 +282,14 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                     .map((client, ci) => {
                     const clientKey = `${day.delivery_date}-${slot.slot_id}-${ci}`;
                     const isExpanded = expandedClients.has(clientKey);
+                    const eatDays = groupByEatDay(client);
+                    const multiDay = eatDays.length > 1;
                     return (
                     <div key={ci} style={{ background: C.white, borderRadius: 8, padding: "8px 10px", border: `1px solid ${C.border}` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                         <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: C.primary, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           {`${client.name ?? ""} ${client.last_name ?? ""}`.trim() || "Unknown client"}
+                          {multiDay && <Badge bg={AMBER_BG} color={AMBER}>📦 {eatDays.length} days in one bag</Badge>}
                           {/* Always say it either way, so a missing label is never
                               mistaken for "no cutlery" (or the reverse). */}
                           {client.needs_cutlery ? (
@@ -295,18 +320,32 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
                         </button>
                       </div>
 
-                      {isExpanded && <DayCombination client={client} />}
+                      {isExpanded && eatDays.map(([eatDay, recipes]) => (
+                        <DayCombination key={eatDay} recipes={recipes} dayLabel={multiDay ? fmtEatDay(eatDay) : undefined} />
+                      ))}
 
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: isExpanded ? 8 : 0 }}>
-                        {sortedRecipes(client).map(recipe => (
-                          <MealChecklist
-                            key={recipe.meal_plan_day_recipe_id}
-                            recipe={recipe}
-                            busy={pending && marking === recipe.meal_plan_day_recipe_id}
-                            onToggle={toggle}
-                          />
-                        ))}
-                      </div>
+                      {eatDays.map(([eatDay, recipes], di) => (
+                        <div key={eatDay || di} style={{
+                          marginTop: isExpanded || di > 0 ? 10 : 0,
+                          ...(multiDay ? { border: `2px solid ${AMBER}`, borderRadius: 10, padding: "8px 8px 10px" } : {}),
+                        }}>
+                          {multiDay && (
+                            <p style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 800, color: AMBER, textTransform: "uppercase", letterSpacing: "0.03em" }}>
+                              Day {di + 1} of {eatDays.length} · {fmtEatDay(eatDay)}
+                            </p>
+                          )}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            {recipes.map(recipe => (
+                              <MealChecklist
+                                key={recipe.meal_plan_day_recipe_id}
+                                recipe={recipe}
+                                busy={pending && marking === recipe.meal_plan_day_recipe_id}
+                                onToggle={toggle}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                     );
                   })}

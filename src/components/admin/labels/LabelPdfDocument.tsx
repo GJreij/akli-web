@@ -127,7 +127,7 @@ function LabelCell({ label, widthMm, heightMm, stroke }: { label: LabelData; wid
       <Text style={styles.wordmark}>akli</Text>
       <Text style={styles.subtitle}>Personalised nutrition. Precision macros.</Text>
       <View style={styles.rule} />
-      <Text style={styles.mealType}>{label.meal_type}</Text>
+      <Text style={styles.mealType}>{label.eat_day ? `${label.eat_day} · ${label.meal_type}` : label.meal_type}</Text>
       <View style={styles.rule} />
       <Text style={styles.row}>
         <Text style={styles.bold}>For : </Text>

@@ -817,6 +817,9 @@ export interface PackagingSalad {
 
 export interface PackagingRecipe {
   meal_plan_day_recipe_id: number;
+  // Day the client eats this meal. Several days can share one bag (one
+  // delivery night), so the board splits a client's card by this.
+  eat_date?: string | null;
   meal_type: string | null;
   recipe_name: string | null;
   packaging_status: string;
@@ -873,6 +876,7 @@ export interface DeliveryPayment {
 export interface DeliveryRow {
   id: number;
   delivery_date: string | null;
+  eat_date?: string | null; // day the client eats this delivery's meals
   status: string | null;
   delivery_slot: { id: number; start_time: string | null; end_time: string | null } | null;
   client: { id: string | null; name: string | null; last_name: string | null; phone_number: string | null } | null;
