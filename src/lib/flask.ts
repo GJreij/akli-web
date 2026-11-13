@@ -804,6 +804,15 @@ export interface PackagingSubrecipe {
   subrecipe_id: number;
   subrecipe_name: string | null;
   serving_size: number | null;
+  is_side_salad: boolean;
+}
+
+// How this meal's side salad differs from the recipe's standard one.
+// null = the dish has no salad and none was added.
+export interface PackagingSalad {
+  status: "standard" | "removed" | "swapped" | "added";
+  usual: string | null;   // the recipe's standard salad name(s)
+  packed: string | null;  // what actually goes in this box
 }
 
 export interface PackagingRecipe {
@@ -815,6 +824,7 @@ export interface PackagingRecipe {
   // feature) — a pre-swap printed label may show the wrong macros.
   is_swapped: boolean;
   subrecipes: PackagingSubrecipe[];
+  salad: PackagingSalad | null;
 }
 
 export interface PackagingClient {

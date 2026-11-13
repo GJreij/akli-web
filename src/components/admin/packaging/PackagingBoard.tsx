@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { PackagingDay, PackagingClient } from "@/lib/flask";
+import type { PackagingDay, PackagingClient, PackagingRecipe } from "@/lib/flask";
 import { markPackaged } from "@/app/admin/packaging/actions";
 import { mealTypeRank } from "@/lib/mealOrder";
 import { C } from "../ui";
@@ -50,6 +50,154 @@ function DayCombination({ client }: { client: PackagingClient }) {
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+const RED = "#c0392b";
+const RED_BG = "#fdecea";
+const AMBER = "#b45309";
+const AMBER_BG = "#fff8e6";
+
+function fmtServing(n: number | null) {
+  if (n == null) return "×?";
+  return `×${Number.isInteger(n) ? n : n.toFixed(2).replace(/0+$/, "")}`;
+}
+
+function Badge({ bg, color, children }: { bg: string; color: string; children: React.ReactNode }) {
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em",
+      padding: "3px 9px", borderRadius: 20, background: bg, color, whiteSpace: "nowrap",
+    }}>
+      {children}
+    </span>
+  );
+}
+
+// One meal = one checklist. Every component is its own big tappable line,
+// and "Mark packaged" stays locked until every line is ticked, so a forgotten
+// side blocks the packer instead of slipping through. Salad changes versus
+// the standard dish are shouted, since packers work from memory of the usual
+// recipe. Ticks are local to this page view; only "packaged" is saved.
+function MealChecklist({ recipe, busy, onToggle }: {
+  recipe: PackagingRecipe;
+  busy: boolean;
+  onToggle: (mpdrId: number, currentlyPackaged: boolean) => void;
+}) {
+  const packaged = recipe.packaging_status === "completed";
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  const salad = recipe.salad;
+  const total = recipe.subrecipes.length;
+  const doneCount = packaged ? total : ticked.size;
+  const allTicked = doneCount >= total;
+
+  function tick(i: number) {
+    if (packaged) return;
+    setTicked(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  }
+
+  return (
+    <div style={{
+      border: `1.5px solid ${packaged ? C.tealDark : C.border}`, borderRadius: 10, padding: "10px 12px",
+      background: packaged ? "#f1f7f7" : C.white,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <span style={{ fontSize: 15.5, fontWeight: 700, color: C.primary }}>{recipe.recipe_name ?? "—"}</span>
+        {recipe.meal_type && (
+          <span style={{ fontSize: 12, color: C.muted, textTransform: "capitalize" }}>· {recipe.meal_type}</span>
+        )}
+        {recipe.is_swapped && <Badge bg={AMBER_BG} color={AMBER}>Modified</Badge>}
+      </div>
+
+      {salad?.status === "removed" && (
+        <div style={{
+          background: RED_BG, color: RED, border: `2px solid ${RED}`, borderRadius: 8,
+          padding: "8px 10px", marginBottom: 8, fontSize: 14, fontWeight: 800,
+        }}>
+          🚫 NO SALAD — do not add the usual {salad.usual ?? "side salad"}
+        </div>
+      )}
+      {salad?.status === "swapped" && (
+        <div style={{
+          background: AMBER_BG, color: AMBER, border: `2px solid ${AMBER}`, borderRadius: 8,
+          padding: "8px 10px", marginBottom: 8, fontSize: 14, fontWeight: 800,
+        }}>
+          🔁 SALAD CHANGED — {salad.packed} instead of {salad.usual}
+        </div>
+      )}
+      {salad?.status === "added" && (
+        <div style={{
+          background: AMBER_BG, color: AMBER, border: `2px solid ${AMBER}`, borderRadius: 8,
+          padding: "8px 10px", marginBottom: 8, fontSize: 14, fontWeight: 800,
+        }}>
+          ➕ EXTRA SALAD — add {salad.packed}
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {recipe.subrecipes.map((s, i) => {
+          const isTicked = packaged || ticked.has(i);
+          const highlight = s.is_side_salad && salad && salad.status !== "standard";
+          return (
+            <button
+              key={`${s.subrecipe_id}-${i}`}
+              type="button"
+              onClick={() => tick(i)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                background: highlight ? AMBER_BG : isTicked ? "#e3efef" : C.offWhite,
+                border: `1px solid ${highlight ? AMBER : "transparent"}`,
+                borderRadius: 8, padding: "9px 10px", cursor: packaged ? "default" : "pointer",
+              }}
+            >
+              <span style={{
+                flex: "0 0 22px", height: 22, borderRadius: 6,
+                border: `2px solid ${isTicked ? C.tealDark : C.light}`,
+                background: isTicked ? C.tealDark : C.white, color: C.white,
+                display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800,
+              }}>
+                {isTicked ? "✓" : ""}
+              </span>
+              <span style={{
+                flex: 1, fontSize: 15, fontWeight: 600, color: C.primary,
+                textDecoration: isTicked ? "line-through" : "none", opacity: isTicked ? 0.6 : 1,
+              }}>
+                {s.subrecipe_name ?? "?"}
+                {s.is_side_salad && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 800, color: AMBER }}>SALAD</span>}
+              </span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.primary }}>{fmtServing(s.serving_size)}</span>
+            </button>
+          );
+        })}
+        {total === 0 && (
+          <p style={{ margin: 0, fontSize: 13, color: RED, fontWeight: 700 }}>No components found for this meal — check the order.</p>
+        )}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, gap: 8 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: allTicked ? C.tealDark : C.muted }}>
+          {doneCount}/{total} in the box
+        </span>
+        <button
+          onClick={() => onToggle(recipe.meal_plan_day_recipe_id, packaged)}
+          disabled={busy || (!packaged && !allTicked)}
+          title={!packaged && !allTicked ? "Tick every component first" : undefined}
+          style={{
+            background: packaged ? C.tealDark : allTicked ? C.primary : C.offWhite,
+            color: packaged || allTicked ? C.white : C.light,
+            border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700,
+            cursor: busy || (!packaged && !allTicked) ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {packaged ? "Packaged ✓ (undo)" : "Mark packaged"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -149,44 +297,15 @@ export default function PackagingBoard({ days }: { days: PackagingDay[] }) {
 
                       {isExpanded && <DayCombination client={client} />}
 
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: isExpanded ? 8 : 0 }}>
-                        {sortedRecipes(client).map(recipe => {
-                          const packaged = recipe.packaging_status === "completed";
-                          return (
-                            <div key={recipe.meal_plan_day_recipe_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                              <div>
-                                <p style={{ margin: 0, fontSize: 12.5 }}>
-                                  <strong>{recipe.recipe_name ?? "—"}</strong>
-                                  {recipe.meal_type && <span style={{ color: C.light }}> · {recipe.meal_type}</span>}
-                                  {recipe.is_swapped && (
-                                    <span style={{
-                                      marginLeft: 6, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em",
-                                      padding: "1px 7px", borderRadius: 20, background: "#fff8e6", color: "#b45309",
-                                    }}>
-                                      Modified
-                                    </span>
-                                  )}
-                                </p>
-                                <p style={{ margin: "2px 0 0", fontSize: 11, color: C.light }}>
-                                  {recipe.subrecipes.map(s => `${s.subrecipe_name ?? "?"} (${s.serving_size ?? "?"})`).join(" · ")}
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => toggle(recipe.meal_plan_day_recipe_id, packaged)}
-                                disabled={pending && marking === recipe.meal_plan_day_recipe_id}
-                                style={{
-                                  background: packaged ? C.tealDark : C.offWhite,
-                                  color: packaged ? C.white : C.muted,
-                                  border: "none", borderRadius: 7, padding: "5px 10px", fontSize: 11, fontWeight: 600,
-                                  cursor: "pointer", whiteSpace: "nowrap",
-                                  opacity: pending && marking === recipe.meal_plan_day_recipe_id ? 0.6 : 1,
-                                }}
-                              >
-                                {packaged ? "Packaged ✓" : "Mark packaged"}
-                              </button>
-                            </div>
-                          );
-                        })}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: isExpanded ? 8 : 0 }}>
+                        {sortedRecipes(client).map(recipe => (
+                          <MealChecklist
+                            key={recipe.meal_plan_day_recipe_id}
+                            recipe={recipe}
+                            busy={pending && marking === recipe.meal_plan_day_recipe_id}
+                            onToggle={toggle}
+                          />
+                        ))}
                       </div>
                     </div>
                     );
