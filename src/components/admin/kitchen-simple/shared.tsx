@@ -14,7 +14,15 @@ export function ClientNotes({ row, cookDate, total }: { row: PlanRow; cookDate: 
   const ahead = notesAhead(row, cookDate, total);
   if (row.comments.length === 0 && ahead.length === 0) return null;
   const who = (c: PlanRow["comments"][number]) => (
-    <><strong>{c.name}</strong>{c.recipe_name && c.recipe_name !== row.name ? ` (${c.recipe_name})` : ""}: {c.instruction || c.comment}</>
+    <>
+      <strong>{c.name}</strong>
+      {c.servings != null && c.servings > 0 && (
+        <strong style={{ marginLeft: 6, padding: "1px 7px", borderRadius: 10, background: "#5c3d00", color: "#fff3dc", fontSize: 12 }}>
+          {fmt(c.servings)} serv.
+        </strong>
+      )}
+      {c.recipe_name && c.recipe_name !== row.name ? ` (${c.recipe_name})` : ""}: {c.instruction || c.comment}
+    </>
   );
   return (
     <div style={{ background: "#fff3dc", borderRadius: 10, padding: "6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>

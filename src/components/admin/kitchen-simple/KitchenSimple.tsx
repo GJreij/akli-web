@@ -7,10 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { C } from "../ui";
 import PlanTab from "./PlanTab";
 import TodayTab from "./TodayTab";
+import WrapUpTab from "./WrapUpTab";
 import { KitchenCtx, type Live } from "./live";
 import { addDays, dayLabel } from "./shared";
 
-type Tab = "plan" | "today";
+export type Tab = "plan" | "today" | "wrap";
 
 export default function KitchenSimple({ cookDate, dates, rows, items: items0, steps: steps0, equipment, people: people0, initialTab }: {
   cookDate: string; dates: string[]; rows: PlanRow[]; items: PlanItem[]; steps: PlanStep[]; equipment: Equipment[];
@@ -101,11 +102,14 @@ export default function KitchenSimple({ cookDate, dates, rows, items: items0, st
       <div style={{ display: "flex", gap: 4, background: C.offWhite, borderRadius: 12, padding: 4, marginBottom: 14 }}>
         {tabBtn("plan", 1, "Plan")}
         {tabBtn("today", 2, "Today")}
+        {tabBtn("wrap", 3, "Wrap-up")}
       </div>
 
       {tab === "plan"
         ? <PlanTab cookDate={cookDate} dates={dates} rows={rows} items={live.items} steps={live.steps} onSaved={() => pick("today")} />
-        : <TodayTab cookDate={cookDate} rows={rows} items={live.items} steps={live.steps} equipment={equipment} onPlan={() => pick("plan")} />}
+        : tab === "today"
+          ? <TodayTab cookDate={cookDate} rows={rows} items={live.items} steps={live.steps} equipment={equipment} onPlan={() => pick("plan")} />
+          : <WrapUpTab cookDate={cookDate} rows={rows} items={live.items} />}
     </KitchenCtx.Provider>
   );
 }

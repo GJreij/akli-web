@@ -6,7 +6,7 @@ import { unwrap, weekTotal, type Equipment, type Person, type PlanItem, type Pla
 import { addEquipment, setItemAssignee, setItemDone, setItemPortioned, updateStep } from "@/app/admin/kitchen/simple-actions";
 import PortioningPanel from "../cooking/PortioningPanel";
 import { C } from "../ui";
-import { bigBtn, byName, ClientNotes, decimalInput, fmt, linkBtn, ListTools, matchesQuery, qty, r2, usePref, WhoChip, type Sort } from "./shared";
+import { bigBtn, byName, ClientNotes, decimalInput, fmt, linkBtn, ListTools, matchesQuery, qty, r2, usePref, weekday, WhoChip, type Sort } from "./shared";
 
 const now = () => new Date().toISOString();
 const cookPatch = (sid: number, done: boolean, cooked: number | null = null) =>
@@ -98,12 +98,20 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
     () => [{ subrecipeId: row.subrecipe_id, name: row.name, mpdrIds: row.mpdr_ids }],
     [row.subrecipe_id, row.name, row.mpdr_ids],
   );
+  // Days this dish can be portioned for: today first, then later days with orders.
+  const days = useMemo(() => Object.keys(row.by_date).sort()
+    .filter(d => d >= cookDate && (row.by_date[d] ?? 0) > 0 && (row.mpdr_ids_by_date[d]?.length ?? 0) > 0)
+    .map(d => ({ date: d, label: d === cookDate ? "Today" : weekday(d), mpdrIds: row.mpdr_ids_by_date[d], servings: row.by_date[d] })),
+  [row.by_date, row.mpdr_ids_by_date, cookDate]);
   // Notes per client, shown next to their name while weighing.
   const notes = useMemo(() => {
     const m: Record<string, string[]> = {};
-    for (const c of row.comments) (m[c.user_id] ??= []).push(c.instruction || c.comment);
+    for (const c of [...row.comments, ...row.upcoming_comments]) {
+      const text = c.instruction || c.comment;
+      if (!(m[c.user_id] ??= []).includes(text)) m[c.user_id].push(text);
+    }
     return m;
-  }, [row.comments]);
+  }, [row.comments, row.upcoming_comments]);
 
   const box = (label: string, value: string, strong = false, color: string = C.primary) => (
     <div style={{ flex: "1 1 80px", background: strong ? "#f1f8f8" : "#f7f4f2", borderRadius: 10, padding: "8px 10px" }}>
@@ -133,10 +141,13 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
             ✓ Cooked {fmt(cooked)} · <button onClick={() => run(() => setItemDone(cookDate, sid, false), cookPatch(sid, false))} style={linkBtn}>undo</button>
           </span>
         )}
-        {item.need > 0 && row.mpdr_ids.length > 0 && !item.portioned_at && (
+        {days.length > 0 && !(item.need > 0 && item.portioned_at) && (
           <button onClick={() => setWeighing(true)} style={{ ...bigBtn(!(item.cook > 0 && !item.done_at)), background: item.cook > 0 && !item.done_at ? C.white : "#1f6f50" }}>
-            ⚖️ Weigh &amp; portion {fmt(item.need)}
+            ⚖️ Weigh &amp; portion {item.need > 0 ? fmt(item.need) : `for ${days[0].label}`}
           </button>
+        )}
+        {item.need > 0 && item.portioned_at && days.length > 1 && (
+          <button onClick={() => setWeighing(true)} style={linkBtn}>⚖️ Portion later days too</button>
         )}
         {item.need > 0 && (item.portioned_at
           ? <span style={{ fontSize: 13.5, color: "#1f6f50", fontWeight: 700 }}>✓ Portioned · <button onClick={() => run(() => setItemPortioned(cookDate, sid, false), portionPatch(sid, false, item.need))} style={linkBtn}>undo</button></span>
@@ -181,12 +192,17 @@ function ItemDetail({ t, cookDate, equipment }: { t: Extract<Task, { kind: "item
       {weighing && (
         <PortioningPanel
           targets={targets}
+          days={days}
           notes={notes}
-          potServings={potServings > item.need ? potServings : undefined}
+          potServings={potServings}
           pots={equipment}
           onAddPot={async (n, w) => unwrap(await addEquipment(n, w))}
           onClose={() => setWeighing(false)}
-          onSaved={() => { void run(() => setItemPortioned(cookDate, sid, true, item.need), portionPatch(sid, true, item.need)); }}
+          onSaved={({ complete, dates }) => {
+            // Ticks today's "Portion" only once all of today's boxes are done
+            // (not while someone is still left out for their own pot).
+            if (complete && dates.includes(cookDate)) void run(() => setItemPortioned(cookDate, sid, true, item.need), portionPatch(sid, true, item.need));
+          }}
         />
       )}
     </div>

@@ -44,6 +44,8 @@ export interface PlanRow {
   need: number;
   // meal_plan_day_recipe ids delivered on the cook date (portioning).
   mpdr_ids: number[];
+  // Same, for every day of the week (portioning several days at once).
+  mpdr_ids_by_date: Record<string, number[]>;
   instructions: string | null;
   comments: KitchenSimpleComment[];
   // Notes for later days, shown when today's pot reaches those days.
@@ -94,6 +96,7 @@ export function buildRows(
       boxes_by_date: s.boxes_by_date ?? { [data.cook_date]: s.today_mpdr_ids.length },
       need: r2(s.by_date[data.cook_date] ?? 0),
       mpdr_ids: s.today_mpdr_ids,
+      mpdr_ids_by_date: s.mpdr_ids_by_date ?? { [data.cook_date]: s.today_mpdr_ids },
       instructions: s.instructions,
       comments: s.comments,
       upcoming_comments: s.upcoming_comments ?? [],

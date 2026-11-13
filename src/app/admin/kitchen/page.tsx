@@ -8,7 +8,7 @@ import { loadPlan } from "./simple-actions";
 import KitchenSimple from "@/components/admin/kitchen-simple/KitchenSimple";
 import AkliLoader from "@/components/AkliLoader";
 
-async function KitchenResults({ date, tab }: { date: string; tab: "plan" | "today" }) {
+async function KitchenResults({ date, tab }: { date: string; tab: "plan" | "today" | "wrap" }) {
   const [data, plan] = await Promise.all([getKitchenSimple(date), loadPlan(date)]);
   const rows = buildRows(data, plan.previous);
   return (
@@ -28,7 +28,7 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <PageHeader title="Kitchen" right={<Link href="/admin/kitchen/old" style={{ fontSize: 12, color: C.light }}>old screen</Link>} />
         <Suspense key={cookDate} fallback={<AkliLoader message="Checking the fridge…" tone="dark" />}>
-          <KitchenResults date={cookDate} tab={tab === "today" ? "today" : "plan"} />
+          <KitchenResults date={cookDate} tab={tab === "today" || tab === "wrap" ? tab : "plan"} />
         </Suspense>
       </div>
     </div>

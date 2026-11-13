@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { getPortioningSummary, type PortioningSummary } from "@/lib/flask";
 import { savePortioning } from "@/app/admin/cooking/actions";
 import { mealTypeRank } from "@/lib/mealOrder";
 import { ALLERGENS } from "@/lib/allergens";
 import { C } from "../ui";
+import { decimalInput } from "../kitchen-simple/shared";
 
 export interface PortionTarget {
   subrecipeId: number;
@@ -28,18 +29,30 @@ type Mode = "total" | "per_serving";
 
 export interface PotWeight { id: number; name: string; weight_g: number }
 
+// Number boxes are text boxes with a decimal keypad: type="number" drops a
+// half-typed "1." on some phones, and comma-keypad phones can't type a dot.
 const numIn = (s: string | undefined) => {
-  const n = parseFloat(s ?? "");
+  const n = parseFloat((s ?? "").replace(",", "."));
   return Number.isFinite(n) ? n : NaN;
 };
 const fmtG = (g: number) => `${Math.round(g).toLocaleString("en-US")} g`;
 
-export default function PortioningPanel({ targets, onClose, onSaved, batchId, potServings, pots, onAddPot, notes }: {
+// Kitchen: a day that can be portioned from this pot.
+export interface PortionDay { date: string; label: string; mpdrIds: number[]; servings: number }
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+export default function PortioningPanel({ targets: baseTargets, onClose, onSaved, batchId, potServings, pots, onAddPot, notes, days }: {
   targets: PortionTarget[];
+  // Kitchen: days to choose from (first = the cook date, picked by default).
+  // Picking more portions those days' boxes from the same pot.
+  days?: PortionDay[];
   // Client notes by user id, shown under the client's name.
   notes?: Record<string, string[]>;
   onClose: () => void;
-  onSaved: () => void;
+  // complete: every client shown was portioned (nobody left out);
+  // dates: the delivery days that were in the window.
+  onSaved: (info: { complete: boolean; dates: string[] }) => void;
   // Kitchen Day: the kitchen_batch these portions are taken from.
   batchId?: number;
   // Kitchen: servings in the pot being weighed, when it holds more than
@@ -49,6 +62,18 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
   pots?: PotWeight[];
   onAddPot?: (name: string, weightG: number) => Promise<PotWeight>;
 }) {
+  const [picked, setPicked] = useState<string[]>(() => (days?.length ? [days[0].date] : []));
+  // With day choices, the single target's meals are the picked days' meals.
+  const targets = useMemo(() => {
+    if (!days?.length || baseTargets.length !== 1) return baseTargets;
+    const ids = days.filter(d => picked.includes(d.date)).flatMap(d => d.mpdrIds);
+    return [{ ...baseTargets[0], mpdrIds: ids }];
+  }, [baseTargets, days, picked]);
+  // Rows (client · day · meal) left out of this pot, e.g. a "no garlic"
+  // cooked in its own pot. They're not counted and not saved.
+  const [out, setOutRaw] = useState<Set<string>>(new Set());
+  // Rows saved from this window (main pot first, left-out ones after).
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bySubrecipe, setBySubrecipe] = useState<Record<number, PortioningSummary>>({});
@@ -56,14 +81,15 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
   const [weights, setWeights] = useState<Record<number, string>>({});
   // Pot/tray weight to take off, and servings in the weighed pot, per subrecipe.
   const [tares, setTares] = useState<Record<number, string>>({});
-  const [potServ, setPotServ] = useState<Record<number, string>>(() =>
-    potServings != null && targets.length === 1 ? { [targets[0].subrecipeId]: String(Math.round(potServings * 100) / 100) } : {});
+  // Only what the cook typed; otherwise the pot's servings come from the plan.
+  const [potServ, setPotServ] = useState<Record<number, string>>({});
   const [potList, setPotList] = useState<PotWeight[]>(pots ?? []);
   const [newPot, setNewPot] = useState<{ sid: number; name: string } | null>(null);
   const [potErr, setPotErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const setOut = (next: Set<string> | ((prev: Set<string>) => Set<string>)) => { setOutRaw(next); setSaved(false); };
 
   useEffect(() => {
     let cancelled = false;
@@ -146,6 +172,8 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
     || (a.mealLabel ?? "").localeCompare(b.mealLabel ?? "")
   );
 
+  const included = rows.filter(r => !out.has(r.key));
+
   function rowDemand(row: RowInfo, subrecipeId: number) {
     return (row.perTarget[subrecipeId] ?? []).reduce((sum, e) => sum + e.demand, 0);
   }
@@ -153,7 +181,20 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
   // Each subrecipe is portioned entirely independently — its own total demand,
   // its own weight input, its own per-client grams. No blending across targets.
   function totalDemand(subrecipeId: number) {
-    return rows.reduce((sum, r) => sum + rowDemand(r, subrecipeId), 0);
+    return included.reduce((sum, r) => sum + rowDemand(r, subrecipeId), 0);
+  }
+  const leftOutDemand = (subrecipeId: number) =>
+    rows.filter(r => out.has(r.key)).reduce((sum, r) => sum + rowDemand(r, subrecipeId), 0);
+
+  // Servings in the pot: what the cook typed, else the plan's pot (minus
+  // anyone left out, who was cooked apart) when it holds more than these portions.
+  function potServingsFor(subrecipeId: number): string {
+    if (potServ[subrecipeId] != null) return potServ[subrecipeId];
+    if (potServings == null || targets.length !== 1) return "";
+    const ps = r2(potServings - leftOutDemand(subrecipeId));
+    // Shown whenever it differs from these boxes: bigger → some is put
+    // aside; smaller → a warning that the boxes need more than the pot has.
+    return ps > 0 && Math.abs(ps - totalDemand(subrecipeId)) > 0.01 ? String(ps) : "";
   }
 
   // "Total weight" mode: weighed total − pot weight = food; when the pot
@@ -166,7 +207,7 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
     const net = weight - (tare > 0 ? tare : 0);
     if (net <= 0) return null;
     const td = totalDemand(subrecipeId);
-    const ps = numIn(potServ[subrecipeId]);
+    const ps = numIn(potServingsFor(subrecipeId));
     if (ps > td + 0.01 && td > 0) {
       const today = net * (td / ps);
       return { net, today, aside: net - today, asideServings: ps - td, perServing: net / ps };
@@ -176,6 +217,7 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
 
   // Total grams for this row (across all its serving entries for this subrecipe).
   function gramsFor(row: RowInfo, subrecipeId: number) {
+    if (out.has(row.key)) return null;
     const entries = row.perTarget[subrecipeId];
     if (!entries || entries.length === 0) return null;
     const mode = modes[subrecipeId] ?? "total";
@@ -235,7 +277,7 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
     console.log("[portioning] handleSave clicked. weights =", weights, "anyValid =", anyValid);
     setSaving(true);
     setSaveError(null);
-    const toSave = rows.flatMap(row =>
+    const toSave = included.flatMap(row =>
       targets
         .filter(t => row.perTarget[t.subrecipeId]?.length && isValid(t.subrecipeId))
         .flatMap(t =>
@@ -250,8 +292,13 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
     try {
       await savePortioning(toSave);
       console.log("[portioning] savePortioning resolved with no error");
+      const nowSaved = new Set([...savedKeys, ...included.map(r => r.key)]);
+      setSavedKeys(nowSaved);
       setSaved(true);
-      onSaved();
+      // Complete once every row is portioned: in this save, an earlier save
+      // from this window, or already saved before.
+      const complete = rows.every(r => nowSaved.has(r.key) || targets.every(t => !r.perTarget[t.subrecipeId]?.length || savedGramsFor(r, t.subrecipeId) != null));
+      onSaved({ complete, dates: [...new Set(rows.map(r => r.date).filter((d): d is string => !!d))] });
     } catch (e) {
       console.error("[portioning] savePortioning threw:", e);
       setSaveError(e instanceof Error ? e.message : "Save failed — unknown error.");
@@ -271,6 +318,31 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
           </h3>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: C.muted, fontSize: 13, cursor: "pointer" }}>Close</button>
         </div>
+
+        {days && days.length > 1 && (
+          <div style={{ marginBottom: 12 }}>
+            <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 6 }}>Portion boxes for</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {days.filter(d => d.mpdrIds.length > 0).map(d => {
+                const on = picked.includes(d.date);
+                return (
+                  <button key={d.date}
+                    onClick={() => {
+                      if (on && picked.length === 1) return; // at least one day
+                      setOut(new Set());
+                      setPicked(p => on ? p.filter(x => x !== d.date) : [...p, d.date]);
+                    }}
+                    style={{
+                      minHeight: 40, padding: "0 12px", borderRadius: 20, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      background: on ? C.primary : C.white, color: on ? C.white : C.primary, border: `1.5px solid ${on ? C.primary : C.border}`,
+                    }}>
+                    {on ? "✓ " : "+ "}{d.label} · {r2(d.servings)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <p style={{ fontSize: 13, color: C.light }}>Loading…</p>
@@ -300,10 +372,10 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                       <option value="per_serving">Weight of one serving</option>
                     </select>
                     <input
-                      type="number" step="any"
+                      type="text" inputMode="decimal"
                       placeholder={(modes[t.subrecipeId] ?? "total") === "total" ? "Total grams" : "Grams per serving"}
                       value={weights[t.subrecipeId] ?? ""}
-                      onChange={e => setWeights(prev => ({ ...prev, [t.subrecipeId]: e.target.value }))}
+                      onChange={e => setWeights(prev => ({ ...prev, [t.subrecipeId]: decimalInput(e.target.value) }))}
                       style={{ padding: "7px 10px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, flex: "1 1 140px" }}
                     />
                   </div>
@@ -317,13 +389,13 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                           <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
                             Pot / tray (optional)
-                            <input type="number" step="any" min="0" inputMode="decimal" placeholder="g" value={tares[sid] ?? ""}
-                              onChange={e => setTares(prev => ({ ...prev, [sid]: e.target.value }))} style={field} />
+                            <input type="text" inputMode="decimal" placeholder="g" value={tares[sid] ?? ""}
+                              onChange={e => setTares(prev => ({ ...prev, [sid]: decimalInput(e.target.value) }))} style={field} />
                           </label>
                           <label style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
                             Servings in the pot
-                            <input type="number" step="any" min="0" inputMode="decimal" placeholder={String(Math.round(td * 100) / 100)} value={potServ[sid] ?? ""}
-                              onChange={e => setPotServ(prev => ({ ...prev, [sid]: e.target.value }))} style={{ ...field, width: 90 }} />
+                            <input type="text" inputMode="decimal" placeholder={String(r2(td))} value={potServingsFor(sid)}
+                              onChange={e => setPotServ(prev => ({ ...prev, [sid]: decimalInput(e.target.value) }))} style={{ ...field, width: 90 }} />
                           </label>
                         </div>
                         {(potList.length > 0 || onAddPot) && (
@@ -359,6 +431,11 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                             <br />
                             <strong>Portion now: {fmtG(s.today)}</strong> for {Math.round(td * 100) / 100} servings
                             {s.aside > 0.5 && <><br /><strong>Put aside: {fmtG(s.aside)}</strong> ({Math.round(s.asideServings * 100) / 100} servings)</>}
+                            {numIn(potServingsFor(sid)) > 0 && numIn(potServingsFor(sid)) < td - 0.01 && (
+                              <><br /><strong style={{ color: C.error }}>
+                                ⚠️ The pot holds {r2(numIn(potServingsFor(sid)))} servings but these boxes need {r2(td)}: portions will be smaller. Pick fewer days?
+                              </strong></>
+                            )}
                           </div>
                         )}
                       </div>
@@ -367,6 +444,37 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                 </div>
               );
             })}
+
+            {(() => {
+              const noted = rows.filter(r => r.clientId && notes?.[r.clientId]?.length);
+              if (noted.length === 0 && out.size === 0) return null;
+              const allNotedOut = noted.length > 0 && noted.every(r => out.has(r.key));
+              return (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "10px 0 0" }}>
+                  {noted.length > 0 && !allNotedOut && (
+                    <button onClick={() => setOut(prev => new Set([...prev, ...noted.map(r => r.key)]))} style={{
+                      minHeight: 38, padding: "0 12px", borderRadius: 19, fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+                      background: "#fff3dc", color: "#5c3d00", border: "1.5px solid #e8c46a",
+                    }}>
+                      💬 Leave out clients with a note ({noted.length})
+                    </button>
+                  )}
+                  {out.size > 0 && (
+                    <>
+                      <span style={{ fontSize: 12.5, color: "#8a5a00", fontWeight: 700 }}>
+                        {out.size} left out: not counted, not saved. Portion them from their own pot after.
+                      </span>
+                      <button onClick={() => setOut(new Set())} style={{ background: "none", border: "none", padding: 0, color: C.tealDark, fontSize: 12.5, textDecoration: "underline", cursor: "pointer" }}>
+                        Put everyone back
+                      </button>
+                      <button onClick={() => setOut(new Set(rows.filter(r => !out.has(r.key)).map(r => r.key)))} style={{ background: "none", border: "none", padding: 0, color: C.tealDark, fontSize: 12.5, textDecoration: "underline", cursor: "pointer" }}>
+                        Swap (portion only them)
+                      </button>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
 
             <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse", margin: "10px 0 14px" }}>
               <thead>
@@ -391,10 +499,20 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                 </tr>
               </thead>
               <tbody>
-                {rows.map(row => (
-                  <tr key={row.key} style={{ borderBottom: `1px solid ${C.offWhite}` }}>
+                {rows.map(row => {
+                  const isOut = out.has(row.key);
+                  return (
+                  <tr key={row.key} style={{ borderBottom: `1px solid ${C.offWhite}`, background: isOut ? "#f4f1ee" : undefined, opacity: isOut ? 0.6 : 1 }}>
                     <td style={{ padding: "6px 6px", fontWeight: 600 }}>
-                      {row.name}
+                      <span style={{ textDecoration: isOut ? "line-through" : "none" }}>{row.name}</span>
+                      <button
+                        onClick={() => setOut(prev => { const n = new Set(prev); n.has(row.key) ? n.delete(row.key) : n.add(row.key); return n; })}
+                        style={{
+                          marginLeft: 6, padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, cursor: "pointer",
+                          background: isOut ? C.primary : C.white, color: isOut ? C.white : C.muted, border: `1px solid ${isOut ? C.primary : C.border}`,
+                        }}>
+                        {isOut ? "Put back" : "Leave out"}
+                      </button>
                       {row.allergens.size > 0 && (
                         <span
                           title={`Allergic to ${ALLERGENS.filter(a => row.allergens.has(a.key)).map(a => a.label).join(", ")}`}
@@ -421,17 +539,20 @@ export default function PortioningPanel({ targets, onClose, onSaved, batchId, po
                         <Fragment key={t.subrecipeId}>
                           <td style={{ padding: "6px 6px", color: C.muted }}>{entries?.length ? rowDemand(row, t.subrecipeId) : "—"}</td>
                           <td style={{ padding: "6px 6px", fontWeight: 600, color: showSaved ? C.muted : C.tealDark }}>
-                            {grams != null
-                              ? `${grams.toFixed(1)}g`
-                              : showSaved
-                                ? `${savedGrams.toFixed(1)}g ✓ saved`
-                                : "—"}
+                            {isOut && !showSaved
+                              ? "left out"
+                              : grams != null
+                                ? `${grams.toFixed(1)}g`
+                                : showSaved
+                                  ? `${savedGrams.toFixed(1)}g ✓ saved`
+                                  : "—"}
                           </td>
                         </Fragment>
                       );
                     })}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
 

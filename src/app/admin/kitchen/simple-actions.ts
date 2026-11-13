@@ -1,7 +1,8 @@
 "use server";
 
 import { requireAdmin } from "@/lib/supabase/requireAdmin";
-import type { Equipment, KitchenPerson, Person, PlanItem, PlanStep, Result } from "@/lib/kitchenSimple";
+import { buildRows, type Equipment, type KitchenPerson, type Person, type PlanItem, type PlanStep, type Result } from "@/lib/kitchenSimple";
+import { getKitchenSimple } from "@/lib/flask";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const TENANT = 1;
@@ -257,6 +258,29 @@ export async function deleteStep(id: number) {
     const { supabase } = await requireAdmin();
     const { error } = await (supabase.from("kitchen_plan_step") as any).delete().eq("id", id).eq("tenant_id", TENANT);
     check(error, "delete the step");
+    return null;
+  });
+}
+
+// Wrap-up: the next cooking day's orders and saved plan. Its "I have"
+// suggestions come from what's saved for today (cooked amounts included),
+// so confirm today's cooking first.
+export async function loadNextDay(date: string) {
+  return safe(async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("Bad date.");
+    const [data, plan] = await Promise.all([getKitchenSimple(date), loadPlan(date)]);
+    return { cookDate: data.cook_date, dates: data.dates, rows: buildRows(data, plan.previous), items: plan.items };
+  });
+}
+
+// Mark an ingredient as kept in the freezer (Wrap-up's "take out tonight").
+export async function setIngredientFrozen(ingredientId: number, frozen: boolean) {
+  return safe(async () => {
+    const { supabase } = await requireAdmin();
+    const { data, error } = await (supabase.from("ingredient") as any)
+      .update({ stored_frozen: frozen }).eq("id", ingredientId).select("id");
+    check(error, "save the freezer setting");
+    if (!data?.length) throw new Error("Couldn't save the freezer setting: ingredient not found.");
     return null;
   });
 }

@@ -1056,6 +1056,8 @@ export interface KitchenSimpleComment {
   recipe_id: number | null;
   recipe_name: string | null;
   instruction: string | null;
+  // That client's servings of this subrecipe that day (missing from an older backend).
+  servings?: number;
 }
 
 export interface KitchenSimpleRow {
@@ -1069,6 +1071,8 @@ export interface KitchenSimpleRow {
   people_by_date?: Record<string, number>;
   boxes_by_date?: Record<string, number>;
   today_mpdr_ids: number[];
+  // Meal ids per day of the week (missing from an older backend).
+  mpdr_ids_by_date?: Record<string, number[]>;
   comments: KitchenSimpleComment[];
   // Same, for the days after the cook date (missing from an older backend).
   upcoming_comments?: (KitchenSimpleComment & { date: string })[];
