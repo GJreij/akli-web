@@ -17,10 +17,12 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
   const menuId = Number(id);
   const supabase = await createClient();
 
-  const [menuRes, compositionRes, recipesRes] = await Promise.all([
+  const [menuRes, compositionRes, recipesRes, closuresRes] = await Promise.all([
     supabase.from("weekly_menu").select("*").eq("id", menuId).single(),
-    supabase.from("weekly_menu_recipe").select("*").eq("weekly_menu_id", menuId),
+    // Fixed order: without it an edited row comes back last and jumps to the bottom.
+    supabase.from("weekly_menu_recipe").select("*").eq("weekly_menu_id", menuId).order("id"),
     supabase.from("recipe").select("*").order("name"),
+    supabase.from("kitchen_closure").select("closure_date").is("kitchen_id", null),
   ]);
 
   const menu = menuRes.data as WeeklyMenu | null;
@@ -30,7 +32,11 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
   const allRecipes = (recipesRes.data ?? []) as Recipe[];
   const recipesById = new Map(allRecipes.map(r => [r.id, r]));
 
-  const menuDays = menu.week_start_date && menu.week_end_date ? weekdaysBetween(menu.week_start_date, menu.week_end_date) : [];
+  // Closed days (kitchen_closure) get no chip.
+  const closed = new Set(((closuresRes.data ?? []) as { closure_date: string }[]).map(c => String(c.closure_date).slice(0, 10)));
+  const menuDays = menu.week_start_date && menu.week_end_date
+    ? weekdaysBetween(menu.week_start_date, menu.week_end_date).filter(d => !closed.has(d))
+    : [];
   const deleteAction = deleteWeeklyMenu.bind(null, menu.id);
   const addRecipeAction = addWeeklyMenuRecipe.bind(null, menu.id);
 

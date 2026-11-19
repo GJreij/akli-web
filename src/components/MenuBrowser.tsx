@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconArrowLeft, IconLeaf, IconChevronDown } from "@tabler/icons-react";
+import { IconArrowLeft, IconLeaf } from "@tabler/icons-react";
 import { conflictingAllergens, type AllergenFlags } from "@/lib/allergens";
-import { availabilityLabel } from "@/lib/menuAvailability";
+import { availabilityLabel, isAvailableOn, isRestricted, weekdaysBetween } from "@/lib/menuAvailability";
 
 type RecipeRow = {
   id: number; name: string | null; description: string | null; photo: string | null;
@@ -20,30 +20,11 @@ type WeekMenu = {
   recipes: RecipeRow[];
 };
 
-type Filter = "all" | "breakfast" | "lunch" | "dinner" | "snack";
 
 const C = {
   primary: "#063330", teal: "#67b1b0", offWhite: "#eee9e6",
   muted: "#5c5c5c", light: "#9a9a9a", border: "#e0dbd5", white: "#ffffff",
 };
-
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-function isCurrentWeek(start: string, end: string) {
-  const now = new Date();
-  return new Date(start) <= now && new Date(end) >= now;
-}
-
-function matchesFilter(r: RecipeRow, filter: Filter) {
-  if (filter === "all")       return true;
-  if (filter === "breakfast") return !!r.could_be_breakfast;
-  if (filter === "lunch")     return !!r.could_be_lunch;
-  if (filter === "dinner")    return !!r.could_be_dinner;
-  if (filter === "snack")     return !!r.could_be_snack;
-  return true;
-}
 
 function mealLabel(r: RecipeRow): string {
   const labels = [];
@@ -52,39 +33,6 @@ function mealLabel(r: RecipeRow): string {
   if (r.could_be_dinner)    labels.push("Dinner");
   if (r.could_be_snack)     labels.push("Snack");
   return labels.join(" · ") || "Meal";
-}
-
-// ── Filter bar (used both in header and sticky float) ─────────────────────────
-
-function FilterBar({ filter, setFilter }: { filter: Filter; setFilter: (f: Filter) => void }) {
-  const filters: { id: Filter; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "breakfast", label: "Breakfast" },
-    { id: "lunch", label: "Lunch" },
-    { id: "dinner", label: "Dinner" },
-    { id: "snack", label: "Snack" },
-  ];
-  return (
-    <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 2 }}>
-      {filters.map(f => (
-        <button
-          key={f.id}
-          onClick={() => setFilter(f.id)}
-          style={{
-            flexShrink: 0,
-            padding: "6px 14px", borderRadius: 20,
-            border: `1px solid ${filter === f.id ? C.teal : C.border}`,
-            background: filter === f.id ? C.teal : C.white,
-            color: filter === f.id ? C.primary : C.muted,
-            fontSize: 12.5, fontWeight: filter === f.id ? 600 : 400,
-            cursor: "pointer", transition: "all 0.15s",
-          }}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
 // ── Recipe modal ──────────────────────────────────────────────────────────────
@@ -144,28 +92,28 @@ function RecipeModal({ recipe, conflicts, onClose }: { recipe: RecipeRow; confli
 
 // ── Recipe card ───────────────────────────────────────────────────────────────
 
-function AvailabilityTag({ label }: { label: string }) {
-  return (
-    <span style={{ fontSize: 10.5, fontWeight: 600, color: "#8a5a00", background: "#fbf1dc", padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
-      {label}
-    </span>
-  );
+/** "Wed only" / "Mon & Tue only" — short, since the day is already picked. */
+function daysTag(dates: string[] | null | undefined): string | null {
+  if (!isRestricted(dates)) return null;
+  const names = [...new Set(dates!.map(d => d.slice(0, 10)))].sort()
+    .map(d => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short" }));
+  return `${names.join(" & ")} only`;
 }
 
 function RecipeCard({ recipe, conflicts, onClick }: { recipe: RecipeRow; conflicts: { key: string; label: string }[]; onClick: () => void }) {
-  const onlyOn = availabilityLabel(recipe.available_dates);
+  const tag = daysTag(recipe.available_dates);
   const [imgErr, setImgErr] = useState(false);
   return (
     <button
       onClick={onClick}
       style={{
         display: "flex", gap: 12, alignItems: "center",
-        width: "100%", padding: "12px 0",
+        width: "100%", padding: "11px 0",
         background: "none", border: "none",
         cursor: "pointer", textAlign: "left",
       }}
     >
-      <div style={{ width: 62, height: 62, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 58, height: 58, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
         {recipe.photo && !imgErr ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={recipe.photo} alt="" onError={() => setImgErr(true)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -174,17 +122,16 @@ function RecipeCard({ recipe, conflicts, onClick }: { recipe: RecipeRow; conflic
         )}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13.5, fontWeight: 600, margin: "0 0 3px", color: "#1a1a1a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <p style={{ fontSize: 14, fontWeight: 600, margin: 0, color: "#1a1a1a", lineHeight: 1.3 }}>
           {recipe.name}
         </p>
-        <p style={{ fontSize: 11.5, color: C.light, margin: 0 }}>{mealLabel(recipe)}</p>
-        {onlyOn && (
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
-            <AvailabilityTag label={onlyOn} />
-          </div>
+        {tag && (
+          <span style={{ display: "inline-block", marginTop: 5, fontSize: 10.5, fontWeight: 600, color: "#8a5a00", background: "#fbf1dc", padding: "2px 7px", borderRadius: 20 }}>
+            {tag}
+          </span>
         )}
         {conflicts.length > 0 && (
-          <p style={{ fontSize: 11, color: "#b45309", fontWeight: 600, margin: "2px 0 0" }}>
+          <p style={{ fontSize: 11, color: "#b45309", fontWeight: 600, margin: "4px 0 0" }}>
             Contains: {conflicts.map(c => c.label).join(", ")}
           </p>
         )}
@@ -193,85 +140,81 @@ function RecipeCard({ recipe, conflicts, onClick }: { recipe: RecipeRow; conflic
   );
 }
 
-// ── Collapsible week section ──────────────────────────────────────────────────
+// ── Day picker ────────────────────────────────────────────────────────────────
 
-function WeekSection({
-  week, filter, onRecipeClick, defaultOpen, userAllergens, recipeAllergens,
-}: {
-  week: WeekMenu;
-  filter: Filter;
-  onRecipeClick: (r: RecipeRow) => void;
-  defaultOpen: boolean;
-  userAllergens: AllergenFlags;
-  recipeAllergens: Record<number, AllergenFlags>;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const visible = week.recipes.filter(r => matchesFilter(r, filter));
-  const current = isCurrentWeek(week.week_start_date, week.week_end_date);
-
-  if (visible.length === 0) return null;
-
+function DayStrip({ days, selected, onSelect }: { days: string[]; selected: string; onSelect: (d: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>(`[data-day="${selected}"]`)?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [selected]);
   return (
-    <div style={{ marginBottom: 14 }}>
-      {/* Collapsible header */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: C.white, border: `1px solid ${C.border}`,
-          borderRadius: open ? "12px 12px 0 0" : 12,
-          padding: "14px 16px", cursor: "pointer", transition: "border-radius 0.2s",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 15, fontWeight: 500, color: "#1a1a1a" }}>
-            {fmt(week.week_start_date)} – {fmt(week.week_end_date)}
-          </span>
-          {current && (
-            <span style={{ fontSize: 10.5, fontWeight: 600, color: "#437b7b", background: "#e8f4f4", padding: "2px 8px", borderRadius: 20 }}>
-              This week
-            </span>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 11.5, color: C.light }}>{visible.length} dishes</span>
-          <IconChevronDown
-            size={16}
-            color={C.light}
-            style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
-          />
-        </div>
-      </button>
-
-      {/* Collapsible body */}
-      {open && (
-        <div style={{
-          background: C.white,
-          border: `1px solid ${C.border}`, borderTop: "none",
-          borderRadius: "0 0 12px 12px",
-          padding: "0 14px",
-        }}>
-          {visible.map((r, i) => (
-            <div key={r.id} style={{ borderBottom: i < visible.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <RecipeCard recipe={r} conflicts={conflictingAllergens(userAllergens, recipeAllergens[r.id])} onClick={() => onRecipeClick(r)} />
-            </div>
-          ))}
-        </div>
-      )}
+    <div ref={ref} style={{ display: "flex", gap: 8, overflowX: "auto", padding: "2px 20px 4px", scrollbarWidth: "none" }}>
+      {days.map((d, i) => {
+        const dt = new Date(d + "T12:00:00");
+        const on = d === selected;
+        const newWeek = i > 0 && (new Date(days[i - 1] + "T12:00:00").getTime() + 3 * 864e5 < dt.getTime() || dt.getDay() === 1);
+        return (
+          <button
+            key={d}
+            data-day={d}
+            aria-label={dt.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+            aria-pressed={on}
+            onClick={() => onSelect(d)}
+            style={{
+              flexShrink: 0, width: 54, padding: "8px 0 7px", borderRadius: 14,
+              marginLeft: newWeek ? 10 : 0,
+              border: `1px solid ${on ? C.primary : C.border}`,
+              background: on ? C.primary : C.white,
+              color: on ? C.white : "#1a1a1a",
+              cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+            }}
+          >
+            <span style={{ fontSize: 11, opacity: on ? 0.75 : 0.55 }}>{dt.toLocaleDateString("en-GB", { weekday: "short" })}</span>
+            <span style={{ fontSize: 17, fontWeight: 600, lineHeight: 1.2 }}>{dt.getDate()}</span>
+            <span style={{ fontSize: 10, opacity: on ? 0.75 : 0.55 }}>{dt.toLocaleDateString("en-GB", { month: "short" })}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function MenuBrowser({ menus, userAllergens, recipeAllergens }: {
+const SECTIONS: { key: string; title: string; match: (r: RecipeRow) => boolean }[] = [
+  { key: "breakfast", title: "Breakfast", match: r => !!r.could_be_breakfast },
+  { key: "main", title: "Lunch & dinner", match: r => !r.could_be_breakfast && !!(r.could_be_lunch || r.could_be_dinner) },
+  { key: "snack", title: "Snacks", match: r => !r.could_be_breakfast && !r.could_be_lunch && !r.could_be_dinner && !!r.could_be_snack },
+];
+
+export default function MenuBrowser({ menus, userAllergens, recipeAllergens, today, closedDays = [] }: {
   menus: WeekMenu[];
   userAllergens: AllergenFlags;
   recipeAllergens: Record<number, AllergenFlags>;
+  today: string;
+  closedDays?: string[];
 }) {
   const router = useRouter();
-  const [filter, setFilter] = useState<Filter>("all");
   const [activeRecipe, setActiveRecipe] = useState<RecipeRow | null>(null);
+
+  // Every open weekday from today on that some menu covers, with what's cooked that day.
+  const dayMenus = useMemo(() => {
+    const closed = new Set(closedDays);
+    const byDay = new Map<string, Map<number, RecipeRow>>();
+    for (const w of menus) {
+      for (const d of weekdaysBetween(w.week_start_date, w.week_end_date)) {
+        if (d < today || closed.has(d)) continue;
+        const m = byDay.get(d) ?? new Map<number, RecipeRow>();
+        for (const r of w.recipes) if (isAvailableOn(r.available_dates, d)) m.set(r.id, r);
+        byDay.set(d, m);
+      }
+    }
+    return new Map([...byDay.entries()].filter(([, m]) => m.size > 0).sort(([a], [b]) => a.localeCompare(b)));
+  }, [menus, today, closedDays]);
+
+  const days = [...dayMenus.keys()];
+  const [selected, setSelected] = useState<string>(days[0] ?? "");
+  const recipes = [...(dayMenus.get(selected)?.values() ?? [])];
 
   return (
     <div style={{ minHeight: "100vh", background: C.offWhite }}>
@@ -288,39 +231,52 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens }: {
           <span style={{ fontFamily: "'Playfair Display', serif", fontSize: 17, color: "rgba(255,255,255,0.5)", fontWeight: 500 }}>akli</span>
         </div>
         <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 500, color: C.white, margin: 0 }}>
-          Upcoming menus
+          Menu
         </h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Pick a day to see what&apos;s cooking</p>
       </div>
 
-      {/* Sticky floating filter bar */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 20,
-        background: "rgba(238,233,230,0.88)",
-        backdropFilter: "blur(10px)",
-        borderBottom: `1px solid ${C.border}`,
-        padding: "10px 20px",
-      }}>
-        <FilterBar filter={filter} setFilter={setFilter} />
-      </div>
+      {/* Sticky day picker */}
+      {days.length > 0 && (
+        <div style={{
+          position: "sticky", top: 0, zIndex: 20,
+          background: "rgba(238,233,230,0.92)", backdropFilter: "blur(10px)",
+          borderBottom: `1px solid ${C.border}`, padding: "10px 0",
+        }}>
+          <DayStrip days={days} selected={selected} onSelect={setSelected} />
+        </div>
+      )}
 
-      {/* Weeks */}
-      <div style={{ padding: "20px 20px 90px" }}>
-        {menus.length === 0 && (
+      <div style={{ padding: "18px 20px 90px" }}>
+        {days.length === 0 ? (
           <p style={{ textAlign: "center", color: C.light, marginTop: 40, fontSize: 13 }}>
             No upcoming menus published yet.
           </p>
+        ) : (
+          <>
+            <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 19, fontWeight: 500, margin: "0 0 14px", color: "#1a1a1a" }}>
+              {new Date(selected + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+            </h3>
+            {SECTIONS.map(sec => {
+              const list = recipes.filter(sec.match);
+              if (list.length === 0) return null;
+              return (
+                <div key={sec.key} style={{ marginBottom: 16 }}>
+                  <p style={{ margin: "0 0 6px 2px", fontSize: 11.5, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    {sec.title} <span style={{ color: C.light, fontWeight: 400 }}>· {list.length}</span>
+                  </p>
+                  <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: "0 14px" }}>
+                    {list.map((r, i) => (
+                      <div key={r.id} style={{ borderBottom: i < list.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                        <RecipeCard recipe={r} conflicts={conflictingAllergens(userAllergens, recipeAllergens[r.id])} onClick={() => setActiveRecipe(r)} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </>
         )}
-        {menus.map((week, i) => (
-          <WeekSection
-            key={week.id}
-            week={week}
-            filter={filter}
-            onRecipeClick={setActiveRecipe}
-            defaultOpen={i === 0}
-            userAllergens={userAllergens}
-            recipeAllergens={recipeAllergens}
-          />
-        ))}
       </div>
 
       {activeRecipe && (
