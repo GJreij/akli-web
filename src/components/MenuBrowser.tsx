@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { IconArrowLeft, IconLeaf, IconChevronDown } from "@tabler/icons-react";
 import { conflictingAllergens, type AllergenFlags } from "@/lib/allergens";
 import { availabilityLabel } from "@/lib/menuAvailability";
-import type { ChefsPicks } from "@/lib/flask";
 
 type RecipeRow = {
   id: number; name: string | null; description: string | null; photo: string | null;
@@ -145,14 +144,6 @@ function RecipeModal({ recipe, conflicts, onClose }: { recipe: RecipeRow; confli
 
 // ── Recipe card ───────────────────────────────────────────────────────────────
 
-function ChefsPickBadge() {
-  return (
-    <span style={{ fontSize: 10.5, fontWeight: 600, color: "#437b7b", background: "#e8f4f4", padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
-      Chef&apos;s pick
-    </span>
-  );
-}
-
 function AvailabilityTag({ label }: { label: string }) {
   return (
     <span style={{ fontSize: 10.5, fontWeight: 600, color: "#8a5a00", background: "#fbf1dc", padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
@@ -161,7 +152,7 @@ function AvailabilityTag({ label }: { label: string }) {
   );
 }
 
-function RecipeCard({ recipe, conflicts, onClick, chefsPick }: { recipe: RecipeRow; conflicts: { key: string; label: string }[]; onClick: () => void; chefsPick?: boolean }) {
+function RecipeCard({ recipe, conflicts, onClick }: { recipe: RecipeRow; conflicts: { key: string; label: string }[]; onClick: () => void }) {
   const onlyOn = availabilityLabel(recipe.available_dates);
   const [imgErr, setImgErr] = useState(false);
   return (
@@ -187,10 +178,9 @@ function RecipeCard({ recipe, conflicts, onClick, chefsPick }: { recipe: RecipeR
           {recipe.name}
         </p>
         <p style={{ fontSize: 11.5, color: C.light, margin: 0 }}>{mealLabel(recipe)}</p>
-        {(onlyOn || chefsPick) && (
+        {onlyOn && (
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
-            {chefsPick && <ChefsPickBadge />}
-            {onlyOn && <AvailabilityTag label={onlyOn} />}
+            <AvailabilityTag label={onlyOn} />
           </div>
         )}
         {conflicts.length > 0 && (
@@ -206,7 +196,7 @@ function RecipeCard({ recipe, conflicts, onClick, chefsPick }: { recipe: RecipeR
 // ── Collapsible week section ──────────────────────────────────────────────────
 
 function WeekSection({
-  week, filter, onRecipeClick, defaultOpen, userAllergens, recipeAllergens, chefsPicks,
+  week, filter, onRecipeClick, defaultOpen, userAllergens, recipeAllergens,
 }: {
   week: WeekMenu;
   filter: Filter;
@@ -214,15 +204,8 @@ function WeekSection({
   defaultOpen: boolean;
   userAllergens: AllergenFlags;
   recipeAllergens: Record<number, AllergenFlags>;
-  chefsPicks: ChefsPicks;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  // A dish is badged when it's the most-ordered of its group on any day of this week so far.
-  const picksThisWeek = new Set<number>();
-  for (const [date, groups] of Object.entries(chefsPicks)) {
-    if (date < week.week_start_date || date > week.week_end_date) continue;
-    for (const rid of Object.values(groups)) if (rid != null) picksThisWeek.add(rid);
-  }
   const visible = week.recipes.filter(r => matchesFilter(r, filter));
   const current = isCurrentWeek(week.week_start_date, week.week_end_date);
 
@@ -270,7 +253,7 @@ function WeekSection({
         }}>
           {visible.map((r, i) => (
             <div key={r.id} style={{ borderBottom: i < visible.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <RecipeCard recipe={r} conflicts={conflictingAllergens(userAllergens, recipeAllergens[r.id])} onClick={() => onRecipeClick(r)} chefsPick={picksThisWeek.has(r.id)} />
+              <RecipeCard recipe={r} conflicts={conflictingAllergens(userAllergens, recipeAllergens[r.id])} onClick={() => onRecipeClick(r)} />
             </div>
           ))}
         </div>
@@ -281,11 +264,10 @@ function WeekSection({
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-export default function MenuBrowser({ menus, userAllergens, recipeAllergens, chefsPicks = {} }: {
+export default function MenuBrowser({ menus, userAllergens, recipeAllergens }: {
   menus: WeekMenu[];
   userAllergens: AllergenFlags;
   recipeAllergens: Record<number, AllergenFlags>;
-  chefsPicks?: ChefsPicks;
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
@@ -337,7 +319,6 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens, che
             defaultOpen={i === 0}
             userAllergens={userAllergens}
             recipeAllergens={recipeAllergens}
-            chefsPicks={chefsPicks}
           />
         ))}
       </div>

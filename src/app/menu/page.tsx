@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import MenuBrowser from "@/components/MenuBrowser";
 import { emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
-import { getChefsPicks } from "@/lib/flask";
 import { collectMenuRecipes } from "@/lib/menuAvailability";
 
 export default async function MenuPage() {
@@ -45,12 +44,7 @@ export default async function MenuPage() {
     return { id: w.id, week_start_date: w.week_start_date!, week_end_date: w.week_end_date!, recipes };
   });
 
-  const lastMenuDay = menus.reduce((m, w) => (w.week_end_date > m ? w.week_end_date : m), today);
-  const pickEnd = new Date(today + "T12:00:00");
-  pickEnd.setDate(pickEnd.getDate() + 30);
-  const pickEndStr = lastMenuDay < pickEnd.toISOString().slice(0, 10) ? lastMenuDay : pickEnd.toISOString().slice(0, 10);
-
-  const [userRes, allergenRows, chefsPicks] = await Promise.all([
+  const [userRes, allergenRows] = await Promise.all([
     supabase
       .from("user")
       .select("celery, cereals_containing_gluten, crustaceans, eggs, fish, lupin, milk, molluscs, sulphites, mustard, peanuts, sesame, soybeans, tree_nuts")
@@ -62,7 +56,6 @@ export default async function MenuPage() {
       const { data } = await supabase.from("recipe_allergen").select("*").in("recipe_id", recipeIds);
       return data ?? [];
     })(),
-    menus.length ? getChefsPicks(today, pickEndStr) : Promise.resolve({}),
   ]);
   const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...(userRes.data ?? {}) };
   const recipeAllergens: Record<number, AllergenFlags> = {};
@@ -71,5 +64,5 @@ export default async function MenuPage() {
     recipeAllergens[recipe_id] = flags;
   }
 
-  return <MenuBrowser menus={menus} userAllergens={userAllergens} recipeAllergens={recipeAllergens} chefsPicks={chefsPicks} />;
+  return <MenuBrowser menus={menus} userAllergens={userAllergens} recipeAllergens={recipeAllergens} />;
 }
