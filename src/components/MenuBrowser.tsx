@@ -179,6 +179,55 @@ function DayStrip({ days, selected, onSelect }: { days: string[]; selected: stri
   );
 }
 
+function WeekStrip({ weeks, selected, onSelect }: { weeks: { id: number; first: string; last: string }[]; selected: number; onSelect: (id: number) => void }) {
+  const fmt = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return (
+    <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "2px 20px 4px", scrollbarWidth: "none" }}>
+      {weeks.map(w => {
+        const on = w.id === selected;
+        return (
+          <button
+            key={w.id}
+            aria-pressed={on}
+            onClick={() => onSelect(w.id)}
+            style={{
+              flexShrink: 0, padding: "10px 14px", borderRadius: 14,
+              border: `1px solid ${on ? C.primary : C.border}`,
+              background: on ? C.primary : C.white, color: on ? C.white : "#1a1a1a",
+              fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            {fmt(w.first)} – {fmt(w.last)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModeSwitch({ mode, setMode }: { mode: "day" | "week"; setMode: (m: "day" | "week") => void }) {
+  return (
+    <div role="tablist" style={{ display: "inline-flex", marginTop: 14, padding: 3, borderRadius: 20, background: "rgba(255,255,255,0.12)" }}>
+      {(["day", "week"] as const).map(m => (
+        <button
+          key={m}
+          role="tab"
+          aria-selected={mode === m}
+          onClick={() => setMode(m)}
+          style={{
+            padding: "6px 16px", borderRadius: 17, border: "none", cursor: "pointer",
+            fontSize: 12.5, fontWeight: 600,
+            background: mode === m ? C.white : "transparent",
+            color: mode === m ? C.primary : "rgba(255,255,255,0.75)",
+          }}
+        >
+          {m === "day" ? "By day" : "By week"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const SECTIONS: { key: string; title: string; match: (r: RecipeRow) => boolean }[] = [
@@ -214,7 +263,23 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens, tod
 
   const days = [...dayMenus.keys()];
   const [selected, setSelected] = useState<string>(days[0] ?? "");
-  const recipes = [...(dayMenus.get(selected)?.values() ?? [])];
+  const [mode, setMode] = useState<"day" | "week">("day");
+
+  // Weeks that still have an open day ahead, labelled by their first/last open day.
+  const weeks = useMemo(() => menus
+    .map(w => {
+      const open = days.filter(d => d >= w.week_start_date && d <= w.week_end_date);
+      return { id: w.id, first: open[0], last: open[open.length - 1], recipes: w.recipes };
+    })
+    .filter(w => w.first), [menus, days]);
+  const [weekId, setWeekId] = useState<number>(weeks[0]?.id ?? 0);
+  const week = weeks.find(w => w.id === weekId) ?? weeks[0];
+
+  // Week view: every-day dishes first, then limited ones in day order.
+  const firstDay = (r: RecipeRow) => (isRestricted(r.available_dates) ? [...r.available_dates!].sort()[0] : "");
+  const recipes = mode === "day"
+    ? [...(dayMenus.get(selected)?.values() ?? [])]
+    : [...(week?.recipes ?? [])].sort((a, b) => firstDay(a).localeCompare(firstDay(b)));
 
   return (
     <div style={{ minHeight: "100vh", background: C.offWhite }}>
@@ -233,7 +298,10 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens, tod
         <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 24, fontWeight: 500, color: C.white, margin: 0 }}>
           Menu
         </h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(255,255,255,0.65)" }}>Pick a day to see what&apos;s cooking</p>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "rgba(255,255,255,0.65)" }}>
+          {mode === "day" ? "Pick a day to see what's cooking" : "Everything on the menu that week"}
+        </p>
+        {days.length > 0 && <ModeSwitch mode={mode} setMode={setMode} />}
       </div>
 
       {/* Sticky day picker */}
@@ -243,7 +311,9 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens, tod
           background: "rgba(238,233,230,0.92)", backdropFilter: "blur(10px)",
           borderBottom: `1px solid ${C.border}`, padding: "10px 0",
         }}>
-          <DayStrip days={days} selected={selected} onSelect={setSelected} />
+          {mode === "day"
+            ? <DayStrip days={days} selected={selected} onSelect={setSelected} />
+            : <WeekStrip weeks={weeks} selected={week?.id ?? 0} onSelect={setWeekId} />}
         </div>
       )}
 
@@ -255,8 +325,15 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens, tod
         ) : (
           <>
             <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 19, fontWeight: 500, margin: "0 0 14px", color: "#1a1a1a" }}>
-              {new Date(selected + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
+              {mode === "day"
+                ? new Date(selected + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })
+                : week && `${new Date(week.first + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long" })} – ${new Date(week.last + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "long" })}`}
             </h3>
+            {mode === "week" && (
+              <p style={{ margin: "-8px 0 14px", fontSize: 12.5, color: C.muted }}>
+                Dishes without a tag are cooked every day that week.
+              </p>
+            )}
             {SECTIONS.map(sec => {
               const list = recipes.filter(sec.match);
               if (list.length === 0) return null;
