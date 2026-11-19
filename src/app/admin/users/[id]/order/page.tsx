@@ -7,6 +7,7 @@ import type { Database } from "@/lib/supabase/types";
 import { parsePref, type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
 import type { AllergenFlags } from "@/lib/allergens";
+import { collectMenuRecipes } from "@/lib/menuAvailability";
 
 // Same shape order/new/page.tsx builds for the client-facing flow — kept in
 // sync manually since OrderFlow imports its own copy of this type too.
@@ -42,7 +43,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("weekly_menu")
       .select(`id, week_start_date, week_end_date,
-        weekly_menu_recipe(recipe(id, name, photo, could_be_breakfast, could_be_lunch, could_be_dinner, could_be_snack))`)
+        weekly_menu_recipe(available_dates, recipe(id, name, photo, could_be_breakfast, could_be_lunch, could_be_dinner, could_be_snack))`)
       .gte("week_end_date", today)
       .eq("tenant_id", 1)
       .order("week_start_date", { ascending: true }),
@@ -134,7 +135,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
   const closureDays = ((closuresRes.data ?? []) as unknown as ClosureRow[])
     .map(c => ({ date: c.closure_date, reason: c.reason }));
 
-  type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { recipe: RecipeRow | null }[] };
+  type RawWeek = { id: number; week_start_date: string | null; week_end_date: string | null; weekly_menu_recipe: { available_dates: string[] | null; recipe: RecipeRow | null }[] };
   const weeks: OrderableWeek[] = ((menusRes.data ?? []) as unknown as RawWeek[]).map(w => {
     const weekdays: string[] = [];
     const start = new Date(w.week_start_date + "T12:00:00");
@@ -147,14 +148,7 @@ export default async function AdminOrderForUserPage({ params }: { params: Promis
       if (iso >= minOrderable) weekdays.push(iso);
     }
 
-    const recipes: RecipeRow[] = [];
-    const seen = new Set<number>();
-    for (const wmr of (w.weekly_menu_recipe ?? []) as { recipe: RecipeRow | null }[]) {
-      if (wmr.recipe && !seen.has(wmr.recipe.id)) {
-        seen.add(wmr.recipe.id);
-        recipes.push(wmr.recipe);
-      }
-    }
+    const recipes = collectMenuRecipes(w.weekly_menu_recipe);
 
     return { id: w.id, week_start_date: w.week_start_date!, week_end_date: w.week_end_date!, weekdays, recipes };
   }).filter(w => w.weekdays.length > 0);

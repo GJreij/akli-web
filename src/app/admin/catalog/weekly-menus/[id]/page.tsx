@@ -4,10 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { PageHeader, Section, inputStyle, dangerButton, subtleButton, th, td, C } from "@/components/admin/ui";
 import SubmitButton from "@/components/admin/SubmitButton";
-import { deleteWeeklyMenu, addWeeklyMenuRecipe, removeWeeklyMenuRecipe } from "../actions";
+import MenuDayChips from "@/components/admin/MenuDayChips";
+import { weekdaysBetween } from "@/lib/menuAvailability";
+import { deleteWeeklyMenu, addWeeklyMenuRecipe, removeWeeklyMenuRecipe, setWeeklyMenuRecipeDates } from "../actions";
 
 type WeeklyMenu = Database["public"]["Tables"]["weekly_menu"]["Row"];
-type WeeklyMenuRecipe = Database["public"]["Tables"]["weekly_menu_recipe"]["Row"];
+type WeeklyMenuRecipe = Database["public"]["Tables"]["weekly_menu_recipe"]["Row"] & { available_dates: string[] | null };
 type Recipe = Database["public"]["Tables"]["recipe"]["Row"];
 
 export default async function WeeklyMenuDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,12 +30,13 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
   const allRecipes = (recipesRes.data ?? []) as Recipe[];
   const recipesById = new Map(allRecipes.map(r => [r.id, r]));
 
+  const menuDays = menu.week_start_date && menu.week_end_date ? weekdaysBetween(menu.week_start_date, menu.week_end_date) : [];
   const deleteAction = deleteWeeklyMenu.bind(null, menu.id);
   const addRecipeAction = addWeeklyMenuRecipe.bind(null, menu.id);
 
   return (
     <div style={{ padding: "16px 20px 60px" }}>
-      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+      <div style={{ maxWidth: 880, margin: "0 auto" }}>
         <Link href="/admin/catalog/weekly-menus" style={{ fontSize: 12.5, color: C.muted, textDecoration: "none" }}>← Back to weekly menus</Link>
         <PageHeader
           title={menu.name ?? `Week of ${menu.week_start_date}`}
@@ -48,9 +51,7 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
               <thead>
                 <tr>
                   <th style={th}>Recipe</th>
-                  <th style={th}>Available from</th>
-                  <th style={th}>Available to</th>
-                  <th style={th}>Always</th>
+                  <th style={th}>Days (none selected = every day)</th>
                   <th style={th}></th>
                 </tr>
               </thead>
@@ -61,9 +62,10 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
                   return (
                     <tr key={row.id}>
                       <td style={td}>{recipe?.name ?? `#${row.recipe_id}`}</td>
-                      <td style={{ ...td, color: C.muted }}>{row.always_available ? "—" : row.available_from ?? "—"}</td>
-                      <td style={{ ...td, color: C.muted }}>{row.always_available ? "—" : row.available_to ?? "—"}</td>
-                      <td style={{ ...td, color: C.muted }}>{row.always_available ? "Yes" : "No"}</td>
+                      <td style={td}>
+                        <MenuDayChips dates={menuDays} initial={row.available_dates}
+                          onSave={setWeeklyMenuRecipeDates.bind(null, menu.id, row.id)} />
+                      </td>
                       <td style={td}>
                         <form action={removeAction}>
                           <SubmitButton style={{ ...dangerButton, padding: "4px 10px", fontSize: 11.5 }} pendingText="…">Remove</SubmitButton>
@@ -81,11 +83,6 @@ export default async function WeeklyMenuDetailPage({ params }: { params: Promise
               <option value="">Select recipe…</option>
               {allRecipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
-            <input name="available_from" type="date" style={{ ...inputStyle, flex: "0 1 150px" }} />
-            <input name="available_to" type="date" style={{ ...inputStyle, flex: "0 1 150px" }} />
-            <label style={{ fontSize: 12.5, color: C.muted, display: "flex", alignItems: "center", gap: 6 }}>
-              <input type="checkbox" name="always_available" /> Always available
-            </label>
             <SubmitButton style={subtleButton} pendingText="Adding…">Add recipe</SubmitButton>
           </form>
         </Section>

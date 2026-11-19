@@ -361,6 +361,40 @@ export async function getAvailableRecipeIdsForDate(date: string): Promise<number
   }
 }
 
+// ─── /chefs_picks ───────────────────────────────────────────────────────────
+
+// "Chef's pick" = most-ordered dish of a day so far, per group
+// ("breakfast", "main" = lunch+dinner, "snack"); a group is absent until a
+// dish has a few orders. Badge only — on any failure return {} and the
+// UI simply shows no badge.
+export type ChefsPickGroup = "breakfast" | "main" | "snack";
+export type ChefsPicks = Record<string, Partial<Record<ChefsPickGroup, number>>>;
+
+export async function getChefsPicks(startDate: string, endDate: string): Promise<ChefsPicks> {
+  try {
+    const res = await fetch(`${FLASK_URL}/chefs_picks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+      cache: "no-store",
+    });
+    if (!res.ok) return {};
+    const json = await safeJson(res);
+    return (json?.picks && typeof json.picks === "object") ? json.picks : {};
+  } catch {
+    return {};
+  }
+}
+
+export function chefsPickGroup(mealType: string): ChefsPickGroup {
+  return mealType === "breakfast" ? "breakfast" : mealType === "snack" ? "snack" : "main";
+}
+
+/** Is `recipeId` the chef's pick for this date + meal type? */
+export function isChefsPick(picks: ChefsPicks, date: string, mealType: string, recipeId: number): boolean {
+  return picks[date]?.[chefsPickGroup(mealType)] === recipeId;
+}
+
 // ─── /modify_meal/preview & /modify_meal/confirm ────────────────────────────
 
 export interface MealSwapRequest {

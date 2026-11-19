@@ -22,6 +22,7 @@ import { type PrefRating } from "@/lib/preferences";
 import { beirutISODate } from "@/lib/dates";
 import { conflictingAllergens, emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 import AddressForm from "@/components/AddressForm";
+import SwapRecipeList from "@/components/SwapRecipeList";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,8 @@ type RecipeRow = {
   id: number; name: string | null; photo: string | null;
   could_be_breakfast: boolean | null; could_be_lunch: boolean | null;
   could_be_dinner: boolean | null; could_be_snack: boolean | null;
+  /** Dates within the week this dish is cooked; null = every day. */
+  available_dates?: string[] | null;
 };
 
 export type OrderableWeek = {
@@ -1196,8 +1199,8 @@ function RemoveMealSheet({ meal, onClose, onSpread, onEatingOut }: {
 
 // ─── Replace meal sheet ───────────────────────────────────────────────────────
 
-function ReplaceMealSheet({ meal, recipes, onClose, onSelect, mode = "replace" }: {
-  meal: { meal_type: MealType; recipe_id?: number }; recipes: RecipeRow[]; onClose: () => void; onSelect: (id: number) => void;
+function ReplaceMealSheet({ meal, date, recipes, onClose, onSelect, mode = "replace" }: {
+  meal: { meal_type: MealType; recipe_id?: number }; date: string; recipes: RecipeRow[]; onClose: () => void; onSelect: (id: number) => void;
   mode?: "replace" | "add";
 }) {
   const compatible = recipes.filter(r => {
@@ -1213,26 +1216,10 @@ function ReplaceMealSheet({ meal, recipes, onClose, onSelect, mode = "replace" }
       <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 480, background: C.white, borderRadius: "18px 18px 0 0", maxHeight: "72dvh", display: "flex", flexDirection: "column", animation: "slideUp 0.22s ease" }}>
         <div style={{ padding: "20px 20px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
           <h3 style={{ margin: "0 0 3px", fontSize: 18 }}>{mode === "add" ? `Add ${meal.meal_type}` : `Replace ${meal.meal_type}`}</h3>
-          <p style={{ margin: 0, fontSize: 12.5, color: C.muted }}>Pick something from this week&apos;s menu</p>
+          <p style={{ margin: 0, fontSize: 12.5, color: C.muted }}>What&apos;s cooking on {new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" })}</p>
         </div>
         <div style={{ overflowY: "auto", padding: "6px 20px 36px" }}>
-          {compatible.length === 0
-            ? <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
-            : compatible.map(r => (
-              <button key={r.id} onClick={() => onSelect(r.id)}
-                style={{ width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "12px 0", background: "none", border: "none", borderBottom: `1px solid ${C.border}`, cursor: "pointer", textAlign: "left" }}
-              >
-                <div style={{ width: 52, height: 52, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {r.photo
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={r.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <IconLeaf size={18} color={C.light} />
-                  }
-                </div>
-                <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
-              </button>
-            ))
-          }
+          <SwapRecipeList recipes={compatible} date={date} mealType={meal.meal_type} onPick={onSelect} />
         </div>
       </div>
     </div>
@@ -2669,6 +2656,7 @@ export default function OrderFlow({
         {replaceTarget && (
           <ReplaceMealSheet
             meal={replaceTarget.meal}
+            date={replaceTarget.date}
             recipes={
               orderableWeeks.find(w =>
                 replaceTarget.date >= w.week_start_date &&
@@ -2699,6 +2687,7 @@ export default function OrderFlow({
           <ReplaceMealSheet
             mode="add"
             meal={{ meal_type: addTarget.mealType }}
+            date={addTarget.date}
             recipes={
               orderableWeeks.find(w =>
                 addTarget.date >= w.week_start_date &&

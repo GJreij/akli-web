@@ -16,6 +16,7 @@ import {
   previewCancellationDiscountImpact, type DiscountImpactPreview,
 } from "@/lib/flask";
 import { createClient } from "@/lib/supabase/client";
+import SwapRecipeList, { useWeekMenuDates } from "@/components/SwapRecipeList";
 import { setDeliveryCutlery } from "@/app/orders/actions";
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -1066,6 +1067,8 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
   const [pickedRecipeId, setPickedRecipeId] = useState<number | null>(null);
   const [recipes, setRecipes] = useState<SwapCandidateRecipe[] | null>(null);
   const [availableRecipeIds, setAvailableRecipeIds] = useState<number[] | null>(null);
+  // available_dates for this week's menu, to show dishes cooked on other days.
+  const weekDates = useWeekMenuDates(selectedDay?.date);
   // Distinct from availableRecipeIds being null/empty because there's
   // genuinely no weekly menu configured — this means the check itself
   // couldn't run, so the recipe list below is unfiltered and may include
@@ -1190,12 +1193,11 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
         || (t === "lunch"     && r.could_be_lunch)
         || (t === "dinner"    && r.could_be_dinner)
         || (t === "snack"     && r.could_be_snack);
-    if (!typeOk) return false;
-    // Restrict to what's actually on the weekly menu for this date — fall
-    // back to unfiltered could_be_X matching if no menu is configured.
-    if (availableRecipeIds && availableRecipeIds.length > 0) return availableRecipeIds.includes(r.id);
-    return true;
+    return typeOk;
   });
+  // What's on the menu that day (backend), or null = no menu configured /
+  // check failed → everything valid for the meal type is offered.
+  const availableSet = availableRecipeIds && availableRecipeIds.length > 0 ? new Set(availableRecipeIds) : null;
 
   return (
     <div onClick={step === "done" ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -1307,26 +1309,16 @@ function ModifyMealSheet({ plan, userId, onClose, onSubmitted }: {
                 showed the unfiltered list and let an off-menu recipe be picked. */}
             {recipes === null || (availableRecipeIds === null && !menuLoadFailed) ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>Loading recipes…</p>
-            ) : compatibleRecipes.length === 0 ? (
-              <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
             ) : (
               <div style={{ maxHeight: "55dvh", overflowY: "auto" }}>
-                {compatibleRecipes.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => pickRecipe(r)}
-                    style={{
-                      width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "12px 0",
-                      background: "none", border: "none", borderBottom: `1px solid ${C.border}`,
-                      cursor: "pointer", textAlign: "left",
-                    }}
-                  >
-                    <div style={{ width: 52, height: 52, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {r.photo ? <img src={r.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <IconLeaf size={18} color={C.light} />}
-                    </div>
-                    <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
-                  </button>
-                ))}
+                <SwapRecipeList
+                  recipes={compatibleRecipes}
+                  date={selectedDay?.date ?? ""}
+                  mealType={selectedMeal?.meal_type ?? ""}
+                  availableIds={availableSet}
+                  datesById={weekDates}
+                  onPick={id => { const r = compatibleRecipes.find(x => x.id === id); if (r) pickRecipe(r); }}
+                />
               </div>
             )}
 
@@ -1571,6 +1563,8 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
   const [pickingFor, setPickingFor] = useState<PickTarget | null>(null);
   const [recipes, setRecipes] = useState<SwapCandidateRecipe[] | null>(null);
   const [availableRecipeIds, setAvailableRecipeIds] = useState<number[] | null>(null);
+  // available_dates for this week's menu, to show dishes cooked on other days.
+  const weekDates = useWeekMenuDates(selectedDay?.date);
   // See ModifyMealSheet's identical flag — distinguishes "couldn't check
   // the menu" from "no menu configured," which otherwise look the same.
   const [menuLoadFailed, setMenuLoadFailed] = useState(false);
@@ -1712,10 +1706,9 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
         || (t === "lunch"     && r.could_be_lunch)
         || (t === "dinner"    && r.could_be_dinner)
         || (t === "snack"     && r.could_be_snack);
-    if (!typeOk) return false;
-    if (availableRecipeIds && availableRecipeIds.length > 0) return availableRecipeIds.includes(r.id);
-    return true;
+    return typeOk;
   });
+  const availableSet = availableRecipeIds && availableRecipeIds.length > 0 ? new Set(availableRecipeIds) : null;
 
   return (
     <div onClick={step === "done" ? undefined : onClose} style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -1895,26 +1888,16 @@ function DayEditSheet({ plan, userId, onClose, onSubmitted }: {
                 showed the unfiltered list and let an off-menu recipe be picked. */}
             {recipes === null || (availableRecipeIds === null && !menuLoadFailed) ? (
               <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>Loading recipes…</p>
-            ) : compatibleRecipes.length === 0 ? (
-              <p style={{ textAlign: "center", color: C.light, marginTop: 24, fontSize: 13 }}>No alternatives available for this meal type.</p>
             ) : (
               <div style={{ maxHeight: "55dvh", overflowY: "auto" }}>
-                {compatibleRecipes.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => pickRecipeFor(r)}
-                    style={{
-                      width: "100%", display: "flex", gap: 12, alignItems: "center", padding: "12px 0",
-                      background: "none", border: "none", borderBottom: `1px solid ${C.border}`,
-                      cursor: "pointer", textAlign: "left",
-                    }}
-                  >
-                    <div style={{ width: 52, height: 52, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: C.offWhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      {r.photo ? <img src={r.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <IconLeaf size={18} color={C.light} />}
-                    </div>
-                    <span style={{ fontSize: 13.5, fontWeight: 600 }}>{r.name}</span>
-                  </button>
-                ))}
+                <SwapRecipeList
+                  recipes={compatibleRecipes}
+                  date={selectedDay?.date ?? ""}
+                  mealType={pickingFor.mealType ?? ""}
+                  availableIds={availableSet}
+                  datesById={weekDates}
+                  onPick={id => { const r = compatibleRecipes.find(x => x.id === id); if (r) pickRecipeFor(r); }}
+                />
               </div>
             )}
 
