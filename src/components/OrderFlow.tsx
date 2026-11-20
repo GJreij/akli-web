@@ -1973,6 +1973,12 @@ export default function OrderFlow({
 
   // ── Advanced planning (beta) ──────────────────────────────────────────────────
   const advEnabled = !!advancedPlanning?.enabled;
+  const shapeTargets = {
+    kcal: finalKcalOverride ?? originalKcal,
+    protein: macroTarget?.protein_g ?? null,
+    carbs: macroTarget?.carbs_g ?? null,
+    fat: macroTarget?.fat_g ?? null,
+  };
   // The account's saved day shape wins over this browser's copy.
   useEffect(() => {
     if (!advEnabled || !userId) return;
@@ -2142,6 +2148,72 @@ export default function OrderFlow({
     });
   }
 
+  // What a switched-off meal's calories become (shared by the old Meal types
+  // card and the beta "Your day" card).
+  function renderKcalWidget() {
+    if (suggestedKcal === null || originalKcal === null) return null;
+    return (
+      <div style={{ padding: "14px 16px", borderTop: `1px solid ${C.border}`, background: "#f5fafa" }}>
+        <p style={{ margin: "0 0 4px", fontSize: 12.5, fontWeight: 600, color: C.tealDark }}>Adjusted daily target</p>
+        <p style={{ margin: "0 0 14px", fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
+          Without{" "}
+          <strong>{eatingOutMeals.map(m => MEAL_LABELS[m]).join(" & ")}</strong>,
+          your day goes from{" "}
+          <strong>{Math.round(originalKcal).toLocaleString()} kcal</strong> to{" "}
+          <strong>{suggestedKcal.toLocaleString()} kcal</strong>.
+          Nudge it if you&apos;ll eat more or less at that meal.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
+          <button
+            onClick={() => setKcalAdjustment(a => a - 50)}
+            disabled={finalKcalOverride! <= 500}
+            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}
+          >−</button>
+          <div style={{ textAlign: "center", minWidth: 90 }}>
+            <p style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 500 }}>
+              {finalKcalOverride!.toLocaleString()}
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: C.light }}>kcal / day</p>
+          </div>
+          <button
+            onClick={() => setKcalAdjustment(a => a + 50)}
+            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}
+          >+</button>
+        </div>
+        {kcalAdjustment !== 0 && (
+          <button
+            onClick={() => setKcalAdjustment(0)}
+            style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", fontSize: 11.5, color: C.light, cursor: "pointer", textDecoration: "underline" }}
+          >
+            Reset to suggested ({suggestedKcal.toLocaleString()} kcal)
+          </button>
+        )}
+      </div>
+    );
+  }
+  function renderSkipChoice(meal: MealType) {
+    return (
+      <div key={meal} style={{ background: "#faf9f7", border: `1px solid ${C.border}`, borderRadius: 10, padding: "9px 11px", marginBottom: 8 }}>
+        <p style={{ margin: "0 0 7px", fontSize: 12, color: C.muted }}>Without <b>{MEAL_LABELS[meal].toLowerCase()}</b>, what happens to those calories?</p>
+        <div style={{ display: "flex", gap: 7 }}>
+          {([false, true] as const).map(out => {
+            const on = !!mealEatingOut[meal] === out;
+            return (
+              <button
+                key={String(out)} onClick={() => setMealEatingOut(p => ({ ...p, [meal]: out }))}
+                style={{
+                  flex: 1, padding: "8px 6px", borderRadius: 9, fontSize: 12, cursor: "pointer",
+                  border: `2px solid ${on ? C.tealDark : C.border}`, background: on ? "#f0f7f7" : C.white,
+                  fontWeight: on ? 600 : 400, color: on ? C.tealDark : C.muted,
+                }}
+              >{out ? "I'll sort this one myself" : "Spread across my meals"}</button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── Generate ──────────────────────────────────────────────────────────────────
 
   async function handleGenerate() {
@@ -2164,10 +2236,10 @@ export default function OrderFlow({
         include_weekends: weekendsOn,
         meals: mealsParam,
         kcal_override: finalKcalOverride,
-        ...(advEnabled && shapeIsSet(dayShape, includedMeals) ? shapeRequest(dayShape, includedMeals) : {}),
+        ...(advEnabled && shapeIsSet(dayShape, includedMeals) ? shapeRequest(dayShape, includedMeals, shapeTargets) : {}),
       });
       if (advEnabled && shapeIsSet(dayShape, includedMeals)) {
-        track("day_shape_used", { mode: dayShape.mode, shape: shapeRequest(dayShape, includedMeals) }, "order");
+        track("day_shape_used", { mode: dayShape.mode, shape: shapeRequest(dayShape, includedMeals, shapeTargets) }, "order");
       }
       result.days = result.days.filter(d => selected.has(d.date));
 
@@ -2553,20 +2625,25 @@ export default function OrderFlow({
             <ShapeYourDay
               shape={dayShape}
               onChange={setDayShape}
-              meals={ALL_MEALS.filter(m => !excludedMeals.has(m))}
-              targets={{
-                kcal: finalKcalOverride ?? originalKcal,
-                protein: macroTarget?.protein_g ?? null,
-                carbs: macroTarget?.carbs_g ?? null,
-                fat: macroTarget?.fat_g ?? null,
-              }}
+              allMeals={ALL_MEALS}
+              excludedMeals={[...excludedMeals]}
+              onToggleMeal={m => toggleMeal(m as MealType)}
+              mealExtras={excludedMeals.size > 0 && excludedMeals.size < ALL_MEALS.length ? (
+                <>
+                  {ALL_MEALS.filter(m => excludedMeals.has(m)).map(renderSkipChoice)}
+                  {renderKcalWidget() && <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>{renderKcalWidget()}</div>}
+                </>
+              ) : excludedMeals.size >= ALL_MEALS.length ? (
+                <p style={{ margin: 0, fontSize: 12, color: C.error }}>Pick at least one meal.</p>
+              ) : null}
+              targets={shapeTargets}
               weekendsOn={weekendsOn}
               savedLabel={shapeSaved === "account" ? "Saved to your account for your next orders." : "Saved on this device for your next orders."}
             />
           )}
 
-          {/* ── Meal type preferences (collapsible) ── */}
-          {(() => {
+          {/* ── Meal type preferences (collapsible) — inside "Your day" for beta clients ── */}
+          {!advEnabled && (() => {
             const includedCount = ALL_MEALS.length - excludedMeals.size;
             const allExcluded   = excludedMeals.size >= ALL_MEALS.length;
             const summaryText   = excludedMeals.size === 0
@@ -2672,44 +2749,7 @@ export default function OrderFlow({
                     })}
 
                     {/* Kcal target widget — only when at least one meal is "eating out" */}
-                    {suggestedKcal !== null && originalKcal !== null && (
-                      <div style={{ padding: "14px 16px", borderTop: `1px solid ${C.border}`, background: "#f5fafa" }}>
-                        <p style={{ margin: "0 0 4px", fontSize: 12.5, fontWeight: 600, color: C.tealDark }}>Adjusted daily target</p>
-                        <p style={{ margin: "0 0 14px", fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
-                          Without{" "}
-                          <strong>{eatingOutMeals.map(m => MEAL_LABELS[m]).join(" & ")}</strong>,
-                          your day goes from{" "}
-                          <strong>{Math.round(originalKcal).toLocaleString()} kcal</strong> to{" "}
-                          <strong>{suggestedKcal.toLocaleString()} kcal</strong>.
-                          Nudge it if you&apos;ll eat more or less at that meal.
-                        </p>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16 }}>
-                          <button
-                            onClick={() => setKcalAdjustment(a => a - 50)}
-                            disabled={finalKcalOverride! <= 500}
-                            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}
-                          >−</button>
-                          <div style={{ textAlign: "center", minWidth: 90 }}>
-                            <p style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 500 }}>
-                              {finalKcalOverride!.toLocaleString()}
-                            </p>
-                            <p style={{ margin: 0, fontSize: 11, color: C.light }}>kcal / day</p>
-                          </div>
-                          <button
-                            onClick={() => setKcalAdjustment(a => a + 50)}
-                            style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted }}
-                          >+</button>
-                        </div>
-                        {kcalAdjustment !== 0 && (
-                          <button
-                            onClick={() => setKcalAdjustment(0)}
-                            style={{ display: "block", margin: "10px auto 0", background: "none", border: "none", fontSize: 11.5, color: C.light, cursor: "pointer", textDecoration: "underline" }}
-                          >
-                            Reset to suggested ({suggestedKcal.toLocaleString()} kcal)
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {renderKcalWidget()}
                   </div>
                 )}
               </div>

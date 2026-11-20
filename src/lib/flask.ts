@@ -74,7 +74,8 @@ export interface GenerateMealPlanRequest {
 export type MealShapeSetting =
   | "light" | "normal" | "big"
   | { pct: number }
-  | { kcal?: number; protein?: number; carbs?: number; fat?: number };
+  | { kcal?: number; protein?: number; carbs?: number; fat?: number }
+  | "even"; // only as meal_sizes._rest: meals without a goal share the rest equally
 
 export interface SubrecipeMacros {
   protein: number; carbs: number; fat: number; kcal: number;
