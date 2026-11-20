@@ -135,7 +135,7 @@ export default function SideSaladsSection({
   function fallbackHint(salad: SideSalad) {
     if (ratings[salad.id] !== "dislike") return null;
     if (!salad.isHouse && !houseDisliked) return `You'll get the ${house!.name} instead.`;
-    return "You'll get no salad — the rest of your plate gets bigger instead.";
+    return "You'll get no salad — and more food across your day instead.";
   }
 
   return (
@@ -164,7 +164,7 @@ export default function SideSaladsSection({
           <span>
             <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#1a1a1a" }}>Don&apos;t include any side salad</span>
             <span style={{ display: "block", fontSize: 11, color: C.muted, marginTop: 2 }}>
-              Same calories — the rest of your plate gets bigger instead.
+              Same calories — you get more food across your day instead.
             </span>
           </span>
           <span aria-hidden style={{

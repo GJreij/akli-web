@@ -85,8 +85,8 @@ function Header({
             <button
               onClick={onSignIn}
               style={{
-                background: "none", border: "none", padding: 0, cursor: "pointer",
-                fontSize: 13, color: "#67b1b0", fontWeight: 600,
+                background: "none", border: "1px solid #67b1b0", borderRadius: 20, padding: "5px 13px", cursor: "pointer",
+                fontSize: 12.5, color: "#9fd4d3", fontWeight: 600,
               }}
             >
               Sign in
@@ -244,6 +244,7 @@ export default function AkliApp({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saveError, setSaveError]   = useState<string | null>(null);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
   // Set when this email already belongs to an admin-created guest profile —
@@ -368,6 +369,13 @@ export default function AkliApp({
   function startOnboarding() {
     track("landing_cta_click", { source: "in_app_landing" }, "onboarding");
     transition("onboarding", () => { setPath(FULL_PATH); setIdx(0); });
+  }
+
+  // `from` is logged so we can see which entry point existing customers use.
+  function goToSignIn(from: string, prefillEmail?: string) {
+    track("signin_cta_click", { from }, "auth");
+    if (prefillEmail) setSiEmail(prefillEmail);
+    transition("signin");
   }
 
   function handleSkip() {
@@ -502,7 +510,19 @@ export default function AkliApp({
 
     // 1. Create auth user
     const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
-    if (authError) { track("signup_failed", { reason: authError.message }, "auth"); setSaveError(authError.message); setSaveLoading(false); return; }
+    if (authError) {
+      track("signup_failed", { reason: authError.message }, "auth");
+      const msg = authError.message.toLowerCase();
+      if (msg.includes("already registered")) {
+        setAlreadyRegistered(true);
+      } else if (msg.includes("password should contain")) {
+        setSaveErrors(p => ({ ...p, password: "Use at least one lowercase letter, one capital letter and one number." }));
+      } else {
+        setSaveError(authError.message);
+      }
+      setSaveLoading(false);
+      return;
+    }
 
     const userId = authData.user?.id;
     if (!userId) { setSaveError("Sign-up failed. Please try again."); setSaveLoading(false); return; }
@@ -599,7 +619,12 @@ export default function AkliApp({
         onLogoClick={() => transition(
           screen === "home" || screen === "delivery" ? "home" : "signin"
         )}
-        onSignIn={screen === "landing" ? () => transition("signin") : undefined}
+        // Visible on the landing page AND through onboarding (not the final
+        // account-creation step) — existing customers often only realise
+        // mid-flow that they already have an account.
+        onSignIn={screen === "landing" || (screen === "onboarding" && step !== "save")
+          ? () => goToSignIn(screen === "landing" ? "header_landing" : `header_${step}`)
+          : undefined}
       />
 
       {/* ── Screen content ── */}
@@ -831,7 +856,12 @@ export default function AkliApp({
             {step === "goal" && (
               <div>
                 <h3 style={{ margin: "0 0 4px", fontSize: 20 }}>What brings you to Akli?</h3>
-                <p style={{ fontSize: 13, color: C.muted, margin: "0 0 18px" }}>Pick what fits best. You can change this later.</p>
+                <p style={{ fontSize: 13, color: C.muted, margin: "0 0 6px" }}>Pick what fits best. You can change this later.</p>
+                <p style={{ fontSize: 12.5, color: C.light, margin: "0 0 18px" }}>
+                  Ordered with us before?{" "}
+                  <a href="#" onClick={e => { e.preventDefault(); goToSignIn("goal_step"); }}
+                    style={{ color: C.tealDark, fontWeight: 600, textDecoration: "underline" }}>Sign in</a>
+                </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
                   {([
                     { id: "lose",     label: "Lose weight",    Icon: IconTrendingDown },
@@ -865,11 +895,6 @@ export default function AkliApp({
                   </div>
                   <IconChevronRight size={16} color={C.light} style={{ flexShrink: 0 }} />
                 </button>
-                <p style={{ fontSize: 12, textAlign: "center", marginTop: 16, color: C.light }}>
-                  Have an account?{" "}
-                  <a href="#" onClick={e => { e.preventDefault(); transition("signin"); }}
-                    style={{ color: C.teal, textDecoration: "none" }}>Sign in</a>
-                </p>
               </div>
             )}
 
@@ -1349,7 +1374,7 @@ export default function AkliApp({
                 {/* Email */}
                 <div style={{ marginBottom: 10 }}>
                   <input type="email" placeholder="Email address" autoComplete="email"
-                    value={email} onChange={e => { setEmail(e.target.value); setSaveErrors(p => ({ ...p, email: "" })); }} />
+                    value={email} onChange={e => { setEmail(e.target.value); setAlreadyRegistered(false); setSaveErrors(p => ({ ...p, email: "" })); }} />
                   {saveErrors.email && <p className="field-error">{saveErrors.email}</p>}
                 </div>
 
@@ -1369,6 +1394,16 @@ export default function AkliApp({
                   />
                   {saveErrors.confirmPassword && <p className="field-error">{saveErrors.confirmPassword}</p>}
                 </div>
+
+                {alreadyRegistered && (
+                  <div style={{ background: "#f0f7f7", borderRadius: 10, padding: "12px 14px", margin: "4px 0 8px" }}>
+                    <p style={{ margin: "0 0 2px", fontSize: 13.5, fontWeight: 600, color: C.primary }}>You already have an account</p>
+                    <p style={{ margin: "0 0 10px", fontSize: 12, color: C.tealDark }}>This email is already registered with Akli.</p>
+                    <button className="btn-primary" onClick={() => goToSignIn("signup_already_registered", email.trim())}>
+                      Sign in instead
+                    </button>
+                  </div>
+                )}
 
                 {saveError && (
                   <div style={{ fontSize: 12.5, color: C.error, background: "#fdf0ef", padding: "9px 12px", borderRadius: 7, marginBottom: 8 }}>
@@ -1468,19 +1503,19 @@ export default function AkliApp({
       {/* ────────── LANDING FOOTER ────────── */}
       {screen === "landing" && (
         <div style={{ padding: "14px 20px 20px", background: C.offWhite, flexShrink: 0 }}>
-          <button className="btn-primary" style={{ marginBottom: 12 }} onClick={startOnboarding}>
+          <button className="btn-primary" style={{ marginBottom: 8 }} onClick={startOnboarding}>
             Build my plan
           </button>
-          <p style={{ fontSize: 12.5, textAlign: "center", margin: 0 }}>
-            Already have an account?{" "}
-            <a
-              href="#"
-              onClick={e => { e.preventDefault(); transition("signin"); }}
-              style={{ color: C.teal, fontWeight: 500, textDecoration: "none" }}
-            >
-              Sign in
-            </a>
-          </p>
+          <button
+            onClick={() => goToSignIn("landing_button")}
+            style={{
+              width: "100%", padding: "13px 0", borderRadius: 12, cursor: "pointer",
+              border: `1px solid ${C.tealDark}`, background: C.white, color: C.tealDark,
+              fontSize: 14, fontWeight: 600,
+            }}
+          >
+            I already have an account
+          </button>
         </div>
       )}
 

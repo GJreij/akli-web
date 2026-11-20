@@ -4,7 +4,7 @@ import React, { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   IconArrowLeft, IconChevronDown, IconLeaf, IconReceipt2,
-  IconTruck, IconCheck, IconClock, IconBrandWhatsapp, IconX, IconBan,
+  IconTruck, IconCheck, IconClock, IconBrandWhatsapp, IconX, IconCalendarX,
   IconToolsKitchen2, IconCalendar, IconChevronRight,
 } from "@tabler/icons-react";
 import { beirutISODate } from "@/lib/dates";
@@ -194,7 +194,9 @@ function cancellationButtonState(plan: MealPlan): CancelButtonState {
   }
 
   if (cancellableDays(plan).length === 0) return { show: false, disabled: true, label: "" };
-  return { show: true, disabled: false, label: "Cancel" };
+  // "Cancel days", not "Cancel" — the plain word read as "cancel the whole
+  // order", when the sheet actually lets you pick individual days.
+  return { show: true, disabled: false, label: "Cancel days" };
 }
 
 // A day is individually modifiable (meal swap) once it's at least two full
@@ -293,13 +295,13 @@ function modifyButtonState(plan: MealPlan): ModifyButtonState {
   const hasPendingRequest = plan.meal_plan_day.some(d => d.status === "cancellation_pending");
   if (hasPendingRequest) {
     return {
-      show: true, disabled: true, label: "Change order",
+      show: true, disabled: true, label: "Change meals",
       reason: "You can't change meals while a cancellation is pending on this order.",
     };
   }
 
   if (modifiableDays(plan).length === 0) return { show: false, disabled: true, label: "" };
-  return { show: true, disabled: false, label: "Change order" };
+  return { show: true, disabled: false, label: "Change meals" };
 }
 
 // Excludes cancelled days — a partially-cancelled order's total should read
@@ -634,12 +636,17 @@ function ExplainerStep({ emoji, title, body }: { emoji: string; title: string; b
   );
 }
 
-function CancelOrderSheet({ plan, userId, onClose, onSubmitted }: {
-  plan: MealPlan; userId: string; onClose: () => void; onSubmitted: () => void;
+function CancelOrderSheet({ plan, userId, initialDayId, onClose, onSubmitted }: {
+  plan: MealPlan; userId: string; initialDayId?: number; onClose: () => void; onSubmitted: () => void;
 }) {
   const days = [...plan.meal_plan_day].sort((a, b) => (a.date ?? "").localeCompare(b.date ?? ""));
   const eligible = cancellableDays(plan);
-  const [selected, setSelected] = useState<Set<number>>(new Set(eligible.map(d => d.id)));
+  // Starts EMPTY (or with just the day the client tapped "Cancel this day"
+  // on). Pre-selecting every day made the sheet read as "cancel the whole
+  // order" and one careless tap on Continue requested exactly that.
+  const [selected, setSelected] = useState<Set<number>>(
+    new Set(initialDayId != null && eligible.some(d => d.id === initialDayId) ? [initialDayId] : [])
+  );
   const [phase, setPhase] = useState<"select" | "confirm" | "done">("select");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -701,26 +708,16 @@ function CancelOrderSheet({ plan, userId, onClose, onSubmitted }: {
         {phase === "select" && (
           <>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 }}>
-              <h3 style={{ margin: 0, fontSize: 18 }}>Request cancellation</h3>
+              <h3 style={{ margin: 0, fontSize: 18 }}>Which days do you want to cancel?</h3>
               <button onClick={onClose} style={{ background: "none", border: "none", padding: 2, color: C.light, cursor: "pointer" }}>
                 <IconX size={18} />
               </button>
             </div>
-            <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 10px" }}>
-              All eligible days are selected by default — uncheck any day you want to keep. Days within 48h of delivery can&apos;t be cancelled.
+            <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 14px" }}>
+              Tick the days you don&apos;t want — the rest of your order stays as it is. Days within 48h of delivery can&apos;t be cancelled.
             </p>
 
-            <button
-              onClick={() => setSelected(selected.size === eligible.length ? new Set() : new Set(eligible.map(d => d.id)))}
-              style={{
-                alignSelf: "flex-start", background: "none", border: "none", padding: 0, marginBottom: 12,
-                fontSize: 12, fontWeight: 600, color: C.tealDark, cursor: "pointer", textDecoration: "underline",
-              }}
-            >
-              {selected.size === eligible.length ? "Deselect all" : "Select all"}
-            </button>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
               {days.map(day => {
                 const cancellable = isDayCancellable(day);
                 const alreadyGone = day.status === "cancellation_pending" || day.status === "cancelled";
@@ -758,6 +755,18 @@ function CancelOrderSheet({ plan, userId, onClose, onSubmitted }: {
               })}
             </div>
 
+            {eligible.length > 1 && (
+              <button
+                onClick={() => setSelected(isWholeOrder ? new Set() : new Set(eligible.map(d => d.id)))}
+                style={{
+                  background: "none", border: "none", padding: 0, marginBottom: 14,
+                  fontSize: 12, color: C.light, cursor: "pointer", textDecoration: "underline",
+                }}
+              >
+                {isWholeOrder ? "Clear selection" : "Cancel the whole order instead"}
+              </button>
+            )}
+
             <button
               onClick={() => setPhase("confirm")}
               disabled={selected.size === 0}
@@ -768,10 +777,12 @@ function CancelOrderSheet({ plan, userId, onClose, onSubmitted }: {
               }}
             >
               {selected.size === 0
-                ? "Select at least one day"
-                : isWholeOrder
+                ? "Tick the days to cancel"
+                : isWholeOrder && days.length > 1
                   ? "Continue — cancel entire order"
-                  : `Continue — cancel ${selected.size} day${selected.size !== 1 ? "s" : ""}`}
+                  : selected.size === 1
+                    ? `Continue — cancel ${fmtDate(selectedDays[0]?.date ?? null)}`
+                    : `Continue — cancel ${selected.size} days`}
             </button>
           </>
         )}
@@ -2074,7 +2085,9 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
   const router = useRouter();
   const [open, setOpen]         = useState(false);
   const [receipt, setReceipt]   = useState(false);
-  const [cancelSheet, setCancelSheet] = useState(false);
+  // false = closed; otherwise open, optionally pre-ticking the day whose
+  // "Cancel this day" link was tapped.
+  const [cancelSheet, setCancelSheet] = useState<false | { dayId?: number }>(false);
   const [changeSheet, setChangeSheet] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
 
@@ -2100,6 +2113,7 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
         <CancelOrderSheet
           plan={plan}
           userId={userId}
+          initialDayId={cancelSheet.dayId}
           onClose={() => setCancelSheet(false)}
           onSubmitted={() => { setCancelSheet(false); router.refresh(); }}
         />
@@ -2182,20 +2196,20 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
             </button>
             {cancelState.show && (
               <button
-                onClick={() => !cancelState.disabled && setCancelSheet(true)}
+                onClick={() => !cancelState.disabled && setCancelSheet({})}
                 disabled={cancelState.disabled}
                 title={cancelState.reason}
                 style={{
                   flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                   padding: "9px 0", borderRadius: 10,
-                  border: `1px solid ${cancelState.disabled ? C.border : C.error}`,
+                  border: `1px solid ${cancelState.disabled ? C.border : "#cfc8c0"}`,
                   background: cancelState.disabled ? C.offWhite : C.white,
                   fontSize: 12.5, fontWeight: 500,
-                  color: cancelState.disabled ? C.light : C.error,
+                  color: cancelState.disabled ? C.light : C.muted,
                   cursor: cancelState.disabled ? "default" : "pointer",
                 }}
               >
-                <IconBan size={14} /> {cancelState.label}
+                <IconCalendarX size={14} /> {cancelState.label}
               </button>
             )}
             {modifyState.show && (
@@ -2286,6 +2300,17 @@ function OrderCard({ plan, userId }: { plan: MealPlan; userId: string }) {
                   {delivery && <DayCutlery day={day} delivery={delivery} />}
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {cancelState.show && !cancelState.disabled && isDayCancellable(day) && (
+                      <button
+                        onClick={() => setCancelSheet({ dayId: day.id })}
+                        style={{
+                          alignSelf: "flex-end", order: 99, marginTop: 2, background: "none", border: "none", padding: "2px 0",
+                          fontSize: 11.5, color: C.error, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                        }}
+                      >
+                        <IconCalendarX size={12} /> Cancel this day
+                      </button>
+                    )}
                     {meals.length === 0 ? (
                       <p style={{ margin: 0, fontSize: 12, color: C.light }}>No meals recorded</p>
                     ) : meals.map(m => (

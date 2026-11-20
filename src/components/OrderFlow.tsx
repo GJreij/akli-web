@@ -148,6 +148,37 @@ function sanitizeTopupInput(raw: string): string {
   return v;
 }
 
+// ─── Holiday hats on calendar cells (Dec 25 / Jan 1) ─────────────────────────
+function SantaHat() {
+  return (
+    <svg width="17" height="15" viewBox="0 0 34 30" aria-hidden="true"
+      style={{ position: "absolute", top: -9, right: -6, transform: "rotate(18deg)", pointerEvents: "none" }}>
+      <path d="M5 22 C8 9 17 2 27 5 C24 9 23 14 25 20 Z" fill="#d6312f" />
+      <circle cx="28" cy="6" r="4" fill="#fff" stroke="#e6dfd6" strokeWidth="1" />
+      <rect x="2" y="19" width="26" height="7" rx="3.5" fill="#fff" stroke="#e6dfd6" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function PartyHat() {
+  return (
+    <svg width="14" height="17" viewBox="0 0 28 34" aria-hidden="true"
+      style={{ position: "absolute", top: -11, right: -4, transform: "rotate(16deg)", pointerEvents: "none" }}>
+      <path d="M14 4 L25 30 H3 Z" fill="#7b5cd6" />
+      <path d="M10.5 12 L17.5 12 M7.5 19 L20.5 19 M4.8 26 L23.2 26" stroke="#f6c343" strokeWidth="3" />
+      <circle cx="14" cy="4" r="3.5" fill="#f25f8a" />
+      <path d="M3 30 H25" stroke="#e3c8ff" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function holidayHat(iso: string) {
+  const md = iso.slice(5);
+  if (md === "12-25") return <SantaHat />;
+  if (md === "01-01") return <PartyHat />;
+  return null;
+}
+
 function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDays, cancellationPendingDays, closureDays, weekendsSelectable, onPick, onRemoveDay }: {
   orderableWeeks: OrderableWeek[];
   rangeStart: string | null;
@@ -340,6 +371,7 @@ function RangePicker({ orderableWeeks, rangeStart, rangeEnd, removed, orderedDay
                       }}
                     >
                       {dayNum}
+                      {holidayHat(iso)}
                     </button>
                   );
                 })}
@@ -767,7 +799,7 @@ function SaladLine({ meal, onChange }: { meal: Meal; onChange: (change: SaladCha
       </button>
     );
   } else if (meal.side_salad_removed) {
-    label = "Salad removed — bigger portion instead";
+    label = "Salad removed — you get more food across your day instead";
     action = <button style={linkBtn} onClick={() => onChange({ removed: false })}>Add back</button>;
   } else if (options.length > 0) {
     label = "No salad (your preferences)";
@@ -1365,6 +1397,140 @@ function DailyBreakdown({ breakdown }: {
   );
 }
 
+// ─── Delivery card (checkout) ─────────────────────────────────────────────────
+// Mirrors Flask order_service._get_slot_period: a slot starting before noon
+// delivers the SAME day as the meals, otherwise the evening before. Keep the
+// two in sync — this is display only, the real delivery rows are written by
+// /confirm_order. Multi-day bags are grouped later by admin, so this shows the
+// default one-bag-per-day schedule.
+
+function isMorningSlot(s: Pick<DeliverySlot, "start_time">) {
+  return Number((s.start_time ?? "18:00").split(":")[0]) < 12;
+}
+
+function sortSlots(slots: DeliverySlot[]) {
+  return [...slots].sort((a, b) => (a.start_time ?? "").localeCompare(b.start_time ?? ""));
+}
+
+// Default = earliest evening-before slot (the usual service); only falls back
+// to a morning slot when no evening one exists. Explicit so adding a slot
+// never silently changes what customers get by default.
+function defaultSlotId(slots: DeliverySlot[]) {
+  const sorted = sortSlots(slots);
+  return (sorted.find(s => !isMorningSlot(s)) ?? sorted[0])?.id ?? null;
+}
+
+function SlotButton({ s, selected, onSelect }: { s: DeliverySlot; selected: boolean; onSelect: (id: number) => void }) {
+  return (
+    <button onClick={() => onSelect(s.id)} style={{
+      padding: "11px 14px", textAlign: "left", borderRadius: 10,
+      border: `2px solid ${selected ? C.tealDark : C.border}`,
+      background: selected ? "#f0f7f7" : C.white,
+      fontSize: 13.5, cursor: "pointer",
+    }}>
+      {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
+    </button>
+  );
+}
+
+function DeliveryCard({ slots, slotId, onSelect, mealDates }: {
+  slots: DeliverySlot[];
+  slotId: number | null;
+  onSelect: (id: number) => void;
+  mealDates: string[];
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const sorted = sortSlots(slots);
+  const slot = sorted.find(s => s.id === slotId) ?? sorted[0];
+  const start = slot?.start_time ?? "18:00";
+  const end   = slot?.end_time ?? "21:00";
+  const isMorning = slot ? isMorningSlot(slot) : false;
+  const eveningSlots = sorted.filter(s => !isMorningSlot(s));
+  const morningSlots = sorted.filter(s => isMorningSlot(s));
+  // Only split into categories when both kinds exist.
+  const grouped = eveningSlots.length > 0 && morningSlots.length > 0;
+  const slotWindow = `${fmtTime(start)} – ${fmtTime(end)}`;
+
+  const fmt = (iso: string) =>
+    new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const deliveryOf = (meal: string) => {
+    if (isMorning) return meal;
+    const d = new Date(meal + "T12:00:00");
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+
+  const dates = [...mealDates].sort();
+  const first = dates[0];
+  const part  = isMorning ? "morning" : "evening";
+
+  return (
+    <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
+      <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 10px" }}>Delivery</p>
+
+      {grouped ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 12 }}>
+          {[
+            { title: "The evening before", sub: "In your fridge for the morning", list: eveningSlots },
+            { title: "The same morning", sub: "Fresh on the day you eat", list: morningSlots },
+          ].map(g => (
+            <div key={g.title}>
+              <p style={{ margin: "0 0 1px", fontSize: 12, fontWeight: 600, color: C.primary }}>{g.title}</p>
+              <p style={{ margin: "0 0 7px", fontSize: 11, color: C.light }}>{g.sub}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {g.list.map(s => <SlotButton key={s.id} s={s} selected={slot?.id === s.id} onSelect={onSelect} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : sorted.length > 1 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          {sorted.map(s => <SlotButton key={s.id} s={s} selected={slot?.id === s.id} onSelect={onSelect} />)}
+        </div>
+      )}
+
+      {first && (
+        <div style={{ background: "#f0f7f7", borderRadius: 10, padding: "11px 12px" }}>
+          <p style={{ margin: "0 0 2px", fontSize: 11.5, color: C.tealDark }}>Your first bag arrives</p>
+          <p style={{ margin: "0 0 4px", fontSize: 15, fontWeight: 600, color: C.primary }}>
+            {fmt(deliveryOf(first))}, {part} · {slotWindow}
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: C.muted }}>
+            {isMorning
+              ? <>Delivered <strong>the same morning</strong> — for your {fmt(first)} meals.</>
+              : <>Delivered <strong>the evening before</strong> — for your {fmt(first)} meals.</>}
+          </p>
+        </div>
+      )}
+
+      {dates.length > 1 && (
+        <>
+          <button
+            onClick={() => setShowAll(o => !o)}
+            style={{ marginTop: 10, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer",
+              display: "flex", justifyContent: "space-between", alignItems: "center" }}
+          >
+            <span style={{ fontSize: 12.5, color: C.tealDark, fontWeight: 600 }}>
+              {showAll ? "Hide delivery days" : `See all ${dates.length} deliveries`}
+            </span>
+            <IconChevronDown size={15} color={C.tealDark} style={{ transform: showAll ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+          </button>
+          {showAll && (
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 7 }}>
+              {dates.map(d => (
+                <div key={d} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5 }}>
+                  <span style={{ color: C.muted }}>{fmt(deliveryOf(d))}, {part}</span>
+                  <span>for your {fmt(d)} meals</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Cutlery picker (checkout) ────────────────────────────────────────────────
 
 function CutleryPicker({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -1608,6 +1774,32 @@ function volumeDealMessage(rules: VolumeDiscountRule[], dayCount: number): strin
   return null;
 }
 
+// Nudge + fill-up bar toward the next automatic volume discount tier.
+function VolumeDealBar({ rules, dayCount }: { rules: VolumeDiscountRule[]; dayCount: number }) {
+  const deal = volumeDealMessage(rules, dayCount);
+  if (!deal) return null;
+  const next = nextVolumeRule(rules, dayCount);
+  const pct = next ? Math.min(100, Math.round((dayCount / next.min_order_days) * 100)) : 100;
+  const unlocked = !next;
+  return (
+    <div style={{ margin: "0 0 12px", background: "#e8f4f4", borderRadius: 8, padding: "7px 10px 8px" }}>
+      <p style={{ margin: "0 0 5px", fontSize: 12, fontWeight: 600, color: C.tealDark, textAlign: "center" }}>
+        {deal}
+      </p>
+      <div
+        role="progressbar" aria-valuemin={0} aria-valuemax={next?.min_order_days ?? dayCount} aria-valuenow={dayCount}
+        style={{ height: 3, borderRadius: 99, background: "#d3e8e8", overflow: "hidden" }}
+      >
+        <div style={{
+          width: `${pct}%`, height: "100%", borderRadius: 99,
+          background: unlocked ? C.tealDark : C.teal, opacity: 0.85,
+          transition: "width 0.35s ease",
+        }} />
+      </div>
+    </div>
+  );
+}
+
 export default function OrderFlow({
   userId, profile, macroTarget, orderableWeeks, deliverySlots, initialPrefs = {}, addresses = [], orderedDays = [],
   cancellationPendingDays = [], closureDays = [], volumeDiscountRules = [], recipeAllergens = {}, allowWeekendToggle = false,
@@ -1835,7 +2027,7 @@ export default function OrderFlow({
   const [checkoutLoading, setCoLoading] = useState(false);
   const [promoInput, setPromoInput]     = useState("");
   const [promoApplied, setPromoApplied] = useState("");
-  const [slotId, setSlotId]             = useState<number | null>(deliverySlots[0]?.id ?? null);
+  const [slotId, setSlotId]             = useState<number | null>(() => defaultSlotId(deliverySlots));
   const [addressList, setAddressList]   = useState<AddressRow[]>(addresses);
   const [addressId, setAddressId]       = useState<number | null>(
     addresses.find(a => a.is_default)?.id ?? addresses[0]?.id ?? null
@@ -2506,17 +2698,7 @@ export default function OrderFlow({
               );
             })()}
           </div>
-          {(() => {
-            const deal = volumeDealMessage(volumeDiscountRules, dayCount);
-            return deal ? (
-              <p style={{
-                margin: "0 0 12px", fontSize: 12, fontWeight: 600, color: C.tealDark,
-                background: "#e8f4f4", borderRadius: 8, padding: "7px 10px", textAlign: "center",
-              }}>
-                {deal}
-              </p>
-            ) : null;
-          })()}
+          <VolumeDealBar rules={volumeDiscountRules} dayCount={dayCount} />
           <button
             className="btn-primary"
             style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
@@ -2907,28 +3089,13 @@ export default function OrderFlow({
             )}
           </div>
 
-          {/* Delivery slot */}
-          <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "14px 16px", marginBottom: 12 }}>
-            <p style={{ fontSize: 12.5, fontWeight: 600, margin: "0 0 10px" }}>Delivery time</p>
-            {deliverySlots.length <= 1 ? (
-              <p style={{ fontSize: 13.5, color: "#1a1a1a", margin: 0 }}>
-                {deliverySlots[0] ? `${fmtTime(deliverySlots[0].start_time)} – ${fmtTime(deliverySlots[0].end_time)}` : "6pm – 9pm"}
-              </p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {deliverySlots.map(s => (
-                  <button key={s.id} onClick={() => setSlotId(s.id)} style={{
-                    padding: "11px 14px", textAlign: "left", borderRadius: 10,
-                    border: `2px solid ${slotId === s.id ? C.tealDark : C.border}`,
-                    background: slotId === s.id ? "#f0f7f7" : C.white,
-                    fontSize: 13.5, cursor: "pointer",
-                  }}>
-                    {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Delivery — when the first bag arrives, rest on demand */}
+          <DeliveryCard
+            slots={deliverySlots}
+            slotId={slotId}
+            onSelect={setSlotId}
+            mealDates={(plan?.days ?? []).map(d => d.date)}
+          />
 
           {/* Cutlery — off by default (less waste), so it's styled to stand
               out: a client who expected cutlery and didn't get it would
