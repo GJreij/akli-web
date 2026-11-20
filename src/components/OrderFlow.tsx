@@ -23,7 +23,7 @@ import { beirutISODate } from "@/lib/dates";
 import { conflictingAllergens, emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 import AddressForm from "@/components/AddressForm";
 import SwapRecipeList from "@/components/SwapRecipeList";
-import ShapeYourDay, { ShapeReport, DayShapeAlert, parseStoredShape, shapeIsSet, shapeRequest, type DayShape } from "@/components/ShapeYourDay";
+import ShapeYourDay, { ShapeReport, DayShapeAlert, parseStoredShape, parseShape, shapeIsSet, shapeRequest, type DayShape } from "@/components/ShapeYourDay";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1884,9 +1884,12 @@ export default function OrderFlow({
     ...readDraft()?.mealEatingOut,
   }));
   const [mealTypesOpen, setMealTypesOpen] = useState(false);
-  // Advanced planning v2 (beta): "Shape your day", remembered per user in this browser.
+  // Advanced planning v2 (beta): "Shape your day". Saved per user in
+  // user_day_shape (follows the account); localStorage is an instant cache.
   const shapeKey = `akli_day_shape_${userId}`;
   const [dayShape, setDayShapeState] = useState<DayShape>(() => parseStoredShape(null));
+  const [shapeSaved, setShapeSaved] = useState<"account" | "browser">("account");
+  const shapeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Read after mount so the server and first client render agree.
   useEffect(() => {
     try { setDayShapeState(parseStoredShape(window.localStorage.getItem(shapeKey))); } catch { /* private mode */ }
@@ -1894,6 +1897,12 @@ export default function OrderFlow({
   function setDayShape(next: DayShape) {
     setDayShapeState(next);
     try { window.localStorage.setItem(shapeKey, JSON.stringify(next)); } catch { /* private mode */ }
+    if (shapeSaveTimer.current) clearTimeout(shapeSaveTimer.current);
+    shapeSaveTimer.current = setTimeout(async () => {
+      const { error } = await (createClient().from("user_day_shape") as any)
+        .upsert({ user_id: userId, shape: next, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+      setShapeSaved(error ? "browser" : "account");
+    }, 800);
   }
   const [kcalAdjustment, setKcalAdjustment] = useState(() => readDraft()?.kcalAdjustment ?? 0);
 
@@ -1964,6 +1973,20 @@ export default function OrderFlow({
 
   // ── Advanced planning (beta) ──────────────────────────────────────────────────
   const advEnabled = !!advancedPlanning?.enabled;
+  // The account's saved day shape wins over this browser's copy.
+  useEffect(() => {
+    if (!advEnabled || !userId) return;
+    let alive = true;
+    (createClient().from("user_day_shape") as any)
+      .select("shape").eq("user_id", userId).maybeSingle()
+      .then(({ data }: { data: { shape: unknown } | null }) => {
+        if (!alive || !data?.shape) return;
+        const s = parseShape(data.shape);
+        setDayShapeState(s);
+        try { window.localStorage.setItem(shapeKey, JSON.stringify(s)); } catch { /* private mode */ }
+      });
+    return () => { alive = false; };
+  }, [advEnabled, userId, shapeKey]);
   const flexibleIds = new Set(advancedPlanning?.flexibleSubrecipeIds ?? []);
   const mainPairs = new Set(advancedPlanning?.mainPairs ?? []);
   const [advOpen, setAdvOpen]     = useState(false);
@@ -2538,6 +2561,7 @@ export default function OrderFlow({
                 fat: macroTarget?.fat_g ?? null,
               }}
               weekendsOn={weekendsOn}
+              savedLabel={shapeSaved === "account" ? "Saved to your account for your next orders." : "Saved on this device for your next orders."}
             />
           )}
 
