@@ -62,7 +62,17 @@ export interface GenerateMealPlanRequest {
   kcal_override?: number;          // when user is "eating out" for excluded meals, reduces daily target
   kitchen_id?: number;
   day_build_tries?: number;
+  // Advanced planning v2 (beta): Light/Normal/Big per meal type; per-weekday
+  // overrides keyed "0".."6" (Mon=0).
+  // Each meal: "light"|"normal"|"big", { pct }, or exact { kcal?, protein?, carbs?, fat? }.
+  meal_sizes?: Record<string, MealShapeSetting>;
+  meal_sizes_by_weekday?: Record<string, Record<string, MealShapeSetting>>;
 }
+
+export type MealShapeSetting =
+  | "light" | "normal" | "big"
+  | { pct: number }
+  | { kcal?: number; protein?: number; carbs?: number; fat?: number };
 
 export interface SubrecipeMacros {
   protein: number; carbs: number; fat: number; kcal: number;
@@ -106,6 +116,18 @@ export interface PlanDay {
   adjusted_target?: { protein_g: number; carbs_g: number; fat_g: number; kcal: number };
   // Advanced planning (beta): servings on this day were set by hand.
   manual_servings?: boolean;
+  // Advanced planning v2 (beta): the sizes this day was shaped with, and how
+  // each changed meal landed vs its goal.
+  meal_sizes?: Record<string, MealShapeSetting>;
+  meal_shape?: {
+    meal_type: string;
+    size: "light" | "normal" | "big" | "pct" | "exact";
+    target_kcal: number;
+    kcal: number;
+    targets?: Partial<Record<"kcal" | "protein" | "carbs" | "fat", number>>;
+    actual?: Partial<Record<"kcal" | "protein" | "carbs" | "fat", number>>;
+    ok: boolean;
+  }[];
 }
 
 export interface PlanSummaryUsedRecipe {

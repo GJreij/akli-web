@@ -23,6 +23,7 @@ import { beirutISODate } from "@/lib/dates";
 import { conflictingAllergens, emptyAllergenFlags, type AllergenFlags } from "@/lib/allergens";
 import AddressForm from "@/components/AddressForm";
 import SwapRecipeList from "@/components/SwapRecipeList";
+import ShapeYourDay, { ShapeReport, DayShapeAlert, parseStoredShape, shapeIsSet, shapeRequest, type DayShape } from "@/components/ShapeYourDay";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1111,7 +1112,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
   );
 }
 
-function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onSaladChange, onAddMeal, isOnlyDay, userAllergens, recipeAllergens }: {
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onSaladChange, onAddMeal, isOnlyDay, userAllergens, recipeAllergens, showShape = false }: {
   day: PlanDay;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -1123,6 +1124,7 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
   isOnlyDay: boolean;
   userAllergens: AllergenFlags;
   recipeAllergens: Record<number, AllergenFlags>;
+  showShape?: boolean;
 }) {
   const presentTypes = new Set(day.meals.map(m => m.meal_type));
   const missingTypes = (["breakfast", "lunch", "snack", "dinner"] as MealType[]).filter(t => !presentTypes.has(t));
@@ -1147,6 +1149,12 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
         <p style={{ margin: 0, padding: "0 14px 8px", fontSize: 11.5, color: C.light, background: "#faf9f7" }}>
           This is your only day — go back to the days step if you want to remove it.
         </p>
+      )}
+      {showShape && (
+        <DayShapeAlert
+          day={day}
+          onSwap={mealType => { const m = day.meals.find(x => x.meal_type === mealType); if (m) onReplaceMeal(m); }}
+        />
       )}
       <div style={{ padding: "0 14px" }}>
         {[...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9)).map((meal) => (
@@ -1876,6 +1884,17 @@ export default function OrderFlow({
     ...readDraft()?.mealEatingOut,
   }));
   const [mealTypesOpen, setMealTypesOpen] = useState(false);
+  // Advanced planning v2 (beta): "Shape your day", remembered per user in this browser.
+  const shapeKey = `akli_day_shape_${userId}`;
+  const [dayShape, setDayShapeState] = useState<DayShape>(() => parseStoredShape(null));
+  // Read after mount so the server and first client render agree.
+  useEffect(() => {
+    try { setDayShapeState(parseStoredShape(window.localStorage.getItem(shapeKey))); } catch { /* private mode */ }
+  }, [shapeKey]);
+  function setDayShape(next: DayShape) {
+    setDayShapeState(next);
+    try { window.localStorage.setItem(shapeKey, JSON.stringify(next)); } catch { /* private mode */ }
+  }
   const [kcalAdjustment, setKcalAdjustment] = useState(() => readDraft()?.kcalAdjustment ?? 0);
 
   // Reset manual kcal adjustment whenever eating-out selections change
@@ -2122,7 +2141,11 @@ export default function OrderFlow({
         include_weekends: weekendsOn,
         meals: mealsParam,
         kcal_override: finalKcalOverride,
+        ...(advEnabled && shapeIsSet(dayShape, includedMeals) ? shapeRequest(dayShape, includedMeals) : {}),
       });
+      if (advEnabled && shapeIsSet(dayShape, includedMeals)) {
+        track("day_shape_used", { mode: dayShape.mode, shape: shapeRequest(dayShape, includedMeals) }, "order");
+      }
       result.days = result.days.filter(d => selected.has(d.date));
 
       // The backend computes each plan_summary period from the full
@@ -2503,6 +2526,21 @@ export default function OrderFlow({
             />
           )}
 
+          {advEnabled && (
+            <ShapeYourDay
+              shape={dayShape}
+              onChange={setDayShape}
+              meals={ALL_MEALS.filter(m => !excludedMeals.has(m))}
+              targets={{
+                kcal: finalKcalOverride ?? originalKcal,
+                protein: macroTarget?.protein_g ?? null,
+                carbs: macroTarget?.carbs_g ?? null,
+                fat: macroTarget?.fat_g ?? null,
+              }}
+              weekendsOn={weekendsOn}
+            />
+          )}
+
           {/* ── Meal type preferences (collapsible) ── */}
           {(() => {
             const includedCount = ALL_MEALS.length - excludedMeals.size;
@@ -2774,6 +2812,16 @@ export default function OrderFlow({
             </button>
           )}
 
+          {advEnabled && (
+            <ShapeReport
+              days={plan.days}
+              onSwap={(date, mealType) => {
+                const meal = plan.days.find(d => d.date === date)?.meals.find(m => m.meal_type === mealType);
+                if (meal) setReplaceTarget({ date, meal });
+              }}
+            />
+          )}
+
           {updatingPlan && (
             <p style={{ fontSize: 12, color: C.teal, textAlign: "center", marginBottom: 12 }}>Updating your plan…</p>
           )}
@@ -2793,6 +2841,7 @@ export default function OrderFlow({
               onAddMeal={mealType => setAddTarget({ date: day.date, mealType })}
               userAllergens={userAllergens}
               recipeAllergens={recipeAllergens}
+              showShape={advEnabled}
             />
           ))}
         </div>
