@@ -21,7 +21,7 @@
 import { useState, type ReactNode } from "react";
 import {
   IconChevronDown, IconRefresh, IconPlus, IconTrash, IconAlertTriangle, IconInfoCircle,
-  IconBarbell, IconMoon, IconCalendar, IconPencil,
+  IconCalendar, IconPencil,
 } from "@tabler/icons-react";
 import type { PlanDay } from "@/lib/flask";
 
@@ -501,8 +501,9 @@ const Hint = ({ text }: { text: string }) => (
 const SectionLabel = ({ children }: { children: ReactNode }) => (
   <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, color: C.muted, textTransform: "uppercase", letterSpacing: 0.4 }}>{children}</p>
 );
-const KindIcon = ({ t, size = 13 }: { t: DayType; size?: number }) =>
-  t.kind === "training" ? <IconBarbell size={size} /> : t.kind === "rest" ? <IconMoon size={size} /> : <IconCalendar size={size} />;
+// Every day type gets the same plain calendar icon — no type is framed as
+// the "lesser" one (kind is kept in saved shapes but no longer drawn).
+const KindIcon = ({ size = 13 }: { t?: DayType; size?: number }) => <IconCalendar size={size} />;
 
 // ── The card ─────────────────────────────────────────────────────────────────
 export default function ShapeYourDay({
@@ -536,9 +537,9 @@ export default function ShapeYourDay({
   const baseDays = days.filter(w => takenBy(w) < 0);
 
   const typeName = (t: DayType, i: number) =>
-    t.name.trim() || (i === 0 ? (hasOthers ? "Other days" : "Every day") : `Day type ${i + 1}`);
+    t.name.trim() || (i === 0 ? (hasOthers ? "Usual days" : "Every day") : `Day type ${i + 1}`);
   const typeDays = (t: DayType, i: number) =>
-    i === 0 ? (hasOthers ? (baseDays.length ? (t.name.trim() ? dayList(baseDays) : "") : "not used") : "")
+    i === 0 ? (hasOthers ? (baseDays.length ? dayList(baseDays) : "no days left") : "")
             : (t.weekdays.length ? dayList(t.weekdays) : "pick days");
 
   const updateType = (i: number, patch: Partial<DayType>) =>
@@ -560,14 +561,19 @@ export default function ShapeYourDay({
     onChange({ ...shape, types: [...types, t] });
     setActiveId(t.id);
   };
-  const trainingAndRest = () => {
+  // One tap for the most common case: the usual days stay as they are and a
+  // "Training" type is added on Mon/Wed/Fri (all editable).
+  const addTraining = () => {
     const training: DayType = {
-      id: newId(), name: "Training", kind: "training", settings: clone(types[0].settings),
+      id: newId(), name: "Training", settings: clone(types[0].settings),
       weekdays: [0, 2, 4].filter(w => days.includes(w)), totals: emptyTotals(),
     };
-    onChange({ ...shape, types: [{ ...types[0], name: types[0].name || "Rest", kind: types[0].kind ?? "rest" }, training] });
+    onChange({ ...shape, types: [...types, training] });
     setActiveId(training.id);
   };
+  // On the usual-days type, tapping a day another type holds gives it back.
+  const giveBack = (w: number) =>
+    onChange({ ...shape, types: types.map((t, j) => (j === 0 ? t : { ...t, weekdays: t.weekdays.filter(x => x !== w) })) });
   const removeType = () => {
     onChange({ ...shape, types: types.filter((_, j) => j !== idx) });
     setActiveId("base");
@@ -727,20 +733,20 @@ export default function ShapeYourDay({
                         background: on ? "#f0f7f7" : C.white, color: on ? C.tealDark : C.muted, fontWeight: on ? 700 : 500,
                       }}
                     >
-                      {(hasOthers || t.kind) && <KindIcon t={t} />}
+                      {hasOthers && <KindIcon />}
                       {typeName(t, i)}
                       {d && <span style={{ fontWeight: 400, color: C.light, fontStyle: d === "pick days" ? "italic" : "normal" }}>{d}</span>}
                     </button>
                   );
                 })}
-                {!hasOthers && (
-                  <button onClick={trainingAndRest} style={{ ...linkBtn, borderStyle: "dashed", padding: "7px 12px" }}>
-                    <IconBarbell size={13} /> Training & rest days
+                {!types.some(t => t.name.trim().toLowerCase() === "training") && types.length < MAX_TYPES && (
+                  <button onClick={addTraining} style={{ ...linkBtn, borderStyle: "dashed", padding: "7px 12px" }}>
+                    <IconPlus size={13} /> Training days
                   </button>
                 )}
                 {types.length < MAX_TYPES && (
                   <button onClick={addType} style={{ ...linkBtn, borderStyle: "dashed", padding: "7px 12px" }}>
-                    <IconPlus size={13} /> {hasOthers ? "Add" : "Other day type"}
+                    <IconPlus size={13} /> {hasOthers ? "Another day type" : "Other day type"}
                   </button>
                 )}
               </div>
@@ -758,7 +764,7 @@ export default function ShapeYourDay({
                     />
                   ) : (
                     <button onClick={() => setRenaming(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 13.5, fontWeight: 700, color: C.primary }}>
-                      <KindIcon t={active} size={15} />{typeName(active, idx)}
+                      <KindIcon size={15} />{typeName(active, idx)}
                       <IconPencil size={13} color={C.light} aria-label="Rename" />
                     </button>
                   )}
@@ -785,15 +791,36 @@ export default function ShapeYourDay({
                       );
                     })}
                   </div>
-                  <p style={{ margin: "6px 0 0", fontSize: 11, color: C.light }}>
-                    {active.weekdays.length === 0 ? "Pick the days this applies to — a day can only be in one type." : `Every other day follows ${typeName(types[0], 0)}.`}
+                  <p style={{ margin: "6px 0 0", fontSize: 11.5, color: C.muted }}>
+                    {active.weekdays.length === 0 ? "Pick the days this applies to. A day can only be in one type." : `The rest of the week stays in ${typeName(types[0], 0)}.`}
                   </p>
                 </div>
               )}
               {isBase && hasOthers && (
-                <p style={{ margin: "-4px 0 12px", fontSize: 11.5, color: C.muted }}>
-                  {baseDays.length ? `Used on ${dayList(baseDays)} — every day no other type takes.` : "Every day is taken by another type, so this one isn't used."}
-                </p>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {days.map(w => {
+                      const on = baseDays.includes(w);
+                      const owner = takenBy(w);
+                      return (
+                        <button
+                          key={w} onClick={() => !on && giveBack(w)} aria-pressed={on}
+                          title={on ? undefined : `Move ${WEEKDAYS[w]} back here from ${typeName(types[owner], owner)}`}
+                          style={{
+                            padding: "6px 10px", borderRadius: 20, fontSize: 12, cursor: on ? "default" : "pointer",
+                            border: `1.5px ${on ? "solid" : "dashed"} ${on ? C.tealDark : C.border}`,
+                            background: on ? C.tealDark : C.white, color: on ? C.white : C.light, fontWeight: on ? 700 : 500,
+                          }}
+                        >{WEEKDAYS[w]}</button>
+                      );
+                    })}
+                  </div>
+                  <p style={{ margin: "6px 0 0", fontSize: 11.5, color: C.muted }}>
+                    {baseDays.length
+                      ? "Any day you don't put in another type stays here."
+                      : "Every day is in another type, so this one isn't used."}
+                  </p>
+                </div>
               )}
 
               {/* Meal split */}
