@@ -524,6 +524,9 @@ export default function ShapeYourDay({
   const [activeId, setActiveId] = useState("base");
   const [totalsOpen, setTotalsOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // Detailed planning (day plans, meal sizes, totals) stays folded for
+  // everyone — most people only switch meals off.
+  const [detailOpen, setDetailOpen] = useState(false);
   const ordered = MEAL_ORDER.filter(m => allMeals.includes(m) && !excludedMeals.includes(m));
   const canShape = ordered.length >= 2;
 
@@ -537,7 +540,7 @@ export default function ShapeYourDay({
   const baseDays = days.filter(w => takenBy(w) < 0);
 
   const typeName = (t: DayType, i: number) =>
-    t.name.trim() || (i === 0 ? (hasOthers ? "Usual days" : "Every day") : `Day type ${i + 1}`);
+    t.name.trim() || (i === 0 ? (hasOthers ? "Usual days" : "Every day") : `Day plan ${i + 1}`);
   const typeDays = (t: DayType, i: number) =>
     i === 0 ? (hasOthers ? (baseDays.length ? dayList(baseDays) : "no days left") : "")
             : (t.weekdays.length ? dayList(t.weekdays) : "pick days");
@@ -684,7 +687,7 @@ export default function ShapeYourDay({
             <span style={{ fontSize: 9.5, fontWeight: 700, color: C.tealDark, border: `1px solid ${C.teal}`, borderRadius: 6, padding: "1px 5px", marginLeft: 6, verticalAlign: "middle" }}>BETA</span>
           </p>
           <p style={{ margin: 0, fontSize: 11.5, color: set ? C.tealDark : ordered.length === 0 ? "#c0392b" : C.light, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {mealSummary} · {set ? shapeSummary : "meals, training days, bigger lunch…"}
+            {mealSummary}{set ? ` · ${shapeSummary}` : " · tap to choose"}
           </p>
         </div>
         <IconChevronDown size={16} color={C.light} style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
@@ -713,13 +716,30 @@ export default function ShapeYourDay({
           </div>
           {mealExtras && <div style={{ marginTop: 10 }}>{mealExtras}</div>}
 
-          {!canShape ? (
-            <p style={{ margin: "14px 0 0", fontSize: 11.5, color: C.light }}>Keep at least two meals to shape your day.</p>
+          <div style={{ height: 1, background: C.border, margin: "14px 0 0" }} />
+          <button
+            onClick={() => setDetailOpen(o => !o)} aria-expanded={detailOpen}
+            style={{ display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", gap: 10, background: "none", border: "none", padding: "12px 0 0", cursor: "pointer", textAlign: "left" }}
+          >
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#1a1a1a" }}>
+                Plan in detail
+                <span style={{ fontSize: 9, fontWeight: 700, color: C.light, border: `1px solid ${C.border}`, borderRadius: 6, padding: "1px 5px", marginLeft: 6, verticalAlign: "middle" }}>OPTIONAL</span>
+              </span>
+              <span style={{ display: "block", fontSize: 11, color: set ? C.tealDark : C.light, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: detailOpen ? "normal" : "nowrap" }}>
+                {set ? `On · ${shapeSummary}` : "Bigger lunch, training days, exact macros… Most people skip this."}
+              </span>
+            </span>
+            <IconChevronDown size={15} color={C.light} style={{ transform: detailOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s", flexShrink: 0 }} />
+          </button>
+
+          {detailOpen && (!canShape ? (
+            <p style={{ margin: "12px 0 0", fontSize: 11.5, color: C.light }}>Keep at least two meals to plan your day in detail.</p>
           ) : (
             <>
-              {/* Day types */}
-              <div style={{ height: 1, background: C.border, margin: "14px 0" }} />
-              <SectionLabel>Day types</SectionLabel>
+              {/* Day plans */}
+              <div style={{ height: 14 }} />
+              <SectionLabel>Day plans</SectionLabel>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                 {types.map((t, i) => {
                   const on = i === idx;
@@ -746,7 +766,7 @@ export default function ShapeYourDay({
                 )}
                 {types.length < MAX_TYPES && (
                   <button onClick={addType} style={{ ...linkBtn, borderStyle: "dashed", padding: "7px 12px" }}>
-                    <IconPlus size={13} /> {hasOthers ? "Another day type" : "Other day type"}
+                    <IconPlus size={13} /> {hasOthers ? "Another day plan" : "Other day plan"}
                   </button>
                 )}
               </div>
@@ -755,7 +775,7 @@ export default function ShapeYourDay({
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, minHeight: 30 }}>
                   {renaming ? (
                     <input
-                      autoFocus aria-label="Day type name" maxLength={24}
+                      autoFocus aria-label="Day plan name" maxLength={24}
                       value={active.name} placeholder={typeName({ ...active, name: "" }, idx)}
                       onChange={e => updateType(idx, { name: e.target.value })}
                       onBlur={() => setRenaming(false)}
@@ -792,7 +812,7 @@ export default function ShapeYourDay({
                     })}
                   </div>
                   <p style={{ margin: "6px 0 0", fontSize: 11.5, color: C.muted }}>
-                    {active.weekdays.length === 0 ? "Pick the days this applies to. A day can only be in one type." : `The rest of the week stays in ${typeName(types[0], 0)}.`}
+                    {active.weekdays.length === 0 ? "Pick the days this applies to. A day can only be in one plan." : `The rest of the week stays in ${typeName(types[0], 0)}.`}
                   </p>
                 </div>
               )}
@@ -817,8 +837,8 @@ export default function ShapeYourDay({
                   </div>
                   <p style={{ margin: "6px 0 0", fontSize: 11.5, color: C.muted }}>
                     {baseDays.length
-                      ? "Any day you don't put in another type stays here."
-                      : "Every day is in another type, so this one isn't used."}
+                      ? "Any day you don't put in another plan stays here."
+                      : "Every day is in another plan, so this one isn't used."}
                   </p>
                 </div>
               )}
@@ -899,7 +919,7 @@ export default function ShapeYourDay({
               {restLine()}
               {hints.map(h => <Hint key={h} text={h} />)}
 
-              {/* Totals for this day type */}
+              {/* Totals for this day plan */}
               <div style={{ marginTop: 14, border: `1px solid ${ownTotals ? C.teal : C.border}`, borderRadius: 10, padding: "9px 11px" }}>
                 <button
                   onClick={() => setTotalsOpen(o => !o)}
@@ -996,7 +1016,7 @@ export default function ShapeYourDay({
               </div>
               {set && <p style={{ margin: "10px 0 0", fontSize: 10.5, color: C.light }}>{savedLabel}</p>}
             </>
-          )}
+          ))}
         </div>
       )}
     </div>
