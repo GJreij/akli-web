@@ -124,6 +124,8 @@ export interface PlanDay {
   // Advanced planning v2 (beta): the sizes this day was shaped with, and how
   // each changed meal landed vs its goal.
   meal_sizes?: Record<string, MealShapeSetting>;
+  // Name of the day type this day follows ("Training days"), if the client named one.
+  day_label?: string;
   meal_shape?: {
     meal_type: string;
     size: "light" | "normal" | "big" | "pct" | "exact";

@@ -6,8 +6,8 @@
 // them to Flask (/advanced_planning/apply), which recomputes the macros —
 // and checkout prices the result with the normal rules. No prices here.
 
-import { useState } from "react";
-import { IconX, IconMinus, IconPlus, IconAlertTriangle, IconRefresh } from "@tabler/icons-react";
+import { useEffect, useRef, useState } from "react";
+import { IconX, IconMinus, IconPlus, IconAlertTriangle, IconRefresh, IconCalendar, IconCheck } from "@tabler/icons-react";
 import type { GenerateMealPlanResponse, PlanDay } from "@/lib/flask";
 import { ADVANCED_PLANNING, clampServings, isAdjustable } from "@/lib/advancedPlanning";
 
@@ -62,6 +62,17 @@ function mealTotals(date: string, meal: PlanDay["meals"][number], draft: DraftSe
 function dayTotals(day: PlanDay, draft: DraftServings): Macros {
   const t: Macros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
   for (const meal of day.meals) {
+    const m = mealTotals(day.date, meal, draft);
+    for (const k of MACRO_KEYS) t[k] += m[k];
+  }
+  return t;
+}
+
+// A meal goal covers every meal of that type on the day (e.g. two snacks).
+function goal_meal_sum(day: PlanDay, mealType: string, draft: DraftServings): Macros {
+  const t: Macros = { protein: 0, carbs: 0, fat: 0, kcal: 0 };
+  for (const meal of day.meals) {
+    if (meal.meal_type !== mealType) continue;
     const m = mealTotals(day.date, meal, draft);
     for (const k of MACRO_KEYS) t[k] += m[k];
   }
@@ -129,6 +140,38 @@ function ServingInput({ value, onChange }: { value: number; onChange: (v: number
   );
 }
 
+// Step-1 goal for one meal (from the plan's meal_shape), judged live against
+// the draft — same tolerance as Flask's meal_shape_report.
+const MISS_PCT = 0.2;
+const MISS_FLOOR: Record<string, number> = { kcal: 120, protein: 10, carbs: 15, fat: 8 };
+const SIZE_WORD: Record<string, string> = { light: "Light", big: "Big", pct: "Share of the day", exact: "Exact" };
+type ShapeEntry = NonNullable<PlanDay["meal_shape"]>[number];
+
+function MealGoal({ entry, live }: { entry: ShapeEntry; live: Macros }) {
+  const t = entry.targets ?? { kcal: entry.target_kcal };
+  // Exact meals are judged on the macros the client typed; otherwise on kcal.
+  const macroKeys = (["protein", "carbs", "fat"] as const).filter(k => t[k] != null);
+  const judged: ("kcal" | "protein" | "carbs" | "fat")[] = entry.size === "exact" && macroKeys.length ? [...macroKeys] : ["kcal"];
+  const misses = judged
+    .map(k => ({ k, diff: Math.round(live[k] - (t[k] ?? 0)) }))
+    .filter(({ k, diff }) => Math.abs(diff) > Math.max(MISS_PCT * (t[k] ?? 0), MISS_FLOOR[k]));
+  const goal = judged.map(k => k === "kcal" ? `~${t.kcal} kcal` : `${t[k]}g ${k}`).join(" · ");
+  const ok = misses.length === 0;
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "flex-start", background: ok ? "#eef6f5" : C.warnBg, borderRadius: 8, padding: "5px 8px", margin: "0 0 8px" }}>
+      {ok
+        ? <IconCheck size={13} color={C.tealDark} style={{ flexShrink: 0, marginTop: 1 }} />
+        : <IconAlertTriangle size={13} color={C.warn} style={{ flexShrink: 0, marginTop: 1 }} />}
+      <span style={{ fontSize: 11.5, lineHeight: 1.35, color: ok ? C.tealDark : C.warn }}>
+        Your goal{SIZE_WORD[entry.size] ? ` (${SIZE_WORD[entry.size]})` : ""}: {goal}
+        {ok
+          ? " — on target"
+          : ` — ${misses.map(({ k, diff }) => `${Math.abs(diff)}${k === "kcal" ? " kcal" : `g ${k}`} ${diff > 0 ? "over" : "under"}`).join(", ")}`}
+      </span>
+    </div>
+  );
+}
+
 // One macro: actual vs target, a bar (100% = target) and the difference.
 function MacroLine({ label, actual, target, unit }: { label: string; actual: number; target: number | null; unit: string }) {
   const a = Math.round(actual);
@@ -159,9 +202,11 @@ function MacroLine({ label, actual, target, unit }: { label: string; actual: num
 }
 
 export default function AdvancedPlanningSheet({
-  plan, flexibleIds, mainPairs, draft, onDraftChange, manualDates, onResetDay, onResetAll, onClose, onSave, saving, error,
+  plan, focusDate, flexibleIds, mainPairs, draft, onDraftChange, manualDates, onResetDay, onResetAll, onClose, onSave, saving, error,
 }: {
   plan: GenerateMealPlanResponse;
+  // Opened from a day's shape alert: scroll to that day and highlight it.
+  focusDate?: string | null;
   flexibleIds: Set<number>;
   mainPairs: Set<string>;
   draft: DraftServings;
@@ -178,13 +223,20 @@ export default function AdvancedPlanningSheet({
   const days = plan.days;
   const dirty = Object.keys(draft).length > 0;
   const draftDates = new Set(Object.keys(draft).map(k => k.split("|")[0]));
+  const dayRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const shaped = days.some(d => (d.meal_shape ?? []).some(e => e.size !== "normal"));
+  useEffect(() => {
+    if (focusDate) dayRefs.current[focusDate]?.scrollIntoView({ block: "start" });
+  }, [focusDate]);
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 60, background: C.offWhite, display: "flex", flexDirection: "column" }}>
       <div style={{ background: C.primary, color: C.white, padding: "12px 16px 10px", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Advanced planning</p>
-          <p style={{ fontSize: 11.5, opacity: 0.8, margin: "2px 0 0" }}>Price updates at checkout based on your choices.</p>
+          <p style={{ fontSize: 11.5, opacity: 0.8, margin: "2px 0 0" }}>
+            {shaped ? "Your day shape from step 1 is shown under each meal. " : ""}Price updates at checkout based on your choices.
+          </p>
         </div>
         <button onClick={onClose} aria-label="Close" style={{ background: "none", border: "none", color: C.white, cursor: "pointer", padding: 4 }}>
           <IconX size={20} />
@@ -219,14 +271,28 @@ export default function AdvancedPlanningSheet({
           const meals = [...day.meals].sort((a, b) => (MEAL_ORDER[a.meal_type] ?? 9) - (MEAL_ORDER[b.meal_type] ?? 9));
 
           return (
-            <div key={day.date} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "0 14px 10px", marginBottom: 14 }}>
+            <div
+              key={day.date}
+              ref={el => { dayRefs.current[day.date] = el; }}
+              style={{
+                background: C.white, border: day.date === focusDate ? `2px solid ${C.teal}` : `1px solid ${C.border}`,
+                borderRadius: 14, padding: "0 14px 10px", marginBottom: 14, scrollMarginTop: 12,
+              }}
+            >
               {/* Pinned while this day's meals scroll under it. */}
               <div style={{
                 position: "sticky", top: 0, zIndex: 2, background: C.white, margin: "0 -14px", padding: "12px 14px 10px",
                 borderRadius: "14px 14px 0 0", borderBottom: `1px solid ${C.border}`, boxShadow: "0 4px 8px -6px rgba(0,0,0,0.15)",
               }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8, minHeight: 28 }}>
-                  <p style={{ fontSize: 14.5, fontWeight: 600, color: C.primary, margin: 0 }}>{dayLabel(day.date)}</p>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 14.5, fontWeight: 600, color: C.primary, margin: 0 }}>{dayLabel(day.date)}</p>
+                    {day.day_label && (
+                      <p style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: C.tealDark, margin: "2px 0 0" }}>
+                        <IconCalendar size={12} /> {day.day_label} · its own daily target
+                      </p>
+                    )}
+                  </div>
                   {showReset && (
                     <button
                       onClick={() => onResetDay(day.date)}
@@ -254,11 +320,14 @@ export default function AdvancedPlanningSheet({
                 // Only the adjustable items are listed; every meal still shows
                 // its live macros (all items counted) so they add up to the day.
                 const flexSubs = meal.subrecipes.filter(s => isAdjustable({ flexibleIds, mainPairs }, meal.recipe_id, s));
+                const goal = (day.meal_shape ?? []).find(e => e.meal_type === meal.meal_type && e.size !== "normal");
+                const live = mealTotals(day.date, meal, draft);
                 return (
                   <div key={meal.meal_key} style={{ borderTop: `1px solid ${C.border}`, padding: "10px 0 4px", marginTop: -1 }}>
                     <p style={{ fontSize: 11, color: C.light, margin: 0, textTransform: "uppercase", letterSpacing: "0.04em" }}>{MEAL_LABELS[meal.meal_type] ?? meal.meal_type}</p>
                     <p style={{ fontSize: 13.5, fontWeight: 600, color: C.primary, margin: "2px 0 0" }}>{meal.recipe_name}</p>
-                    <MealMacros m={mealTotals(day.date, meal, draft)} />
+                    <MealMacros m={live} />
+                    {goal && <MealGoal entry={goal} live={goal_meal_sum(day, meal.meal_type, draft)} />}
                     {flexSubs.length === 0 && (
                       <p style={{ fontSize: 11.5, color: C.light, margin: "0 0 6px" }}>Nothing to adjust in this meal.</p>
                     )}

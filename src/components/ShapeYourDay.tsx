@@ -1032,9 +1032,10 @@ export function missText(e: MealShapeEntry): string {
 
 const isChanged = (e: MealShapeEntry) => e.size !== "normal";
 
-export function ShapeReport({ days, onSwap }: {
+export function ShapeReport({ days, onSwap, onAdjust }: {
   days: (PlanDay & { meal_shape?: MealShapeEntry[] })[];
   onSwap: (date: string, mealType: string) => void;
+  onAdjust?: (date: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const shaped = days.flatMap(d => (d.meal_shape ?? []).filter(isChanged).map(e => ({ d, e })));
@@ -1069,7 +1070,10 @@ export function ShapeReport({ days, onSwap }: {
               <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: C.primary }}>{fmtDay(d.date)} · {MEAL_LABEL[e.meal_type]}</span>
               <span style={{ display: "block", fontSize: 11.5, color: C.muted, marginTop: 1 }}>{meal?.recipe_name ?? "This dish"}: {missText(e)}</span>
             </span>
-            <button onClick={() => onSwap(d.date, e.meal_type)} style={swapBtn}>Swap dish</button>
+            <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              {onAdjust && <button onClick={() => onAdjust(d.date)} style={swapBtn}>Adjust</button>}
+              <button onClick={() => onSwap(d.date, e.meal_type)} style={swapBtn}>Swap</button>
+            </span>
           </div>
         );
       })}
@@ -1078,7 +1082,11 @@ export function ShapeReport({ days, onSwap }: {
 }
 
 /** Inside a day card: the meals of THIS day that couldn't follow the shape. */
-export function DayShapeAlert({ day, onSwap }: { day: PlanDay & { meal_shape?: MealShapeEntry[] }; onSwap: (mealType: string) => void }) {
+export function DayShapeAlert({ day, onSwap, onAdjust }: {
+  day: PlanDay & { meal_shape?: MealShapeEntry[] };
+  onSwap: (mealType: string) => void;
+  onAdjust?: () => void;
+}) {
   const misses = (day.meal_shape ?? []).filter(e => isChanged(e) && !e.ok);
   if (misses.length === 0) return null;
   return (
@@ -1097,6 +1105,11 @@ export function DayShapeAlert({ day, onSwap }: { day: PlanDay & { meal_shape?: M
           </div>
         );
       })}
+      {onAdjust && (
+        <button onClick={onAdjust} style={{ ...swapBtn, display: "block", width: "100%", marginTop: 8, padding: "7px 10px", background: C.tealDark, color: C.white }}>
+          Adjust this day&apos;s portions
+        </button>
+      )}
     </div>
   );
 }

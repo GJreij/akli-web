@@ -1112,7 +1112,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
   );
 }
 
-function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onSaladChange, onAddMeal, isOnlyDay, userAllergens, recipeAllergens, showShape = false }: {
+function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onReplaceMeal, onSaladChange, onAddMeal, isOnlyDay, userAllergens, recipeAllergens, showShape = false, onAdjust }: {
   day: PlanDay;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -1125,6 +1125,7 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
   userAllergens: AllergenFlags;
   recipeAllergens: Record<number, AllergenFlags>;
   showShape?: boolean;
+  onAdjust?: () => void;
 }) {
   const presentTypes = new Set(day.meals.map(m => m.meal_type));
   const missingTypes = (["breakfast", "lunch", "snack", "dinner"] as MealType[]).filter(t => !presentTypes.has(t));
@@ -1154,6 +1155,7 @@ function DayCard({ day, expanded, onToggleExpand, onRemoveDay, onRemoveMeal, onR
         <DayShapeAlert
           day={day}
           onSwap={mealType => { const m = day.meals.find(x => x.meal_type === mealType); if (m) onReplaceMeal(m); }}
+          onAdjust={onAdjust}
         />
       )}
       <div style={{ padding: "0 14px" }}>
@@ -1996,6 +1998,7 @@ export default function OrderFlow({
   const flexibleIds = new Set(advancedPlanning?.flexibleSubrecipeIds ?? []);
   const mainPairs = new Set(advancedPlanning?.mainPairs ?? []);
   const [advOpen, setAdvOpen]     = useState(false);
+  const [advFocus, setAdvFocus]   = useState<string | null>(null);
   const [advDraft, setAdvDraft]   = useState<DraftServings>({});
   const [advSaving, setAdvSaving] = useState(false);
   const [advError, setAdvError]   = useState<string | null>(null);
@@ -2010,6 +2013,12 @@ export default function OrderFlow({
     const next = { ...p };
     if (anyManual) next.advanced_planning = true; else delete next.advanced_planning;
     return next;
+  }
+
+  // focusDate: opened from a day's "doesn't fit your shape" alert — jump to that day.
+  function openAdvanced(focusDate: string | null) {
+    setAdvDraft({}); setAdvError(null); setAdvFocus(focusDate); setAdvOpen(true);
+    track("advanced_planning_opened", { days: plan?.days.length ?? 0, manual_days: manualDates.size, from: focusDate ? "shape_alert" : "button" }, "order");
   }
 
   function closeAdvanced() {
@@ -2851,10 +2860,7 @@ export default function OrderFlow({
 
           {advEnabled && plan.days.length > 0 && (
             <button
-              onClick={() => {
-                setAdvDraft({}); setAdvError(null); setAdvOpen(true);
-                track("advanced_planning_opened", { days: plan.days.length, manual_days: manualDates.size }, "order");
-              }}
+              onClick={() => openAdvanced(null)}
               disabled={updatingPlan}
               style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, width: "100%",
@@ -2883,6 +2889,7 @@ export default function OrderFlow({
                 const meal = plan.days.find(d => d.date === date)?.meals.find(m => m.meal_type === mealType);
                 if (meal) setReplaceTarget({ date, meal });
               }}
+              onAdjust={date => openAdvanced(date)}
             />
           )}
 
@@ -2906,6 +2913,7 @@ export default function OrderFlow({
               userAllergens={userAllergens}
               recipeAllergens={recipeAllergens}
               showShape={advEnabled}
+              onAdjust={advEnabled ? () => openAdvanced(day.date) : undefined}
             />
           ))}
         </div>
@@ -2968,6 +2976,7 @@ export default function OrderFlow({
             flexibleIds={flexibleIds}
             mainPairs={mainPairs}
             draft={advDraft}
+            focusDate={advFocus}
             onDraftChange={setAdvDraft}
             manualDates={manualDates}
             onResetDay={date => resetAdvancedDays([date])}
