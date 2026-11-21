@@ -69,6 +69,8 @@ export interface GenerateMealPlanRequest {
   meal_sizes_by_weekday?: Record<string, Record<string, MealShapeSetting>>;
   /** Shape your day: a day type's own totals, keyed by weekday (Mon=0). Keys kcal / protein_g / carbs_g / fat_g, any subset. */
   day_targets_by_weekday?: Record<string, Partial<Record<"kcal" | "protein_g" | "carbs_g" | "fat_g", number>>>;
+  /** Shape your day: the day type's name per weekday ("Training", "Rest"), stored on daily_macro_order. */
+  day_labels_by_weekday?: Record<string, string>;
 }
 
 export type MealShapeSetting =

@@ -273,6 +273,7 @@ export function shapeRequest(shape: DayShape, meals: string[], usual: DayTargets
     meal_sizes?: Record<string, MealSetting | "even">;
     meal_sizes_by_weekday?: Record<string, Record<string, MealSetting | "even">>;
     day_targets_by_weekday?: Record<string, Record<string, number>>;
+    day_labels_by_weekday?: Record<string, string>;
   } = {};
   const baseSet = requestFor(base.settings, shape.mode, meals);
   const baseTotals = flaskTotals(base.totals, usual);
@@ -295,6 +296,12 @@ export function shapeRequest(shape: DayShape, meals: string[], usual: DayTargets
   if (Object.keys(baseTotals).length) for (let w = 0; w < 7; w++) if (!taken.has(w)) byTotals[w] = baseTotals;
   if (Object.keys(bySizes).length) out.meal_sizes_by_weekday = bySizes;
   if (Object.keys(byTotals).length) out.day_targets_by_weekday = byTotals;
+  // Day type names (only ones the client named or picked, e.g. Training /
+  // Rest) — saved with the order so the food diary can say which day it is.
+  const labels: Record<string, string> = {};
+  for (const t of others) if (t.name.trim()) for (const w of t.weekdays) labels[w] ??= t.name.trim();
+  if (base.name.trim() && others.length) for (let w = 0; w < 7; w++) if (!taken.has(w)) labels[w] = base.name.trim();
+  if (Object.keys(labels).length) out.day_labels_by_weekday = labels;
   return out;
 }
 

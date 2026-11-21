@@ -26,7 +26,7 @@ export default async function LogFoodPage({
       .single(),
     supabase
       .from("daily_macro_order")
-      .select("kcal_ordered, protein_ordered, carbs_ordered, fat_ordered")
+      .select("kcal_ordered, protein_ordered, carbs_ordered, fat_ordered, kcal_target, protein_target, carbs_target, fat_target, day_label")
       .eq("user_id", user.id)
       .eq("for_date", date)
       .maybeSingle(),

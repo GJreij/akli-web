@@ -21,6 +21,13 @@ type OrderMacros = {
   protein_ordered: number | null;
   carbs_ordered: number | null;
   fat_ordered: number | null;
+  // Set when this day had its own totals in the order (Your day beta, e.g. a
+  // Training day) — null means the usual daily target applies.
+  kcal_target?: number | null;
+  protein_target?: number | null;
+  carbs_target?: number | null;
+  fat_target?: number | null;
+  day_label?: string | null;
 } | null;
 type FoodLogEntryRow = Database["public"]["Tables"]["food_log_entry"]["Row"] & {
   food_catalog_item: { status: string } | null;
@@ -1032,7 +1039,7 @@ export default function LogFood({
       const [orderRes, entriesRes] = await Promise.all([
         supabase
           .from("daily_macro_order")
-          .select("kcal_ordered, protein_ordered, carbs_ordered, fat_ordered")
+          .select("kcal_ordered, protein_ordered, carbs_ordered, fat_ordered, kcal_target, protein_target, carbs_target, fat_target, day_label")
           .eq("user_id", userId)
           .eq("for_date", d)
           .maybeSingle(),
@@ -1102,13 +1109,20 @@ export default function LogFood({
   // A person can optionally track a bigger number than what they order
   // (set in Profile → Your diet → Diary tracking target) — falls back to
   // the order target when they haven't set one, which is today's behavior.
+  // A custom diary target is the client's deliberate choice and always wins.
+  // Otherwise a day ordered with its own totals (e.g. a Training day) is
+  // tracked against that day's target, not the usual one.
   const hasCustomDiaryTarget = macroTarget?.diary_kcal_target != null;
-  const diaryTarget = {
-    kcal: macroTarget?.diary_kcal_target ?? macroTarget?.kcal_target ?? null,
-    protein: macroTarget?.diary_protein_g ?? macroTarget?.protein_g,
-    carbs: macroTarget?.diary_carbs_g ?? macroTarget?.carbs_g,
-    fat: macroTarget?.diary_fat_g ?? macroTarget?.fat_g,
-  };
+  const dayTarget = !hasCustomDiaryTarget && order?.kcal_target != null ? order : null;
+  const diaryTarget = dayTarget
+    ? { kcal: dayTarget.kcal_target ?? null, protein: dayTarget.protein_target, carbs: dayTarget.carbs_target, fat: dayTarget.fat_target }
+    : {
+        kcal: macroTarget?.diary_kcal_target ?? macroTarget?.kcal_target ?? null,
+        protein: macroTarget?.diary_protein_g ?? macroTarget?.protein_g,
+        carbs: macroTarget?.diary_carbs_g ?? macroTarget?.carbs_g,
+        fat: macroTarget?.diary_fat_g ?? macroTarget?.fat_g,
+      };
+  const dayLabel = order?.day_label?.trim() || null;
   const diaryVsOrderKcal = hasCustomDiaryTarget
     ? (macroTarget?.diary_kcal_target ?? 0) - (macroTarget?.kcal_target ?? 0)
     : 0;
@@ -1240,7 +1254,7 @@ export default function LogFood({
             screens never show two different "targets". */}
         <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, padding: "6px 16px", marginBottom: 18 }}>
           <StatRow
-            label={hasCustomDiaryTarget ? "Food Diary Target*" : "Food Diary Target"}
+            label={hasCustomDiaryTarget ? "Food Diary Target*" : dayTarget ? `${dayLabel ?? "Today's"} target` : dayLabel ? `Food Diary Target · ${dayLabel}` : "Food Diary Target"}
             kcal={diaryTarget.kcal} protein={diaryTarget.protein} carbs={diaryTarget.carbs} fat={diaryTarget.fat}
           />
           <div style={{ borderTop: `1px solid ${C.border}` }} />
