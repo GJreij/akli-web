@@ -17,7 +17,7 @@ export default function PrivacyPage() {
       <Section title="What we collect">
         <Ul>
           <li><strong>Account details.</strong> Your first and last name, email address, phone number and date of birth. Your password is kept by our sign-in provider in scrambled form, so we cannot read it.</li>
-          <li><strong>Body and nutrition details you choose to give us.</strong> Sex, height, weight, activity level, goal, diet type and the calorie and macro targets worked out from them, the allergens you declare, and the recipes you like, dislike or exclude. This is health-related information. We use it only to build your meal plan and keep your allergens out of it.</li>
+          <li><strong>Body and nutrition details you choose to give us.</strong> Sex, height, weight, activity level, goal and diet type, plus figures calculated from them such as your BMI and your calorie and macro targets, the allergens you declare, and the recipes you like, dislike or exclude. This is health-related information. We use it only to build your meal plan and keep your allergens out of it.</li>
           <li><strong>Food diary.</strong> The foods you log by search, barcode scan or chat, and the messages you type to the food diary assistant.</li>
           <li><strong>Delivery details.</strong> The addresses you save (the written address and map coordinates), your delivery slots, and notes such as whether you need cutlery.</li>
           <li><strong>Orders and payments.</strong> Your meal plans, orders and delivery status, wallet balance and transactions, promo codes used, cancellation requests, and the payment method you chose (cash, Whish or Neo) with its amount and status. We do not store card numbers or bank details.</li>
