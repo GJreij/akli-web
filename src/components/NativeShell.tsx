@@ -30,7 +30,12 @@ export default function NativeShell() {
     StatusBar.setBackgroundColor({ color: "#F8F4EF" }).catch(() => {});
     SplashScreen.hide().catch(() => {});
 
-    registerPush();
+    // Off until Firebase (google-services.json) and the Apple push key are set
+    // up in the native builds: on Android, register() without Firebase crashes
+    // the whole app natively the moment the customer taps Allow, and that
+    // crash can't be caught from JS. Set NEXT_PUBLIC_PUSH_ENABLED=true only
+    // once a release with push configured is what customers have installed.
+    if (process.env.NEXT_PUBLIC_PUSH_ENABLED === "true") registerPush();
   }, []);
 
   return null;
