@@ -9,6 +9,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
 import ProfileAddresses from "@/components/ProfileAddresses";
+import DeleteAccount from "@/components/DeleteAccount";
 import DietWizard from "@/components/DietWizard";
 import { COUNTRY_CODES } from "@/lib/theme";
 import { requestWalletTopup } from "@/app/profile/actions";
@@ -776,6 +777,10 @@ export default function Profile({ userId, profile, macroHistory, addresses, wall
 
         <Section title="Delivery addresses" subtitle="Manage where Akli delivers to you">
           <ProfileAddresses userId={userId} initialAddresses={addresses} />
+        </Section>
+
+        <Section title="Delete account" subtitle="Permanently remove your personal details">
+          <DeleteAccount />
         </Section>
 
         <button onClick={signOut} style={{ display: "block", margin: "20px auto 0", background: "none", border: "none", fontSize: 13, color: C.light, cursor: "pointer", textDecoration: "underline" }}>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import LegalPage, { LEGAL_CONTACT, P, Section, Ul } from "@/components/LegalPage";
 
 export const metadata: Metadata = { title: "Privacy Policy — Akli" };
@@ -69,7 +70,7 @@ export default function PrivacyPage() {
       <Section title="Your choices and rights">
         <Ul>
           <li>You can view and change your details in your Profile at any time.</li>
-          <li>You can delete your account yourself in the app, or ask us to do it.</li>
+          <li>You can delete your account yourself in the app, or ask us to do it. See <Link href="/delete-account">how to delete your account</Link>.</li>
           <li>You can ask us for a copy of your information, or to correct it, by contacting us below.</li>
           <li>If you live somewhere with data-protection laws (for example Lebanon&rsquo;s Law No. 81 of 2018, or the EU and UK GDPR), you have the rights those laws give you, including the right to complain to your local authority.</li>
         </Ul>
