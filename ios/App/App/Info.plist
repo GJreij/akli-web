@@ -68,5 +68,7 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Akli uses your camera to scan barcodes when logging food.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Akli uses your location once, when you tap "use my location", to place the pin for your delivery address.</string>
 </dict>
 </plist>

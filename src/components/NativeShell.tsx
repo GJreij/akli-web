@@ -14,6 +14,9 @@ export default function NativeShell() {
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
 
+    // Hook for the app-only CSS in globals.css (no bounce, no long-press menus).
+    document.documentElement.classList.add("is-native");
+
     // next-pwa's service worker and the native shell are two competing
     // offline-caching layers — running both is the classic cause of "the app
     // won't show my update" bugs, so the wrapped app runs with neither: the

@@ -13,9 +13,12 @@ const config: CapacitorConfig = {
   server: {
     url: serverUrl,
     cleartext: serverUrl.startsWith('http://'),
+    // Shown (from www/) when the live site can't be reached, instead of a raw browser error.
+    errorPath: 'offline.html',
   },
   ios: {
     contentInset: 'automatic',
+    allowsLinkPreview: false,
   },
   plugins: {
     SplashScreen: {

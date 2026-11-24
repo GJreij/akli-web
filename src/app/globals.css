@@ -222,3 +222,24 @@
     margin: 3px 0 0 2px;
   }
 }
+
+/* Only inside the Capacitor app (NativeShell adds .is-native to <html>): behave
+   like an app rather than a web page. The website itself is unaffected. */
+html.is-native,
+html.is-native body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+html.is-native a,
+html.is-native button,
+html.is-native label,
+html.is-native [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+html.is-native input,
+html.is-native textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
