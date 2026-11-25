@@ -5,7 +5,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.BitmapFactory;
 import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
@@ -52,9 +51,11 @@ public class AkliMessagingService extends MessagingService {
         if (path != null) open.putExtra("path", path);
         PendingIntent tap = PendingIntent.getActivity(this, id, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
+        // The round picture on the left is Android's own small-icon slot: it only takes a
+        // one-colour shape (our white logo) on a circle filled with the accent colour. A
+        // full-colour picture can't go there, so there is no large image on the right.
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_akli)
-            .setLargeIcon(BitmapFactory.decodeResource(getResources(), R.drawable.ic_large_akli))
             .setColor(getResources().getColor(R.color.akli_notification_color, getTheme()))
             .setContentTitle(title)
             .setContentText(body)
