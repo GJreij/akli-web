@@ -54,6 +54,7 @@ const PERSONAL_TABLES = [
   "user_beta_feature",
   "delivery_location",
   "label_comment",
+  "device_token",
 ] as const;
 
 const ALLERGEN_COLUMNS = [

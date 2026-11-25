@@ -5,6 +5,7 @@ import { Capacitor } from "@capacitor/core";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { PushNotifications } from "@capacitor/push-notifications";
+import { createClient } from "@/lib/supabase/client";
 
 // Mounted once in the root layout, alongside AnalyticsTracker. No-ops
 // entirely on web — every call in here is gated on isNativePlatform() so
@@ -48,7 +49,52 @@ export default function NativeShell() {
   return null;
 }
 
+// The phone's push address, kept until it can be saved against a signed-in
+// customer (the token often arrives before the customer has logged in).
+let deviceToken: string | null = null;
+let savedFor: string | null = null; // user id the current token is saved under
+
+async function saveToken(userId: string | null) {
+  if (!deviceToken || savedFor === userId) return;
+  const platform = Capacitor.getPlatform();
+  if (platform !== "ios" && platform !== "android") return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = createClient() as any;
+  if (userId) {
+    const { error } = await db.rpc("register_device_token", { p_token: deviceToken, p_platform: platform });
+    if (error) console.error("[push] could not save device token", error.message);
+    else savedFor = userId;
+  } else {
+    // Signed out: stop notifications for the previous customer on this phone.
+    await db.rpc("unregister_device_token", { p_token: deviceToken });
+    savedFor = null;
+  }
+}
+
 async function registerPush() {
+  // Listeners first: register() can answer before the lines after it run.
+  PushNotifications.addListener("registration", (token) => {
+    deviceToken = token.value;
+    savedFor = null;
+    createClient().auth.getSession().then(({ data }) => saveToken(data.session?.user.id ?? null));
+  });
+  PushNotifications.addListener("registrationError", (err) => {
+    console.error("[push] registration failed", err);
+  });
+  PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+    // A notification can carry a path like "/orders" to open when tapped.
+    const path = action.notification.data?.path;
+    if (typeof path === "string" && path.startsWith("/") && !path.startsWith("//")) {
+      window.location.href = path;
+    }
+  });
+
+  // Follow sign-in / sign-out so the token always belongs to whoever is logged in.
+  createClient().auth.onAuthStateChange((event, session) => {
+    if (session?.user) saveToken(session.user.id);
+    else if (event === "SIGNED_OUT") saveToken(null);
+  });
+
   const perm = await PushNotifications.checkPermissions();
   let granted = perm.receive === "granted";
 
@@ -59,22 +105,4 @@ async function registerPush() {
   if (!granted) return;
 
   await PushNotifications.register();
-
-  // TODO: once Firebase (Android) and an APNs key (iOS) exist, POST this
-  // token + the signed-in user_id to a new endpoint that upserts it into a
-  // device-token table (with RLS scoping it to its own owner) so an order
-  // status change or delivery reminder can actually be sent. Until then this
-  // fires but has nowhere to deliver the token.
-  PushNotifications.addListener("registration", (token) => {
-    console.log("[push] device token", token.value);
-  });
-  PushNotifications.addListener("registrationError", (err) => {
-    console.error("[push] registration failed", err);
-  });
-  PushNotifications.addListener("pushNotificationReceived", (notification) => {
-    console.log("[push] received in foreground", notification);
-  });
-  PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
-    console.log("[push] tapped", action.notification);
-  });
 }

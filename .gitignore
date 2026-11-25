@@ -14,4 +14,4 @@ out/
 *.pem
 npm-debug.log*
 
-certificates
+certificatesandroid/app/google-services.json
