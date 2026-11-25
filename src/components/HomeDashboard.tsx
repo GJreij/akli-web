@@ -222,7 +222,7 @@ function RecipeModal({ recipe, onClose }: { recipe: RecipeRow; onClose: () => vo
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, zIndex: 50,
+        position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 50,
         background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}

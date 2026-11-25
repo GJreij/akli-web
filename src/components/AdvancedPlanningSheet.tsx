@@ -230,7 +230,7 @@ export default function AdvancedPlanningSheet({
   }, [focusDate]);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 60, background: C.offWhite, display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 60, background: C.offWhite, display: "flex", flexDirection: "column" }}>
       <div style={{ background: C.primary, color: C.white, padding: "12px 16px 10px", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Advanced planning</p>

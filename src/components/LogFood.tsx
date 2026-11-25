@@ -106,7 +106,7 @@ function CalendarSheet({ value, onSelect, onClose }: {
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, zIndex: 250,
+        position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 250,
         background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
@@ -901,7 +901,7 @@ function AddFoodSheet({ userId, date, presetMealType, onClose, onAdded }: {
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, zIndex: 200,
+        position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 200,
         background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}

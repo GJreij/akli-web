@@ -284,7 +284,7 @@ export default function TastesManager({
 
       {/* Sticky filter bar */}
       <div style={{
-        position: "sticky", top: 0, zIndex: 10,
+        position: "sticky", top: "var(--sat, 0px)", zIndex: 10,
         background: C.offWhite,
         padding: "10px 20px",
         borderBottom: `1px solid ${C.border}`,

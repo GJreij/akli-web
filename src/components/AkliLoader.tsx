@@ -71,7 +71,7 @@ export default function AkliLoader({ message, tone = "light", delayMs = 0, overl
       role="status"
       aria-live="polite"
       style={{
-        ...(overlay === "screen" ? { position: "fixed", inset: 0, zIndex: 50 }
+        ...(overlay === "screen" ? { position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 50 }
           : overlay === "parent" ? { position: "absolute", inset: 0, zIndex: 5, borderRadius: 14 }
           : { minHeight: 320, borderRadius: 14 }),
         background: bg,

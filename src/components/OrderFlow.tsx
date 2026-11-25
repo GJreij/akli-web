@@ -899,7 +899,7 @@ function DailyGoalCard({ target }: { target: { protein_g: number; carbs_g: numbe
 
   return (
     <div style={{
-      position: "sticky", top: 0, zIndex: 20,
+      position: "sticky", top: "var(--sat, 0px)", zIndex: 20,
       background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
       padding: "14px 16px 10px", marginBottom: 14,
       boxShadow: "0 4px 14px rgba(6,51,48,0.08)",
@@ -1035,7 +1035,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
           title="Show food summary"
           aria-label="Show food summary"
           style={{
-            position: "fixed", right: 16, top: 82, zIndex: 41,
+            position: "fixed", right: 16, top: "calc(82px + var(--sat, 0px))", zIndex: 41,
             width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center",
             background: C.tealDark, border: "none", borderRadius: "50%",
             fontSize: 18, lineHeight: 1,
@@ -1048,7 +1048,7 @@ function PlanSummaryPanel({ periods, open, onToggle }: { periods: PlanSummaryPer
 
       {open && (
         <div ref={panelRef} style={{
-          position: "fixed", top: 126, right: 16, left: 16, margin: "0 auto", maxWidth: 420, zIndex: 40,
+          position: "fixed", top: "calc(126px + var(--sat, 0px))", right: 16, left: 16, margin: "0 auto", maxWidth: 420, zIndex: 40,
           background: C.white, border: `1px solid ${C.border}`, borderRadius: 14,
           boxShadow: "0 10px 28px rgba(6,51,48,0.18)", maxHeight: "65dvh", overflowY: "auto",
           transform: `translateX(${dragX}px)`,

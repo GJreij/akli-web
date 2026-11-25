@@ -179,7 +179,7 @@ export default function BarcodeScanner({
   return (
     <div
       style={{
-        position: "fixed", inset: 0, zIndex: 300,
+        position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 300,
         background: "#000",
         display: "flex", flexDirection: "column",
       }}
