@@ -243,3 +243,6 @@ html.is-native textarea {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* Opening animation: skipped when the inline script in layout.tsx adds .splash-skip */
+html.splash-skip .launch-splash { display: none !important; }
