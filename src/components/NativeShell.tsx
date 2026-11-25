@@ -27,14 +27,17 @@ export default function NativeShell() {
       regs.forEach((r) => r.unregister());
     });
 
-    // Style.Default lets the phone pick readable text for the bar. (Style.Dark
-    // means LIGHT text, for dark bars: on our cream bar it was invisible.)
-    StatusBar.setStyle({ style: Style.Default }).catch(() => {});
+    // The status bar is the brand's deep green, the same as the header under
+    // it, so the top of the screen reads as one block. Style.Dark means LIGHT
+    // text, which is what a dark bar needs.
+    // (Android only for now: the iPhone's top strip is drawn differently and
+    // still needs checking on a Mac, so it keeps the phone's default.)
     if (Capacitor.getPlatform() === "android") {
+      StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
       // Android 14 and older draw the page under the status bar by default,
       // hiding the top of every screen. (Android 15+ pads for it by itself.)
       StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
-      StatusBar.setBackgroundColor({ color: "#F8F4EF" }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: "#063330" }).catch(() => {});
     }
     SplashScreen.hide().catch(() => {});
 

@@ -28,6 +28,7 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
+      // iPhone default. Android turns its bar deep green at runtime (NativeShell).
       style: 'DEFAULT',
       backgroundColor: '#F8F4EFFF',
     },
