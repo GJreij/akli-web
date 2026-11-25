@@ -4,11 +4,11 @@ import LegalPage, { LEGAL_CONTACT, P, Section, Ul } from "@/components/LegalPage
 
 export const metadata: Metadata = { title: "Terms of Use — Akli" };
 
-// TODO(owner): confirm the cancellation/refund wording, wallet-credit rules,
-// minimum age and governing law below before this goes live.
+// Cancellation, refund and wallet specifics are deliberately left to the app so
+// they can change without editing these terms.
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Use" updated="24 November 2026">
+    <LegalPage title="Terms of Use" updated="25 November 2026">
       <div style={{ marginTop: 24 }}>
         <P>
           These terms apply when you use the Akli app and website (app.akli-lb.org). Akli is a meal-prep delivery service run by{" "}
@@ -57,8 +57,8 @@ export default function TermsPage() {
 
       <Section title="Changes and cancellations">
         <P>
-          You can ask to change or cancel an upcoming delivery from your Orders page. We review each request, and the app tells you
-          the outcome. If a cancellation is approved, any amount owed to you is returned as shown in the app.
+          You can ask to change or cancel an upcoming delivery from your Orders page. The conditions, such as cut-off times, are
+          shown in the app when you make a request. We review each request, and the app tells you the outcome.
         </P>
       </Section>
 
