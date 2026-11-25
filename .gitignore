@@ -14,4 +14,7 @@ out/
 *.pem
 npm-debug.log*
 
-certificatesandroid/app/google-services.json
+certificates
+
+# Firebase client config: copy from Akli App Keys/Firebase before building Android
+android/app/google-services.json
