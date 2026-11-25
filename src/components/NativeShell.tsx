@@ -43,7 +43,7 @@ export default function NativeShell() {
     // the whole app natively the moment the customer taps Allow, and that
     // crash can't be caught from JS. Set NEXT_PUBLIC_PUSH_ENABLED=true only
     // once a release with push configured is what customers have installed.
-    if (process.env.NEXT_PUBLIC_PUSH_ENABLED === "true") registerPush();
+    if (process.env.NEXT_PUBLIC_PUSH_ENABLED === "true") startPushWhenSignedIn();
   }, []);
 
   return null;
@@ -69,6 +69,23 @@ async function saveToken(userId: string | null) {
     await db.rpc("unregister_device_token", { p_token: deviceToken });
     savedFor = null;
   }
+}
+
+// Asking "Allow notifications?" on the very first screen, before the customer
+// has signed in, gets more "Don't allow" answers (and a token we couldn't
+// attach to anyone yet). So wait until someone is signed in.
+async function startPushWhenSignedIn() {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getSession();
+  if (data.session) {
+    registerPush();
+    return;
+  }
+  const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session?.user) return;
+    sub.subscription.unsubscribe();
+    registerPush();
+  });
 }
 
 async function registerPush() {
