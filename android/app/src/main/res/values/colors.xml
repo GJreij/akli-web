@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="akli_notification_color">#063330</color>
+    <color name="akli_splash_green">#063330</color>
 </resources>

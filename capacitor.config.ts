@@ -16,6 +16,10 @@ const config: CapacitorConfig = {
     // Shown (from www/) when the live site can't be reached, instead of a raw browser error.
     errorPath: 'offline.html',
   },
+  android: {
+    // Behind the page while it loads: brand green, so there is no white flash before the opening animation.
+    backgroundColor: '#063330',
+  },
   ios: {
     contentInset: 'automatic',
     allowsLinkPreview: false,

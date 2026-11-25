@@ -16,7 +16,12 @@
     </style>
 
 
+    <!-- Launch screen: plain deep green (no icon), so it flows straight into the
+         green opening animation inside the app instead of flashing cream and white. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/akli_splash_green</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_empty</item>
+        <item name="android:background">@color/akli_splash_green</item>
+        <item name="android:statusBarColor">@color/akli_splash_green</item>
     </style>
 </resources>
