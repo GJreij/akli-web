@@ -16,6 +16,7 @@ import {
   type GenerateMealPlanResponse, type CheckoutSummaryResponse, type PlanDay, type Meal, type ChangeLog,
   type PlanSummaryPeriod, type ServingChange,
 } from "@/lib/flask";
+import { notifyOrderConfirmed } from "@/app/order/notifyOrderConfirmed";
 import type { AdvancedPlanningAccess } from "@/lib/advancedPlanning";
 import AdvancedPlanningSheet, { type DraftServings } from "@/components/AdvancedPlanningSheet";
 import { type PrefRating } from "@/lib/preferences";
@@ -2485,6 +2486,7 @@ export default function OrderFlow({
         setConfirmErr(res.error); setStep("checkout");
       } else {
         track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, order_id: res.order_id ?? null }, "order");
+        notifyOrderConfirmed().catch(() => {});
         clearDraft();
         setStep("confirmed");
       }
@@ -2492,6 +2494,7 @@ export default function OrderFlow({
       if (await orderWasActuallyPlaced(sortedDates)) {
         // Backend committed the order despite the request erroring out — treat as success.
         track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, recovered_from_error: true }, "order");
+        notifyOrderConfirmed().catch(() => {});
         clearDraft();
         setStep("confirmed");
       } else {

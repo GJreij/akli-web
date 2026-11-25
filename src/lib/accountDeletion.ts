@@ -55,6 +55,7 @@ const PERSONAL_TABLES = [
   "delivery_location",
   "label_comment",
   "device_token",
+  "push_notification_log",
 ] as const;
 
 const ALLERGEN_COLUMNS = [
