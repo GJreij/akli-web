@@ -26,8 +26,15 @@ export default function NativeShell() {
       regs.forEach((r) => r.unregister());
     });
 
-    StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
-    StatusBar.setBackgroundColor({ color: "#F8F4EF" }).catch(() => {});
+    // Style.Default lets the phone pick readable text for the bar. (Style.Dark
+    // means LIGHT text, for dark bars: on our cream bar it was invisible.)
+    StatusBar.setStyle({ style: Style.Default }).catch(() => {});
+    if (Capacitor.getPlatform() === "android") {
+      // Android 14 and older draw the page under the status bar by default,
+      // hiding the top of every screen. (Android 15+ pads for it by itself.)
+      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: "#F8F4EF" }).catch(() => {});
+    }
     SplashScreen.hide().catch(() => {});
 
     // Off until Firebase (google-services.json) and the Apple push key are set
