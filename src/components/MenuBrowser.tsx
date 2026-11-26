@@ -51,7 +51,7 @@ function RecipeModal({ recipe, conflicts, onClose }: { recipe: RecipeRow; confli
     <div
       onClick={onClose}
       style={{
-        position: "fixed", inset: 0, zIndex: 50,
+        position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 50,
         background: "rgba(6,51,48,0.55)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
       }}
@@ -307,7 +307,7 @@ export default function MenuBrowser({ menus, userAllergens, recipeAllergens, tod
       {/* Sticky day picker */}
       {days.length > 0 && (
         <div style={{
-          position: "sticky", top: 0, zIndex: 20,
+          position: "sticky", top: "var(--sat, 0px)", zIndex: 20,
           background: "rgba(238,233,230,0.92)", backdropFilter: "blur(10px)",
           borderBottom: `1px solid ${C.border}`, padding: "10px 0",
         }}>

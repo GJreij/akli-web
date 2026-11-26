@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   title: "Akli — Your Personal Meal Plan",
   description: "Macro-optimised meal prep delivered fresh in Lebanon.",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, statusBarStyle: "default", title: "Akli" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Akli" },
   robots: { index: false, follow: false },
 };
 
@@ -18,6 +18,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

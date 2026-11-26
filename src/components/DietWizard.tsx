@@ -268,7 +268,7 @@ export default function DietWizard({ userId, currentMacro, profile, onClose, onS
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 60, background: C.offWhite, display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "fixed", inset: "var(--sat, 0px) 0 0 0", zIndex: 60, background: C.offWhite, display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div style={{ background: C.primary, padding: "14px 20px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
