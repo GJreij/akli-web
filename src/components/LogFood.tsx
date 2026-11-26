@@ -794,6 +794,9 @@ function SearchTab({ query, setQuery, results, setResults, onPick }: {
           </button>
         ))}
       </div>
+      <p style={{ margin: "8px 0 0", fontSize: 10.5, color: C.light, textAlign: "center" }}>
+        Food data: USDA FoodData Central and Open Food Facts (ODbL).
+      </p>
     </div>
   );
 }
