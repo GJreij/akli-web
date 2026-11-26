@@ -149,7 +149,7 @@ export default function LaunchSplash() {
     >
       <div
         ref={stage}
-        style={{ position: "relative", width: "min(80vw, 380px)", aspectRatio: `${G.w} / ${G.h}` }}
+        style={{ position: "relative", width: "min(50vw, 210px)", aspectRatio: `${G.w} / ${G.h}` }}
       >
         {PARTS.map((p) => (
           // eslint-disable-next-line @next/next/no-img-element
