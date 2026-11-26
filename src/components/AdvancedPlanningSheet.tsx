@@ -357,7 +357,7 @@ export default function AdvancedPlanningSheet({
       </div>
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "12px 20px 28px" }}>
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.white, borderTop: `1px solid ${C.border}`, padding: "12px 20px max(28px, calc(env(safe-area-inset-bottom, 0px) + 14px))" }}>
         {error && <p style={{ fontSize: 12, color: C.error, margin: "0 0 8px", textAlign: "center" }}>{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>
           <button

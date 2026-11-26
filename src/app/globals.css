@@ -11,6 +11,9 @@
 @media (display-mode: standalone) {
   html:not(.is-native) { --sat: env(safe-area-inset-top, 0px); }
 }
+/* Same for the iPhone app (NativeShell adds .is-ios): the page fills the screen,
+   so it must keep clear of the notch / Dynamic Island itself. */
+html.is-ios { --sat: env(safe-area-inset-top, 0px); }
 body { padding-top: var(--sat); }
 body::before {
   content: "";

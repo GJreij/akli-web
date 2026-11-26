@@ -2472,7 +2472,7 @@ export default function OrderHistory({ plans, userId, hasOlderOrders = false, wa
 
       {/* New order FAB */}
       {plans.length > 0 && (
-        <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
+        <div style={{ position: "fixed", bottom: "max(24px, calc(env(safe-area-inset-bottom, 0px) + 10px))", left: 0, right: 0, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
           <button
             onClick={() => router.push("/order/new")}
             style={{

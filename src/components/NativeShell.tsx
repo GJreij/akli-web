@@ -27,6 +27,14 @@ export default function NativeShell() {
       regs.forEach((r) => r.unregister());
     });
 
+    // iPhone: the page is drawn under the status bar, so globals.css pads the top
+    // by the real safe-area height (--sat) and fills that strip with brand green.
+    // Light clock/battery text reads on that green.
+    if (Capacitor.getPlatform() === "ios") {
+      document.documentElement.classList.add("is-ios");
+      StatusBar.setStyle({ style: Style.Dark }).catch(() => {});
+    }
+
     // The status bar is the brand's deep green, the same as the header under
     // it, so the top of the screen reads as one block. Style.Dark means LIGHT
     // text, which is what a dark bar needs.

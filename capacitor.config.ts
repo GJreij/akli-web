@@ -21,7 +21,11 @@ const config: CapacitorConfig = {
     backgroundColor: '#063330',
   },
   ios: {
-    contentInset: 'automatic',
+    // The page fills the whole screen (viewport-fit=cover) and keeps clear of the
+    // notch / Dynamic Island and the home bar itself, with env(safe-area-inset-*)
+    // in globals.css. 'automatic' made iOS inset only part of it, which put the
+    // header under the clock and left a dead strip at the bottom.
+    contentInset: 'never',
     allowsLinkPreview: false,
   },
   plugins: {
