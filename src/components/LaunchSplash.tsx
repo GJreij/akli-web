@@ -7,11 +7,14 @@ import { Capacitor } from "@capacitor/core";
 // up into the "ak" logo while the dot of the i floats to the top.
 // The artwork is the brand's own wordmark, cut into one sprite per letter
 // (public/splash/*.png, all on the same canvas, so they line up by themselves).
-// App only (iPhone/Android) — never on the website. Plays on every fresh launch of the app: the
-// inline script in layout.tsx adds .splash-skip before first paint when the page was reached from
-// another page (in-app navigation) and on admin/legal pages.
+// App only (iPhone/Android) — never on the website. Plays on every fresh launch of the app; the gate
+// script in layout.tsx (SPLASH_GATE) decides before first paint and carries the animation across
+// the redirects a signed-in launch goes through, until it has played through once.
 
 const GREEN = "#063330";
+// Set by the gate script in layout.tsx while a launch's animation has not finished yet.
+const PENDING_KEY = "akli-splash-pending";
+const clearPending = () => { try { localStorage.removeItem(PENDING_KEY); } catch { /* ignore */ } };
 
 // Geometry of the sprites (px on their 380 x 285 canvas): see public/splash/meta.json.
 const G = {
@@ -51,7 +54,7 @@ export default function LaunchSplash() {
     if (!Capacitor.isNativePlatform()) { setDone(true); return; }
     let reduce = false;
     try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* ignore */ }
-    if (reduce || html.classList.contains("splash-skip")) { setDone(true); return; }
+    if (reduce || html.classList.contains("splash-skip")) { clearPending(); setDone(true); return; }
     // The artwork is only fetched here, inside the app — the sprites have no src in the
     // server-rendered page, so the website never downloads them.
     for (const p of PARTS) {
@@ -74,6 +77,7 @@ export default function LaunchSplash() {
       cancelled = true;
       const a = root.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 380, easing: "ease-out", fill: "forwards" });
       if (a) await a.finished.catch(() => {});
+      clearPending();
       setDone(true);
     }
     skip.current = fadeOutAndFinish;
