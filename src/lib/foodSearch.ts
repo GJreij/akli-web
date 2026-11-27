@@ -68,13 +68,44 @@ function normalizeQuery(q: string) {
 // Generic (raw/unbranded) results only, unless and until none exist at all —
 // searching "chicken breast" shouldn't surface a wall of near-duplicate
 // brand variants when the plain ingredient is what most people mean.
-export async function searchFoodByName(admin: SupabaseClient<Database>, rawQ: string): Promise<FoodCatalogItem[]> {
+// Fast mode (used by the food-diary AI chat): the assistant only needs a few
+// good matches per ingredient, not a full results page, so as soon as the local
+// catalog has a couple of strong ones we skip the slow outside USDA lookup.
+// USDA results are saved into the local catalog the first time they are fetched,
+// so ingredients get faster after their first use.
+const FAST_STRONG_LOCAL_ENOUGH = 2;
+
+// Short-lived memory of recent searches on a warm server, so the same
+// ingredient (rice, olive oil, ...) isn't looked up again for every chat.
+const FAST_CACHE_TTL_MS = 10 * 60 * 1000;
+const FAST_CACHE_MAX = 300;
+const fastCache = new Map<string, { at: number; items: FoodCatalogItem[] }>();
+
+export async function searchFoodByName(
+  admin: SupabaseClient<Database>,
+  rawQ: string,
+  opts: { fast?: boolean } = {}
+): Promise<FoodCatalogItem[]> {
   const q = normalizeQuery(rawQ);
   if (!q) return [];
 
+  const cacheKey = q.toLowerCase();
+  if (opts.fast) {
+    const hit = fastCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < FAST_CACHE_TTL_MS) return hit.items;
+  }
+  const items = await searchFoodByNameUncached(admin, q, opts.fast === true);
+  if (opts.fast && items.length > 0) {
+    if (fastCache.size >= FAST_CACHE_MAX) fastCache.delete(fastCache.keys().next().value as string);
+    fastCache.set(cacheKey, { at: Date.now(), items });
+  }
+  return items;
+}
+
+async function searchFoodByNameUncached(admin: SupabaseClient<Database>, q: string, fast: boolean): Promise<FoodCatalogItem[]> {
   const genericLocal = await queryLocalCatalog(admin, q, { genericOnly: true, limit: CANDIDATE_POOL_SIZE });
   const strongLocal = genericLocal.filter((i) => scoreFoodMatch(i.name, q) >= STRONG_MATCH_THRESHOLD);
-  if (strongLocal.length >= SEARCH_RESULT_CAP) return rankAndSlice(genericLocal, q);
+  if (strongLocal.length >= (fast ? FAST_STRONG_LOCAL_ENOUGH : SEARCH_RESULT_CAP)) return rankAndSlice(genericLocal, q);
 
   const genericUsda = await cacheUsdaResults(admin, await searchUsdaFdc(q, "generic", CANDIDATE_POOL_SIZE));
   const seenGeneric = new Set(genericLocal.map((i) => i.id));

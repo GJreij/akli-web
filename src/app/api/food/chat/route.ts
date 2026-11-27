@@ -44,13 +44,13 @@ Rules:
 
 2b. Before asking anything, re-read the whole conversation for facts the user has already given, including short one-word answers to earlier questions ("white", "ground", "regular") — never ask about something already established, even indirectly (e.g. if they said "it was meat" and then "ground", do not later ask "chicken or beef" or "white meat or red meat"). If you're unsure whether something was already covered, treat it as covered rather than re-asking — a redundant question reads as not listening, which is worse than a slightly rougher estimate.
 
-3. To get real nutrition numbers, use the search_food tool — it searches Akli's verified catalog plus USDA. Always search for plain ingredients and generic foods (an apple, chicken breast, rice, olive oil, pita bread, labneh, etc.) rather than guessing their macros yourself.
+3. To get real nutrition numbers, use the search_food tool — it searches Akli's verified catalog plus USDA. Always search for plain ingredients and generic foods (an apple, chicken breast, rice, olive oil, pita bread, labneh, etc.) rather than guessing their macros yourself. SPEED MATTERS: the user is waiting, so work out everything you need to look up first and then call search_food for ALL of those items in ONE single turn (several tool calls at once) — never one item per turn. Keep each composite dish to its 3 to 5 main ingredients, and do not search again for something you already have a result for.
 
-4. Composite / homemade dishes (mjaddara, tabbouleh, fattoush, kibbeh, kafta, manakish, moutabal, hummus, mahshi, knefe, a sandwich, etc.): a single search_food call is unlikely to return one reliable match for a home-cooked regional dish — what's in the catalog for a name like that, if anything, is inconsistent or the wrong portion. Instead, reconstruct it yourself: think of its typical ingredients and realistic per-serving quantities (e.g. mjaddara ≈ rice + brown/green lentils + caramelized onions + olive oil), call search_food separately for each ingredient to get real per-100g macros, then sum them into ONE combined entry for the dish — never split one dish into multiple diary rows. Put a short comma-separated ingredient list in that entry's "components" field so the user can see exactly what you assumed and correct it if it's off. Mark these entries "estimated".
+4. Composite / homemade dishes (mjaddara, tabbouleh, fattoush, kibbeh, kafta, manakish, moutabal, hummus, mahshi, knefe, a sandwich, etc.): a single search_food call is unlikely to return one reliable match for a home-cooked regional dish — what's in the catalog for a name like that, if anything, is inconsistent or the wrong portion. Instead, reconstruct it yourself: think of its typical ingredients and realistic per-serving quantities (e.g. mjaddara ≈ rice + brown/green lentils + caramelized onions + olive oil), call search_food separately for each ingredient to get real per-100g macros, then return it as ONE entry for the dish — never split one dish into multiple diary rows. List every ingredient in that entry's "ingredients" array with its grams and the id from its search_food result; the server adds up the macros from those, so NEVER calculate or write out kcal/macro totals yourself. The ingredient list is also what the user sees, so they can correct what you assumed. Mark these entries "estimated".
 
 5. Only prefer a branded/packaged match (and only then is an OpenFoodFacts- or branded-USDA-sourced item appropriate) when the user actually names a brand or clearly means a specific packaged product off a label ("a can of Pepsi", "Lipton ice tea", "a Kinder bar"). For everything else — plain ingredients and homemade dishes — favor generic/verified catalog and USDA matches, never branded ones.
 
-6. Once every item is resolved (no more clarification needed, every entry's macros are backed by a real search_food result or a sum of searched ingredients), call propose_entries exactly once with the complete list. Never call propose_entries in the same turn as a clarifying question — resolve the ambiguity via plain text first, wait for the reply, then finish.
+6. Once every item is resolved (no more clarification needed, every entry's macros are backed by a real search_food result or a sum of searched ingredients), call propose_entries exactly once with the complete list. Do not write any commentary, working, or arithmetic as text — call the tools directly. Every entry (single foods too) is described by its "ingredients" with grams; the server does the maths. Never call propose_entries in the same turn as a clarifying question — resolve the ambiguity via plain text first, wait for the reply, then finish.
 
 7. Plain-text replies are ONLY for clarifying questions, and they render as raw text in a chat bubble — no markdown. Never use **bold**, headers, bullet lists, or asterisks of any kind. Never restate macros, kcal, or a breakdown of what you've worked out so far in a plain-text reply — that's what the confirmation screen after propose_entries is for. A clarifying reply should be ONE short sentence, at most two, asking only the specific thing you need — nothing else. Example of the right length: "Was the pain demi more like a mini baguette, or a smaller dinner-roll size?" Do not explain your assumptions or show numbers before asking.
 
@@ -72,7 +72,7 @@ Rules:
 
 13. If the user names a specific packaged/branded product — a brand, or "from Carrefour/Spinneys/a supermarket" — search_food for it first. Real branded results are rare (the catalog leans generic/USDA, which barely covers Lebanese retail brands), so a miss here is expected, not a failure: fall back to a reasonable generic estimate for that kind of product exactly as you would for anything else, but set suggest_scan to true on that entry so the confirmation screen can point them to the barcode scanner for the real numbers. Only set it when a specific product was actually named and unmatched — never for a plain description ("yogurt", "a salad") or a homemade dish, and never as a substitute for actually trying search_food first.
 
-14. If the user gives an exact value for one macro or calories on a specific item and asks you to recalculate the rest around it (e.g. "the protein is actually 20g — recalculate the rest to stay consistent"), that number is ground truth — never search for it or second-guess it. Adjust the item's other macros/calories to what's realistic for that kind of food given that one fixed value: use the 4/4/9 kcal-per-gram relationship (protein/carbs = 4, fat = 9) as a sanity check on the total, but the goal is a coherent, plausible profile for that food, not pure arithmetic from nothing — keep whichever of the other macros are still reasonable for the dish rather than changing everything. Keep the item's name, meal, and quantity_label the same unless told otherwise. This is the same kind of correction as rule 9 — call propose_entries again with the complete list, that one entry corrected and everything else from the last proposal unchanged.`;
+14. If the user gives an exact value for one macro or calories on a specific item and asks you to recalculate the rest around it (e.g. "the protein is actually 20g — recalculate the rest to stay consistent"), that number is ground truth — never search for it or second-guess it. Adjust the item's other macros/calories to what's realistic for that kind of food given that one fixed value: use the 4/4/9 kcal-per-gram relationship (protein/carbs = 4, fat = 9) as a sanity check on the total, but the goal is a coherent, plausible profile for that food, not pure arithmetic from nothing — keep whichever of the other macros are still reasonable for the dish rather than changing everything. Because the user's number must be used exactly, for THIS kind of correction fill the entry's exact_totals (grams, kcal, protein_g, carbs_g, fat_g) yourself — the server then uses those instead of adding up ingredients; keep the ingredients list for display. Keep the item's name, meal, and quantity_label the same unless told otherwise. This is the same kind of correction as rule 9 — call propose_entries again with the complete list, that one entry corrected and everything else from the last proposal unchanged.`;
 
 const searchFoodTool: Anthropic.Tool = {
   name: "search_food",
@@ -92,8 +92,7 @@ const searchFoodTool: Anthropic.Tool = {
 const proposeEntriesTool: Anthropic.Tool = {
   name: "propose_entries",
   description:
-    "Final output: the resolved list of food log entries to show the user for confirmation. Call this once, only after every entry's macros are backed by real search_food results (directly, or summed from a reconstructed dish's ingredients).",
-  strict: true,
+    "Final output: the resolved list of food log entries to show the user for confirmation. Call this once. Describe each entry by its ingredients and their grams: the server looks up the macros from the search_food results and adds them up, so do not compute totals yourself (except for a user-supplied exact value, see exact_totals).",
   input_schema: {
     type: "object",
     properties: {
@@ -105,18 +104,38 @@ const proposeEntriesTool: Anthropic.Tool = {
             meal_type: { type: "string", enum: [...MEAL_TYPES] },
             name: { type: "string", description: "Display name for the diary, e.g. 'Grilled chicken breast' or 'Mjaddara'" },
             quantity_label: { type: "string", description: "Short human-readable amount, e.g. '150g' or '1 plate'" },
-            grams: { type: "number", description: "Total grams/ml this entry represents" },
-            kcal: { type: "number" },
-            protein_g: { type: "number" },
-            carbs_g: { type: "number" },
-            fat_g: { type: "number" },
-            catalog_item_id: {
-              type: "string",
-              description: "The food_catalog_item id as a string if this maps to exactly one searched item, otherwise an empty string (composite/reconstructed dishes always use an empty string).",
+            ingredients: {
+              type: "array",
+              description: "What this entry is made of. A single plain food has one ingredient. A composite dish lists its 3 to 5 main ingredients.",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string", description: "Ingredient name, e.g. 'white rice, cooked'" },
+                  grams: { type: "number", description: "Amount in grams (or ml) used in this entry" },
+                  catalog_item_id: {
+                    type: "string",
+                    description: "The id of the matching search_food result as a string. Empty string only if no search result fits.",
+                  },
+                  kcal_per_100: { type: "number", description: "ONLY when catalog_item_id is empty: your best estimate per 100g. Omit otherwise." },
+                  protein_per_100: { type: "number", description: "ONLY when catalog_item_id is empty. Omit otherwise." },
+                  carbs_per_100: { type: "number", description: "ONLY when catalog_item_id is empty. Omit otherwise." },
+                  fat_per_100: { type: "number", description: "ONLY when catalog_item_id is empty. Omit otherwise." },
+                },
+                required: ["name", "grams", "catalog_item_id"],
+                additionalProperties: false,
+              },
             },
-            components: {
-              type: "string",
-              description: "For composite/reconstructed dishes only: brief comma-separated ingredient list, e.g. 'rice, brown lentils, caramelized onions, olive oil'. Empty string for single-catalog-item entries.",
+            exact_totals: {
+              type: "object",
+              description: "ONLY when the user gave an exact value for this item (rule 14): the totals to use as they are instead of adding up the ingredients. Omit otherwise.",
+              properties: {
+                grams: { type: "number" },
+                kcal: { type: "number" },
+                protein_g: { type: "number" },
+                carbs_g: { type: "number" },
+                fat_g: { type: "number" },
+              },
+              required: ["grams", "kcal", "protein_g", "carbs_g", "fat_g"],
             },
             confidence: { type: "string", enum: ["confirmed", "estimated"] },
             suggest_scan: {
@@ -124,10 +143,7 @@ const proposeEntriesTool: Anthropic.Tool = {
               description: "True only if the user named a specific packaged/branded product (a brand, or 'from Carrefour/Spinneys/...') and search_food did not return a confident match for that exact product — meaning this estimate is a generic stand-in, and scanning the real barcode would be meaningfully more accurate. False otherwise, including for homemade/composite dishes.",
             },
           },
-          required: [
-            "meal_type", "name", "quantity_label", "grams", "kcal", "protein_g", "carbs_g", "fat_g",
-            "catalog_item_id", "components", "confidence", "suggest_scan",
-          ],
+          required: ["meal_type", "name", "quantity_label", "ingredients", "confidence", "suggest_scan"],
           additionalProperties: false,
         },
       },
@@ -162,10 +178,18 @@ type ChatResult =
   | { type: "entries"; entries: ProposedEntry[] }
   | { type: "error"; message: string };
 
-async function executeSearchFood(query: string) {
-  const items = await searchFoodByName(admin, query);
+// Items the model has seen in this request, by id, so the server can add up the
+// macros itself from the real per-100g numbers instead of trusting the model's maths.
+type SearchedItem = {
+  id: number; name: string; brand: string | null; source: string;
+  kcal_per_100: number | null; protein_per_100: number | null; carbs_per_100: number | null; fat_per_100: number | null;
+  default_serving_qty: number | null; default_serving_unit: string | null; default_serving_label: string | null;
+};
+
+async function executeSearchFood(query: string, found: Map<number, SearchedItem>) {
+  const items = await searchFoodByName(admin, query, { fast: true });
   // Trim to what the model actually needs — keeps tool_result tokens small.
-  return items.slice(0, 6).map((i) => ({
+  const trimmed = items.slice(0, 6).map((i) => ({
     id: i.id,
     name: i.name,
     brand: i.brand,
@@ -177,27 +201,58 @@ async function executeSearchFood(query: string) {
     default_serving_qty: i.default_serving_qty,
     default_serving_unit: i.default_serving_unit,
     default_serving_label: i.default_serving_label,
-  }));
+  })) as SearchedItem[];
+  for (const t of trimmed) found.set(Number(t.id), t);
+  return trimmed;
 }
 
-function toProposedEntries(raw: unknown): ProposedEntry[] {
+const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+function toProposedEntries(raw: unknown, found: Map<number, SearchedItem>): ProposedEntry[] {
   const input = raw as { entries?: unknown[] };
   const entries = Array.isArray(input.entries) ? input.entries : [];
   return entries.map((e) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r = e as any;
-    const catalogIdNum = Number(r.catalog_item_id);
+    const ings: Array<{ name?: string; grams?: number; catalog_item_id?: string; kcal_per_100?: number; protein_per_100?: number; carbs_per_100?: number; fat_per_100?: number }> =
+      Array.isArray(r.ingredients) ? r.ingredients : [];
+
+    let grams = 0, kcal = 0, protein = 0, carbs = 0, fat = 0;
+    let singleCatalogId: number | null = null;
+    for (const ing of ings) {
+      const g = num(ing.grams);
+      const idNum = Number(ing.catalog_item_id);
+      const hit = ing.catalog_item_id && !Number.isNaN(idNum) ? found.get(idNum) : undefined;
+      const per = hit
+        ? { k: num(hit.kcal_per_100), p: num(hit.protein_per_100), c: num(hit.carbs_per_100), f: num(hit.fat_per_100) }
+        : { k: num(ing.kcal_per_100), p: num(ing.protein_per_100), c: num(ing.carbs_per_100), f: num(ing.fat_per_100) };
+      grams += g;
+      kcal += (per.k * g) / 100;
+      protein += (per.p * g) / 100;
+      carbs += (per.c * g) / 100;
+      fat += (per.f * g) / 100;
+      if (ings.length === 1 && hit) singleCatalogId = Number(hit.id);
+    }
+    // An exact value from the user wins over the sum (rule 14).
+    if (r.exact_totals && num(r.exact_totals.kcal) > 0) {
+      grams = num(r.exact_totals.grams) || grams;
+      kcal = num(r.exact_totals.kcal);
+      protein = num(r.exact_totals.protein_g);
+      carbs = num(r.exact_totals.carbs_g);
+      fat = num(r.exact_totals.fat_g);
+    }
     return {
       meal_type: r.meal_type,
       name: r.name,
       quantity_label: r.quantity_label,
-      grams: Number(r.grams) || 0,
-      kcal: Number(r.kcal) || 0,
-      protein_g: Number(r.protein_g) || 0,
-      carbs_g: Number(r.carbs_g) || 0,
-      fat_g: Number(r.fat_g) || 0,
-      catalog_item_id: r.catalog_item_id && !Number.isNaN(catalogIdNum) ? catalogIdNum : null,
-      components: r.components ? String(r.components) : null,
+      grams: round1(grams),
+      kcal: Math.round(kcal),
+      protein_g: round1(protein),
+      carbs_g: round1(carbs),
+      fat_g: round1(fat),
+      catalog_item_id: singleCatalogId,
+      components: ings.length > 1 ? ings.map((i) => String(i.name ?? "").trim()).filter(Boolean).join(", ") : null,
       confidence: r.confidence === "confirmed" ? "confirmed" : "estimated",
       suggest_scan: r.suggest_scan === true,
     } as ProposedEntry;
@@ -206,16 +261,24 @@ function toProposedEntries(raw: unknown): ProposedEntry[] {
 
 async function runChatLoop(history: ChatTurn[]): Promise<ChatResult> {
   const messages: Anthropic.MessageParam[] = history.map((t) => ({ role: t.role, content: t.content }));
+  const found = new Map<number, SearchedItem>();
 
   for (let i = 0; i < MAX_LOOP_ITERATIONS; i++) {
+    const t0 = Date.now();
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 1536,
-      system: SYSTEM_PROMPT,
-      tools: [searchFoodTool, proposeEntriesTool],
+      // The long instructions and tool definitions are identical on every round and
+      // every chat, so mark them cacheable: when the model supports it for this
+      // size, later rounds start faster (and cost less).
+      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      tools: [searchFoodTool, { ...proposeEntriesTool, cache_control: { type: "ephemeral" } }],
       messages,
     });
 
+    if (process.env.FOOD_CHAT_DEBUG) {
+      console.log(`[food-chat] round ${i} model ${Date.now() - t0}ms stop=${response.stop_reason} in=${response.usage.input_tokens} out=${response.usage.output_tokens}`);
+    }
     if (response.stop_reason === "max_tokens") {
       return { type: "error", message: "That was a lot to parse at once — try splitting it into a couple of messages." };
     }
@@ -229,7 +292,7 @@ async function runChatLoop(history: ChatTurn[]): Promise<ChatResult> {
     // not to mix these, but don't trust that blindly).
     const proposeBlock = toolUseBlocks.find((b) => b.name === "propose_entries");
     if (proposeBlock) {
-      return { type: "entries", entries: toProposedEntries(proposeBlock.input) };
+      return { type: "entries", entries: toProposedEntries(proposeBlock.input, found) };
     }
 
     if (toolUseBlocks.length === 0) {
@@ -243,13 +306,15 @@ async function runChatLoop(history: ChatTurn[]): Promise<ChatResult> {
 
     // Only search_food calls remain — execute them and continue the loop.
     messages.push({ role: "assistant", content: response.content });
+    const s0 = Date.now();
     const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
       toolUseBlocks.map(async (block) => {
         const input = block.input as { query: string };
-        const result = await executeSearchFood(input.query);
+        const result = await executeSearchFood(input.query, found);
         return { type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result) };
       })
     );
+    if (process.env.FOOD_CHAT_DEBUG) console.log(`[food-chat] round ${i} searches=${toolUseBlocks.length} took ${Date.now() - s0}ms`);
     messages.push({ role: "user", content: toolResults });
   }
 
