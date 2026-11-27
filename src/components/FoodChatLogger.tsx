@@ -504,7 +504,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
           }}
           onBlur={() => submitMacroEdit(entry)}
           style={{
-            width: big ? 70 : 48, fontSize: big ? 20 : 13, padding: "2px 4px", border: `1px solid ${C.tealDark}`, borderRadius: 6,
+            width: big ? 60 : 44, fontSize: big ? 16 : 12, padding: "2px 4px", border: `1px solid ${C.tealDark}`, borderRadius: 6,
             font: "inherit", fontWeight: 700, color: C.primary,
           }}
         />
@@ -523,14 +523,14 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
   }
 
   const stepBtn: React.CSSProperties = {
-    width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white,
+    width: 30, height: 30, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white,
     display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.primary, padding: 0,
   };
   const rowLabel: React.CSSProperties = {
-    width: 58, flexShrink: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.light,
+    width: 50, flexShrink: 0, fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.light,
   };
   const linkBtn: React.CSSProperties = {
-    background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+    background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11.5, fontWeight: 600,
     color: C.tealDark, textDecoration: "underline", textUnderlineOffset: 3,
   };
   const SIZE_NAME: Record<Size, string> = { S: "Small", M: "Medium", L: "Large" };
@@ -628,22 +628,22 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
 
           {pendingEntries && (
             <div>
-              <p style={{ fontSize: 12.5, color: C.muted, margin: "4px 0 12px", lineHeight: 1.45 }}>
+              <p style={{ fontSize: 11.5, color: C.light, margin: "4px 0 10px", lineHeight: 1.45 }}>
                 {pendingEntries.some((e) => e.quick)
                   ? "⚡ Quick estimate. Adjust the amount or size below, or tap any number to set it exactly."
                   : "Here's what I got. Adjust the amount below, or tap any number to set it exactly."}
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
                 {pendingEntries.map((e) => {
                   const t = totalsOf(e);
                   return (
                     <div key={e._id} style={{ border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", background: C.white }}>
                       {/* 1 · What it is and what it adds up to */}
-                      <div style={{ background: "#f7f5f2", padding: "12px 14px" }}>
+                      <div style={{ background: "#f7f5f2", padding: "10px 12px" }}>
                         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                           <div style={{ minWidth: 0 }}>
-                            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>{e.name}</p>
-                            <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>
+                            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#1a1a1a" }}>{e.name}</p>
+                            <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.muted }}>
                               {quantityLabelOf(e)}
                               {e.confidence === "estimated" && (
                                 <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 6px", borderRadius: 20, background: "#fff8e6", color: "#b45309" }}>
@@ -657,16 +657,16 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                             aria-label="Remove"
                             style={{ background: "none", border: "none", padding: 6, margin: -6, color: C.light, cursor: "pointer", flexShrink: 0 }}
                           >
-                            <IconX size={16} />
+                            <IconX size={14} />
                           </button>
                         </div>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 26, fontWeight: 800, color: C.primary, lineHeight: 1.1 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: C.primary, lineHeight: 1.1 }}>
                             {renderMacroValue(e, "kcal", "", true)}
                           </span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: C.muted, marginRight: 8 }}>kcal</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: C.muted, marginRight: 6 }}>kcal</span>
                           {([["protein_g", "Protein"], ["carbs_g", "Carbs"], ["fat_g", "Fat"]] as [MacroField, string][]).map(([f, label]) => (
-                            <span key={f} style={{ fontSize: 12, color: C.muted, background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap" }}>
+                            <span key={f} style={{ fontSize: 11, color: C.muted, background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "2px 8px", whiteSpace: "nowrap" }}>
                               {label} <b style={{ color: C.primary }}>{renderMacroValue(e, f, "g")}</b>
                             </span>
                           ))}
@@ -683,7 +683,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                       </div>
 
                       {/* 2 · How much — instant, no AI call */}
-                      <div style={{ padding: "14px 14px 12px", borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 14 }}>
+                      <div style={{ padding: "10px 12px", borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 10 }}>
                         {e.useGrams ? (
                           <>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -694,9 +694,9 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                                 value={e.gramsValue || ""}
                                 onChange={(ev) => updateEntry(e._id, { gramsValue: Math.max(0, Number(ev.target.value) || 0) })}
                                 onFocus={(ev) => ev.target.select()}
-                                style={{ width: 96, padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.tealDark}`, fontSize: 18, fontWeight: 700, color: C.primary }}
+                                style={{ width: 84, padding: "6px 8px", borderRadius: 9, border: `1px solid ${C.tealDark}`, fontSize: 16, fontWeight: 700, color: C.primary }}
                               />
-                              <span style={{ fontSize: 13, color: C.muted }}>g</span>
+                              <span style={{ fontSize: 12, color: C.muted }}>g</span>
                             </div>
                             <button onClick={() => updateEntry(e._id, { useGrams: false })} style={{ ...linkBtn, alignSelf: "flex-start" }}>
                               Go back to {e.labelIsPhrase ? "portions" : `${e.unit_label}s`}
@@ -706,24 +706,24 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                           <>
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <span style={rowLabel}>Amount</span>
-                              <button aria-label="Less" onClick={() => stepCount(e, -1)} style={stepBtn}><IconMinus size={16} /></button>
-                              <span style={{ minWidth: 34, textAlign: "center", fontSize: 21, fontWeight: 800, color: C.primary }}>{fmtCount(e.count)}</span>
-                              <button aria-label="More" onClick={() => stepCount(e, 1)} style={stepBtn}><IconPlus size={16} /></button>
-                              <span style={{ fontSize: 13, color: C.muted, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <button aria-label="Less" onClick={() => stepCount(e, -1)} style={stepBtn}><IconMinus size={14} /></button>
+                              <span style={{ minWidth: 28, textAlign: "center", fontSize: 16, fontWeight: 800, color: C.primary }}>{fmtCount(e.count)}</span>
+                              <button aria-label="More" onClick={() => stepCount(e, 1)} style={stepBtn}><IconPlus size={14} /></button>
+                              <span style={{ fontSize: 12, color: C.muted, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {e.labelIsPhrase ? "portion" : e.unit_label}
                               </span>
                             </div>
                             {e.sizeable && (
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <span style={rowLabel}>Size</span>
-                                <div style={{ flex: 1, display: "flex", background: C.offWhite, borderRadius: 11, padding: 3, gap: 2 }}>
+                                <div style={{ flex: 1, display: "flex", background: C.offWhite, borderRadius: 10, padding: 3, gap: 2 }}>
                                   {(["S", "M", "L"] as Size[]).map((sz) => (
                                     <button
                                       key={sz}
                                       aria-pressed={e.size === sz}
                                       onClick={() => { updateEntry(e._id, { size: sz }); track("food_chat_adjust", { how: "size" }, "food_diary"); }}
                                       style={{
-                                        flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+                                        flex: 1, padding: "6px 0", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 12, fontWeight: 700,
                                         background: e.size === sz ? C.tealDark : "transparent", color: e.size === sz ? C.white : C.muted,
                                       }}
                                     >
@@ -746,7 +746,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                       </div>
 
                       {/* 3 · Which meal — one small pill, chips only when you tap it */}
-                      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}` }}>
+                      <div style={{ padding: "8px 12px", borderTop: `1px solid ${C.border}` }}>
                         {mealOpenId === e._id ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                             {MEAL_TYPES.map((mt) => (
@@ -754,7 +754,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                                 key={mt}
                                 onClick={() => { setEntryMeal(e._id, mt); setMealOpenId(null); }}
                                 style={{
-                                  padding: "6px 11px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                                  padding: "5px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
                                   border: `1px solid ${e.meal_type === mt ? C.tealDark : C.border}`,
                                   background: e.meal_type === mt ? C.tealDark : C.white,
                                   color: e.meal_type === mt ? C.white : C.muted,
@@ -770,8 +770,8 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                             style={{ ...linkBtn, textDecoration: "none", color: C.muted, display: "flex", alignItems: "center", justifyContent: "flex-start", textAlign: "left", gap: 10, width: "100%" }}
                           >
                             <span style={rowLabel}>Meal</span>
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: C.primary }}>{MEAL_EMOJI[e.meal_type]} {MEAL_LABEL[e.meal_type]}</span>
-                            <span style={{ fontSize: 12, color: C.tealDark, marginLeft: "auto", textDecoration: "underline", textUnderlineOffset: 3 }}>Change</span>
+                            <span style={{ fontSize: 12.5, fontWeight: 600, color: C.primary }}>{MEAL_EMOJI[e.meal_type]} {MEAL_LABEL[e.meal_type]}</span>
+                            <span style={{ fontSize: 11, color: C.tealDark, marginLeft: "auto", textDecoration: "underline", textUnderlineOffset: 3 }}>Change</span>
                           </button>
                         )}
                       </div>
@@ -789,7 +789,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                     onClick={requestRefinement}
                     disabled={sending || saving}
                     style={{
-                      flex: 1, padding: "11px 6px", borderRadius: 11, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      flex: 1, padding: "9px 6px", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer",
                       border: "1px solid #ffe4a3", background: "#fff8e6", color: "#8a5a00", opacity: sending || saving ? 0.6 : 1,
                     }}
                   >
@@ -800,7 +800,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                   onClick={() => setShowAdd((v) => !v)}
                   disabled={saving}
                   style={{
-                    flex: 1, padding: "11px 6px", borderRadius: 11, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    flex: 1, padding: "9px 6px", borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer",
                     border: `1px solid ${C.border}`, background: showAdd ? C.offWhite : C.white, color: C.primary,
                   }}
                 >
@@ -846,14 +846,14 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
               {/* The one main action */}
               <button
                 className="btn-primary"
-                style={{ width: "100%", padding: "14px 0", fontSize: 15.5, opacity: saving ? 0.6 : 1 }}
+                style={{ width: "100%", padding: "12px 0", fontSize: 14, opacity: saving ? 0.6 : 1 }}
                 onClick={confirmAll}
                 disabled={saving}
               >
                 {saving ? "Adding…" : pendingEntries.length === 1 ? "Add to diary" : `Add all ${pendingEntries.length} to diary`}
               </button>
               <div style={{ textAlign: "center", marginTop: 12 }}>
-                <button onClick={resetChat} disabled={saving} style={{ ...linkBtn, color: C.light, textDecoration: "none", fontWeight: 500 }}>
+                <button onClick={resetChat} disabled={saving} style={{ ...linkBtn, fontSize: 11.5, color: C.light, textDecoration: "none", fontWeight: 500 }}>
                   Start over
                 </button>
               </div>
