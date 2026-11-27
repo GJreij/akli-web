@@ -202,6 +202,9 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<ChatStatus | null>(null);
+  const [addText, setAddText] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [addNote, setAddNote] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pendingEntries, setPendingEntries] = useState<PendingEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +235,8 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     setInputText("");
     setPendingEntries(null);
     setError(null);
+    setAddText("");
+    setAddNote(null);
     setFlow("quick");
     setExpanded(false);
   }
@@ -306,6 +311,78 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     track("food_chat_macro_override", { field }, "food_diary");
   }
 
+  // One request to the assistant. Progress updates (streamed one JSON object per line)
+  // drive the friendly waiting line; the last line is the result.
+  async function fetchChat(chatHistory: ChatTurn[], mode: "quick" | "accurate") {
+    const res = await fetch("/api/food/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ history: chatHistory, userId, mode, stream: true }),
+    });
+    let result: { type: string; text?: string; message?: string; entries?: unknown[] } | null = null;
+    const isStream = res.body && (res.headers.get("content-type") ?? "").includes("ndjson");
+    if (isStream) {
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      const handle = (line: string) => {
+        if (!line.trim()) return;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.t === "status") setStatus(msg as ChatStatus);
+          else if (msg.t === "result") result = msg.result;
+        } catch { /* ignore a malformed line */ }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          handle(buf.slice(0, nl));
+          buf = buf.slice(nl + 1);
+        }
+      }
+      handle(buf);
+    } else {
+      result = await res.json();
+    }
+    return result;
+  }
+
+  // "Forgot something?" — add-only. Only the new text goes to the quick estimator and the
+  // new cards are appended, so every tweak the user already made to the existing cards
+  // (count, size, grams, exact numbers) stays exactly as they left it.
+  async function addMore() {
+    const text = addText.trim();
+    if (!text || adding || !pendingEntries) return;
+    setAdding(true);
+    setStatus(null);
+    setAddNote(null);
+    setError(null);
+    track("food_chat_add_more", {}, "food_diary");
+    try {
+      const result = await fetchChat([{ role: "user", content: text }], "quick");
+      if (result?.type === "estimate") {
+        const added = (result.entries as QuickEntry[]).map((q, i) => fromQuick(q, 1000 + i));
+        setPendingEntries((prev) => [...(prev ?? []), ...added]);
+        setHistory((h) => [...h, { role: "user", content: text }]);
+        setAddText("");
+      } else if (result?.type === "question") {
+        // Too vague (or not about food): show the one question, keep what they typed.
+        setAddNote(result.text ?? "What did you add?");
+      } else {
+        setError(result?.message || "Couldn't reach the assistant — try again.");
+      }
+    } catch {
+      setError("Couldn't reach the assistant — try again.");
+      track("food_log_error", { stage: "chat_add_more" }, "food_diary");
+    } finally {
+      setAdding(false);
+      setStatus(null);
+    }
+  }
+
   async function sendText(text: string, mode: "quick" | "accurate", baseHistory?: ChatTurn[]) {
     const nextHistory: ChatTurn[] = [...(baseHistory ?? history), { role: "user", content: text }];
     setHistory(nextHistory);
@@ -315,41 +392,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     track("food_chat_message_sent", { turn: nextHistory.length, mode }, "food_diary");
 
     try {
-      const res = await fetch("/api/food/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history: nextHistory, userId, mode, stream: true }),
-      });
-
-      let result: { type: string; text?: string; message?: string; entries?: unknown[] } | null = null;
-      const isStream = res.body && (res.headers.get("content-type") ?? "").includes("ndjson");
-      if (isStream) {
-        // One JSON object per line: progress updates, then the result.
-        const reader = res.body!.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-        const handle = (line: string) => {
-          if (!line.trim()) return;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.t === "status") setStatus(msg as ChatStatus);
-            else if (msg.t === "result") result = msg.result;
-          } catch { /* ignore a malformed line */ }
-        };
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          let nl: number;
-          while ((nl = buf.indexOf("\n")) >= 0) {
-            handle(buf.slice(0, nl));
-            buf = buf.slice(nl + 1);
-          }
-        }
-        handle(buf);
-      } else {
-        result = await res.json();
-      }
+      const result = await fetchChat(nextHistory, mode);
 
       if (!result) {
         setError("Couldn't reach the assistant — try again.");
@@ -692,6 +735,37 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
                   </div>
                 ))}
               </div>
+
+              {/* Forgot something? Add-only, so the user's tweaks above are never touched. */}
+              {adding && <ThinkingLine status={status} />}
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: addNote ? 6 : 12 }}>
+                <input
+                  type="text"
+                  value={addText}
+                  onChange={(ev) => setAddText(ev.target.value)}
+                  onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); addMore(); } }}
+                  disabled={adding || saving}
+                  placeholder="Forgot something? e.g. a coffee with milk"
+                  style={{
+                    flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`,
+                    fontSize: 16, fontFamily: "inherit", background: adding ? C.offWhite : C.white,
+                  }}
+                />
+                <button
+                  onClick={addMore}
+                  disabled={adding || saving || !addText.trim()}
+                  aria-label="Add this"
+                  style={{
+                    flexShrink: 0, height: 40, padding: "0 14px", borderRadius: 10, border: "none",
+                    background: C.tealDark, color: C.white, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 5, opacity: adding || saving || !addText.trim() ? 0.5 : 1,
+                  }}
+                >
+                  {adding ? <IconLoader2 size={16} className="akli-chat-spin" /> : <IconPlus size={16} />}
+                  Add
+                </button>
+              </div>
+              {addNote && <p style={{ fontSize: 12.5, color: C.muted, margin: "0 2px 12px" }}>{addNote}</p>}
 
               {pendingEntries.some((e) => e.confidence === "estimated") && (
                 <button
