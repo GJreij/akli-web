@@ -7,11 +7,11 @@ import { Capacitor } from "@capacitor/core";
 // up into the "ak" logo while the dot of the i floats to the top.
 // The artwork is the brand's own wordmark, cut into one sprite per letter
 // (public/splash/*.png, all on the same canvas, so they line up by themselves).
-// App only (iPhone/Android) — never on the website. Shown once per app session: the inline script in layout.tsx adds .splash-skip
-// before first paint on later loads and on admin/legal pages.
+// App only (iPhone/Android) — never on the website. Plays on every fresh launch of the app: the
+// inline script in layout.tsx adds .splash-skip before first paint when the page was reached from
+// another page (in-app navigation) and on admin/legal pages.
 
 const GREEN = "#063330";
-export const SPLASH_SEEN_KEY = "akli-splash-seen";
 
 // Geometry of the sprites (px on their 380 x 285 canvas): see public/splash/meta.json.
 const G = {
@@ -52,7 +52,12 @@ export default function LaunchSplash() {
     let reduce = false;
     try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* ignore */ }
     if (reduce || html.classList.contains("splash-skip")) { setDone(true); return; }
-    try { sessionStorage.setItem(SPLASH_SEEN_KEY, "1"); } catch { /* ignore */ }
+    // The artwork is only fetched here, inside the app — the sprites have no src in the
+    // server-rendered page, so the website never downloads them.
+    for (const p of PARTS) {
+      const img = el.current[p];
+      if (img) img.src = `/splash/${p}.png`;
+    }
 
     let cancelled = false;
     const anims: Animation[] = [];
@@ -159,7 +164,6 @@ export default function LaunchSplash() {
           <img
             key={p}
             ref={(node) => { el.current[p] = node; }}
-            src={`/splash/${p}.png`}
             alt=""
             draggable={false}
             style={sprite}
