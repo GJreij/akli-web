@@ -205,6 +205,8 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
   const [addText, setAddText] = useState("");
   const [adding, setAdding] = useState(false);
   const [addNote, setAddNote] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [mealOpenId, setMealOpenId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [pendingEntries, setPendingEntries] = useState<PendingEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -237,6 +239,8 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     setError(null);
     setAddText("");
     setAddNote(null);
+    setShowAdd(false);
+    setMealOpenId(null);
     setFlow("quick");
     setExpanded(false);
   }
@@ -368,6 +372,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
         setPendingEntries((prev) => [...(prev ?? []), ...added]);
         setHistory((h) => [...h, { role: "user", content: text }]);
         setAddText("");
+        setShowAdd(false);
       } else if (result?.type === "question") {
         // Too vague (or not about food): show the one question, keep what they typed.
         setAddNote(result.text ?? "What did you add?");
@@ -482,7 +487,7 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
   }
 
   // Tap a macro value to set it directly (e.g. "she knows this had 20g of protein").
-  function renderMacroValue(entry: PendingEntry, field: MacroField, unit: string) {
+  function renderMacroValue(entry: PendingEntry, field: MacroField, unit: string, big = false) {
     const isEditing = editingMacro?.id === entry._id && editingMacro.field === field;
     if (isEditing) {
       return (
@@ -499,8 +504,8 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
           }}
           onBlur={() => submitMacroEdit(entry)}
           style={{
-            width: 44, fontSize: 11.5, padding: "0 2px", border: `1px solid ${C.tealDark}`, borderRadius: 4,
-            font: "inherit", color: C.primary,
+            width: big ? 70 : 48, fontSize: big ? 20 : 13, padding: "2px 4px", border: `1px solid ${C.tealDark}`, borderRadius: 6,
+            font: "inherit", fontWeight: 700, color: C.primary,
           }}
         />
       );
@@ -517,15 +522,18 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
     );
   }
 
-  const chipStyle = (active: boolean): React.CSSProperties => ({
-    padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-    border: `1px solid ${active ? C.tealDark : C.border}`,
-    background: active ? C.tealDark : C.white, color: active ? C.white : C.muted,
-  });
-  const roundBtn: React.CSSProperties = {
-    width: 28, height: 28, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white,
+  const stepBtn: React.CSSProperties = {
+    width: 38, height: 38, borderRadius: "50%", border: `1px solid ${C.border}`, background: C.white,
     display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.primary, padding: 0,
   };
+  const rowLabel: React.CSSProperties = {
+    width: 58, flexShrink: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.light,
+  };
+  const linkBtn: React.CSSProperties = {
+    background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+    color: C.tealDark, textDecoration: "underline", textUnderlineOffset: 3,
+  };
+  const SIZE_NAME: Record<Size, string> = { S: "Small", M: "Medium", L: "Large" };
 
   return (
     <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 18, overflow: "hidden" }}>
@@ -620,188 +628,233 @@ export default function FoodChatLogger({ userId, date, onAdded }: {
 
           {pendingEntries && (
             <div>
-              <p style={{ fontSize: 11.5, color: C.light, margin: "6px 0 10px" }}>
+              <p style={{ fontSize: 12.5, color: C.muted, margin: "4px 0 12px", lineHeight: 1.45 }}>
                 {pendingEntries.some((e) => e.quick)
-                  ? "⚡ Quick estimate — change the amount, size or grams below, tap any number to set it exactly, or make it more accurate."
-                  : "Here's what I got — tap a number to set it exactly, a meal to fix it, or ✕ to drop something."}
+                  ? "⚡ Quick estimate. Adjust the amount or size below, or tap any number to set it exactly."
+                  : "Here's what I got. Adjust the amount below, or tap any number to set it exactly."}
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                {pendingEntries.map((e) => (
-                  <div key={e._id} style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 12px" }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#1a1a1a" }}>{e.name}</p>
-                          {e.confidence === "estimated" && (
-                            <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 6px", borderRadius: 20, background: "#fff8e6", color: "#b45309" }}>
-                              {e.quick ? "Quick estimate" : "Estimated"}
-                            </span>
-                          )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
+                {pendingEntries.map((e) => {
+                  const t = totalsOf(e);
+                  return (
+                    <div key={e._id} style={{ border: `1px solid ${C.border}`, borderRadius: 14, overflow: "hidden", background: C.white }}>
+                      {/* 1 · What it is and what it adds up to */}
+                      <div style={{ background: "#f7f5f2", padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1a1a1a" }}>{e.name}</p>
+                            <p style={{ margin: "2px 0 0", fontSize: 12, color: C.muted }}>
+                              {quantityLabelOf(e)}
+                              {e.confidence === "estimated" && (
+                                <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 6px", borderRadius: 20, background: "#fff8e6", color: "#b45309" }}>
+                                  {e.quick ? "Quick estimate" : "Estimated"}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => removeEntry(e._id)}
+                            aria-label="Remove"
+                            style={{ background: "none", border: "none", padding: 6, margin: -6, color: C.light, cursor: "pointer", flexShrink: 0 }}
+                          >
+                            <IconX size={16} />
+                          </button>
                         </div>
-                        <p style={{ margin: "2px 0 0", fontSize: 11.5, color: C.light, display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0 }}>
-                          <span>{quantityLabelOf(e)}&nbsp;·&nbsp;</span>
-                          {renderMacroValue(e, "kcal", "kcal")}
-                          <span>&nbsp;·&nbsp;P&nbsp;</span>
-                          {renderMacroValue(e, "protein_g", "g")}
-                          <span>&nbsp;·&nbsp;C&nbsp;</span>
-                          {renderMacroValue(e, "carbs_g", "g")}
-                          <span>&nbsp;·&nbsp;F&nbsp;</span>
-                          {renderMacroValue(e, "fat_g", "g")}
-                        </p>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 26, fontWeight: 800, color: C.primary, lineHeight: 1.1 }}>
+                            {renderMacroValue(e, "kcal", "", true)}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.muted, marginRight: 8 }}>kcal</span>
+                          {([["protein_g", "Protein"], ["carbs_g", "Carbs"], ["fat_g", "Fat"]] as [MacroField, string][]).map(([f, label]) => (
+                            <span key={f} style={{ fontSize: 12, color: C.muted, background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "3px 9px", whiteSpace: "nowrap" }}>
+                              {label} <b style={{ color: C.primary }}>{renderMacroValue(e, f, "g")}</b>
+                            </span>
+                          ))}
+                        </div>
                         {e.components && (
-                          <p style={{ margin: "2px 0 0", fontSize: 11, color: C.light, fontStyle: "italic" }}>{e.components}</p>
+                          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: C.light, fontStyle: "italic" }}>{e.components}</p>
                         )}
                         {e.suggest_scan && (
-                          <p style={{ margin: "4px 0 0", fontSize: 11, color: "#2563eb" }}>
+                          <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "#2563eb" }}>
                             <IconBarcode size={12} style={{ verticalAlign: "-2px", marginRight: 3 }} />
-                            Generic estimate for this product — for exact numbers, scan the barcode instead (✕ this, then use + Log food → Scan)
+                            Generic estimate for this product. For exact numbers, scan the barcode instead (✕ this, then + Log food → Scan).
                           </p>
                         )}
                       </div>
-                      <button
-                        onClick={() => removeEntry(e._id)}
-                        style={{ background: "none", border: "none", padding: 4, margin: -4, color: C.light, cursor: "pointer", flexShrink: 0 }}
-                      >
-                        <IconX size={14} />
-                      </button>
-                    </div>
 
-                    {/* How much — instant, no AI call */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                      {e.useGrams ? (
-                        <>
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            value={e.gramsValue || ""}
-                            onChange={(ev) => updateEntry(e._id, { gramsValue: Math.max(0, Number(ev.target.value) || 0) })}
-                            onFocus={(ev) => ev.target.select()}
-                            style={{ width: 72, padding: "6px 8px", borderRadius: 8, border: `1px solid ${C.tealDark}`, fontSize: 14, fontWeight: 600, color: C.primary }}
-                          />
-                          <span style={{ fontSize: 12.5, color: C.muted }}>grams</span>
-                          <button
-                            onClick={() => updateEntry(e._id, { useGrams: false })}
-                            style={{ ...chipStyle(false), marginLeft: "auto" }}
-                          >
-                            Use pieces
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button aria-label="Less" onClick={() => stepCount(e, -1)} style={roundBtn}><IconMinus size={14} /></button>
-                          <span style={{ minWidth: 26, textAlign: "center", fontSize: 15, fontWeight: 700, color: C.primary }}>{fmtCount(e.count)}</span>
-                          <button aria-label="More" onClick={() => stepCount(e, 1)} style={roundBtn}><IconPlus size={14} /></button>
-                          {e.sizeable && (
-                            <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
-                              {(["S", "M", "L"] as Size[]).map((sz) => (
-                                <button
-                                  key={sz}
-                                  onClick={() => { updateEntry(e._id, { size: sz }); track("food_chat_adjust", { how: "size" }, "food_diary"); }}
-                                  style={chipStyle(e.size === sz)}
-                                >
-                                  {sz}
-                                </button>
-                              ))}
+                      {/* 2 · How much — instant, no AI call */}
+                      <div style={{ padding: "14px 14px 12px", borderTop: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 14 }}>
+                        {e.useGrams ? (
+                          <>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={rowLabel}>Grams</span>
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                value={e.gramsValue || ""}
+                                onChange={(ev) => updateEntry(e._id, { gramsValue: Math.max(0, Number(ev.target.value) || 0) })}
+                                onFocus={(ev) => ev.target.select()}
+                                style={{ width: 96, padding: "8px 10px", borderRadius: 10, border: `1px solid ${C.tealDark}`, fontSize: 18, fontWeight: 700, color: C.primary }}
+                              />
+                              <span style={{ fontSize: 13, color: C.muted }}>g</span>
                             </div>
-                          )}
-                          {e.unit_grams > 0 && (
-                            <button
-                              onClick={() => { updateEntry(e._id, { useGrams: true, gramsValue: round(gramsOf(e)) || round(e.unit_grams) }); track("food_chat_adjust", { how: "grams" }, "food_diary"); }}
-                              style={{ ...chipStyle(false), marginLeft: "auto" }}
-                            >
-                              In grams
+                            <button onClick={() => updateEntry(e._id, { useGrams: false })} style={{ ...linkBtn, alignSelf: "flex-start" }}>
+                              Go back to {e.labelIsPhrase ? "portions" : `${e.unit_label}s`}
                             </button>
-                          )}
-                        </>
-                      )}
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={rowLabel}>Amount</span>
+                              <button aria-label="Less" onClick={() => stepCount(e, -1)} style={stepBtn}><IconMinus size={16} /></button>
+                              <span style={{ minWidth: 34, textAlign: "center", fontSize: 21, fontWeight: 800, color: C.primary }}>{fmtCount(e.count)}</span>
+                              <button aria-label="More" onClick={() => stepCount(e, 1)} style={stepBtn}><IconPlus size={16} /></button>
+                              <span style={{ fontSize: 13, color: C.muted, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {e.labelIsPhrase ? "portion" : e.unit_label}
+                              </span>
+                            </div>
+                            {e.sizeable && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span style={rowLabel}>Size</span>
+                                <div style={{ flex: 1, display: "flex", background: C.offWhite, borderRadius: 11, padding: 3, gap: 2 }}>
+                                  {(["S", "M", "L"] as Size[]).map((sz) => (
+                                    <button
+                                      key={sz}
+                                      aria-pressed={e.size === sz}
+                                      onClick={() => { updateEntry(e._id, { size: sz }); track("food_chat_adjust", { how: "size" }, "food_diary"); }}
+                                      style={{
+                                        flex: 1, padding: "8px 0", borderRadius: 9, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+                                        background: e.size === sz ? C.tealDark : "transparent", color: e.size === sz ? C.white : C.muted,
+                                      }}
+                                    >
+                                      {SIZE_NAME[sz]}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {e.unit_grams > 0 && (
+                              <button
+                                onClick={() => { updateEntry(e._id, { useGrams: true, gramsValue: round(gramsOf(e)) || round(e.unit_grams) }); track("food_chat_adjust", { how: "grams" }, "food_diary"); }}
+                                style={{ ...linkBtn, alignSelf: "flex-start" }}
+                              >
+                                Prefer grams? Enter the weight instead
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      {/* 3 · Which meal — one small pill, chips only when you tap it */}
+                      <div style={{ padding: "10px 14px", borderTop: `1px solid ${C.border}` }}>
+                        {mealOpenId === e._id ? (
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                            {MEAL_TYPES.map((mt) => (
+                              <button
+                                key={mt}
+                                onClick={() => { setEntryMeal(e._id, mt); setMealOpenId(null); }}
+                                style={{
+                                  padding: "6px 11px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                                  border: `1px solid ${e.meal_type === mt ? C.tealDark : C.border}`,
+                                  background: e.meal_type === mt ? C.tealDark : C.white,
+                                  color: e.meal_type === mt ? C.white : C.muted,
+                                }}
+                              >
+                                {MEAL_EMOJI[mt]} {MEAL_LABEL[mt]}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setMealOpenId(e._id)}
+                            style={{ ...linkBtn, textDecoration: "none", color: C.muted, display: "flex", alignItems: "center", justifyContent: "flex-start", textAlign: "left", gap: 10, width: "100%" }}
+                          >
+                            <span style={rowLabel}>Meal</span>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: C.primary }}>{MEAL_EMOJI[e.meal_type]} {MEAL_LABEL[e.meal_type]}</span>
+                            <span style={{ fontSize: 12, color: C.tealDark, marginLeft: "auto", textDecoration: "underline", textUnderlineOffset: 3 }}>Change</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-
-                    <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>
-                      {MEAL_TYPES.map((mt) => (
-                        <button
-                          key={mt}
-                          onClick={() => setEntryMeal(e._id, mt)}
-                          style={{
-                            padding: "4px 9px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer",
-                            border: `1px solid ${e.meal_type === mt ? C.tealDark : C.border}`,
-                            background: e.meal_type === mt ? C.tealDark : C.white,
-                            color: e.meal_type === mt ? C.white : C.muted,
-                          }}
-                        >
-                          {MEAL_EMOJI[mt]} {MEAL_LABEL[mt]}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-
-              {/* Forgot something? Add-only, so the user's tweaks above are never touched. */}
-              {adding && <ThinkingLine status={status} />}
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: addNote ? 6 : 12 }}>
-                <input
-                  type="text"
-                  value={addText}
-                  onChange={(ev) => setAddText(ev.target.value)}
-                  onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); addMore(); } }}
-                  disabled={adding || saving}
-                  placeholder="Forgot something? e.g. a coffee with milk"
-                  style={{
-                    flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`,
-                    fontSize: 16, fontFamily: "inherit", background: adding ? C.offWhite : C.white,
-                  }}
-                />
-                <button
-                  onClick={addMore}
-                  disabled={adding || saving || !addText.trim()}
-                  aria-label="Add this"
-                  style={{
-                    flexShrink: 0, height: 40, padding: "0 14px", borderRadius: 10, border: "none",
-                    background: C.tealDark, color: C.white, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
-                    display: "flex", alignItems: "center", gap: 5, opacity: adding || saving || !addText.trim() ? 0.5 : 1,
-                  }}
-                >
-                  {adding ? <IconLoader2 size={16} className="akli-chat-spin" /> : <IconPlus size={16} />}
-                  Add
-                </button>
-              </div>
-              {addNote && <p style={{ fontSize: 12.5, color: C.muted, margin: "0 2px 12px" }}>{addNote}</p>}
-
-              {pendingEntries.some((e) => e.confidence === "estimated") && (
-                <button
-                  onClick={requestRefinement}
-                  disabled={sending || saving}
-                  style={{
-                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                    padding: "11px 0", borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
-                    border: "1px solid #ffe4a3", background: "#fff8e6", color: "#8a5a00", marginBottom: 12,
-                    opacity: sending || saving ? 0.6 : 1,
-                  }}
-                >
-                  ✨ Make this more accurate
-                </button>
-              )}
 
               {error && <p style={{ color: C.error, fontSize: 12, marginBottom: 10 }}>{error}</p>}
 
-              <div style={{ display: "flex", gap: 8 }}>
+              {/* Secondary actions — quieter than the main button */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                {pendingEntries.some((e) => e.confidence === "estimated") && (
+                  <button
+                    onClick={requestRefinement}
+                    disabled={sending || saving}
+                    style={{
+                      flex: 1, padding: "11px 6px", borderRadius: 11, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                      border: "1px solid #ffe4a3", background: "#fff8e6", color: "#8a5a00", opacity: sending || saving ? 0.6 : 1,
+                    }}
+                  >
+                    ✨ More accurate
+                  </button>
+                )}
                 <button
-                  onClick={resetChat}
+                  onClick={() => setShowAdd((v) => !v)}
                   disabled={saving}
                   style={{
-                    padding: "12px 16px", borderRadius: 10, fontSize: 13.5, fontWeight: 600, cursor: "pointer",
-                    border: `1px solid ${C.border}`, background: C.white, color: C.muted,
+                    flex: 1, padding: "11px 6px", borderRadius: 11, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    border: `1px solid ${C.border}`, background: showAdd ? C.offWhite : C.white, color: C.primary,
                   }}
                 >
-                  Start over
+                  + Add another food
                 </button>
-                <button
-                  className="btn-primary"
-                  style={{ flex: 1, padding: "12px 0", fontSize: 14.5, opacity: saving ? 0.6 : 1 }}
-                  onClick={confirmAll}
-                  disabled={saving}
-                >
-                  {saving ? "Adding…" : `Add all ${pendingEntries.length} to diary`}
+              </div>
+
+              {(showAdd || adding || addNote) && (
+                <div style={{ marginBottom: 12 }}>
+                  {adding && <ThinkingLine status={status} />}
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="text"
+                      autoFocus={showAdd && !adding}
+                      value={addText}
+                      onChange={(ev) => setAddText(ev.target.value)}
+                      onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); addMore(); } }}
+                      disabled={adding || saving}
+                      placeholder="e.g. a coffee with milk"
+                      style={{
+                        flex: 1, minWidth: 0, padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`,
+                        fontSize: 16, fontFamily: "inherit", background: adding ? C.offWhite : C.white,
+                      }}
+                    />
+                    <button
+                      onClick={addMore}
+                      disabled={adding || saving || !addText.trim()}
+                      aria-label="Add this"
+                      style={{
+                        flexShrink: 0, height: 40, padding: "0 14px", borderRadius: 10, border: "none",
+                        background: C.tealDark, color: C.white, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 5, opacity: adding || saving || !addText.trim() ? 0.5 : 1,
+                      }}
+                    >
+                      {adding ? <IconLoader2 size={16} className="akli-chat-spin" /> : <IconPlus size={16} />}
+                      Add
+                    </button>
+                  </div>
+                  {addNote && <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 2px 0" }}>{addNote}</p>}
+                </div>
+              )}
+
+              {/* The one main action */}
+              <button
+                className="btn-primary"
+                style={{ width: "100%", padding: "14px 0", fontSize: 15.5, opacity: saving ? 0.6 : 1 }}
+                onClick={confirmAll}
+                disabled={saving}
+              >
+                {saving ? "Adding…" : pendingEntries.length === 1 ? "Add to diary" : `Add all ${pendingEntries.length} to diary`}
+              </button>
+              <div style={{ textAlign: "center", marginTop: 12 }}>
+                <button onClick={resetChat} disabled={saving} style={{ ...linkBtn, color: C.light, textDecoration: "none", fontWeight: 500 }}>
+                  Start over
                 </button>
               </div>
             </div>
