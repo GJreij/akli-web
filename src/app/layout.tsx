@@ -25,11 +25,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Hide the opening animation before first paint when it was already shown this session, or on admin/legal pages. */}
+        {/* The opening animation is for the iPhone/Android app only: hide it before first paint on the
+            website, when it was already shown this session, and on admin/legal pages. The app is
+            recognised by the bridge the native shell injects into its web view before the page runs. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              'try{if(sessionStorage.getItem("akli-splash-seen")||/^\\/(admin|driver|privacy|terms|support|delete-account|reset-password)/.test(location.pathname))document.documentElement.classList.add("splash-skip")}catch(e){}',
+              'var d=document.documentElement;try{var w=window,c=w.Capacitor;if(!((c&&c.isNativePlatform&&c.isNativePlatform())||(w.webkit&&w.webkit.messageHandlers&&w.webkit.messageHandlers.bridge)||w.androidBridge))d.classList.add("splash-skip")}catch(e){}try{if(sessionStorage.getItem("akli-splash-seen")||/^\\/(admin|driver|privacy|terms|support|delete-account|reset-password)/.test(location.pathname))d.classList.add("splash-skip")}catch(e){}',
           }}
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 // Opening animation: "akli" is written letter by letter, then the letters close
 // up into the "ak" logo while the dot of the i floats to the top.
 // The artwork is the brand's own wordmark, cut into one sprite per letter
 // (public/splash/*.png, all on the same canvas, so they line up by themselves).
-// Shown once per app session: the inline script in layout.tsx adds .splash-skip
+// App only (iPhone/Android) — never on the website. Shown once per app session: the inline script in layout.tsx adds .splash-skip
 // before first paint on later loads and on admin/legal pages.
 
 const GREEN = "#063330";
@@ -46,6 +47,8 @@ export default function LaunchSplash() {
 
   useEffect(() => {
     const html = document.documentElement;
+    // The website never plays it (layout.tsx also hides it before first paint, so there is no flash).
+    if (!Capacitor.isNativePlatform()) { setDone(true); return; }
     let reduce = false;
     try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { /* ignore */ }
     if (reduce || html.classList.contains("splash-skip")) { setDone(true); return; }
