@@ -10,6 +10,7 @@ import {
 import type { Database } from "@/lib/supabase/types";
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics";
+import * as metaPixel from "@/lib/metaPixel";
 import {
   generateMealPlan, getCheckoutSummary, confirmOrder, updateMealPlan, simplePriceSimulator,
   applyAdvancedPlanning,
@@ -1842,6 +1843,9 @@ export default function OrderFlow({
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("days");
+  // Meta pixel: InitiateCheckout once per visit to this flow, however many
+  // times the client goes back to review and returns to checkout.
+  const pixelCheckoutSent = useRef(false);
   // profile carries the same 14 allergen columns as `user` — alert-only,
   // review-step warning, never used to filter what the solver generates.
   const userAllergens: AllergenFlags = { ...emptyAllergenFlags(), ...(profile ?? {}) };
@@ -2383,10 +2387,20 @@ export default function OrderFlow({
   async function goToCheckout() {
     if (!plan) return;
     setCoLoading(true);
+    let summary: CheckoutSummaryResponse | null = null;
     try {
-      setCheckoutData(await getCheckoutSummary(userId, plan, promoApplied || undefined, addressId));
+      summary = await getCheckoutSummary(userId, plan, promoApplied || undefined, addressId);
+      setCheckoutData(summary);
     } catch { setCheckoutData(null); }
     finally {
+      if (!pixelCheckoutSent.current) {
+        pixelCheckoutSent.current = true;
+        const value = summary?.price_breakdown?.final_price;
+        metaPixel.track("InitiateCheckout", {
+          ...(typeof value === "number" ? { value, currency: "USD" } : {}),
+          num_items: plan.days.length,
+        }, metaPixel.newEventId("checkout"));
+      }
       setCoLoading(false);
       setStep("checkout");
       track("order_step", { step: "checkout", day_count: plan.days.length }, "order");
@@ -2463,7 +2477,7 @@ export default function OrderFlow({
 
   async function handleConfirm() {
     if (!plan || !checkoutData || !slotId || !addressId) return;
-    const { walletApplied: walletAmountApplied, walletTopupAmount, amountDue: computedAmountDue } = computeAmountDue({
+    const { totalPrice, walletApplied: walletAmountApplied, walletTopupAmount, amountDue: computedAmountDue } = computeAmountDue({
       checkoutData, useWalletCredit, walletTopupInput, estDayPrice, dayCount: plan.days.length,
     });
     const amountDue = computedAmountDue ?? 0;
@@ -2476,6 +2490,16 @@ export default function OrderFlow({
     setConfirmErr(null);
     setStep("confirming");
     const sortedDates = plan.days.map(d => d.date).sort();
+    // Meta pixel Purchase: order total (final_price, after promo, before
+    // wallet credit) in USD, one item per delivery day. trackPurchaseOnce
+    // guards against the success path running twice for the same order.
+    const firePixelPurchase = (orderId: number | null | undefined) => {
+      if (typeof totalPrice !== "number") return;
+      const orderKey = orderId != null ? `order_${orderId}` : `dates_${userId}_${sortedDates.join(",")}`;
+      metaPixel.trackPurchaseOnce(orderKey,
+        { value: totalPrice, currency: "USD", num_items: plan.days.length },
+        orderId != null ? `purchase_${orderId}` : metaPixel.newEventId("purchase"));
+    };
     try {
       const res = await confirmOrder(userId, plan, checkoutData, slotId, paymentMethod ?? "cash", addressId, walletAmountApplied, walletTopupAmount, needsCutlery);
       // confirmOrder() already throws on a non-2xx response, so reaching here without
@@ -2486,6 +2510,7 @@ export default function OrderFlow({
         setConfirmErr(res.error); setStep("checkout");
       } else {
         track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, order_id: res.order_id ?? null }, "order");
+        firePixelPurchase(res.order_id);
         notifyOrderConfirmed().catch(() => {});
         clearDraft();
         setStep("confirmed");
@@ -2494,6 +2519,7 @@ export default function OrderFlow({
       if (await orderWasActuallyPlaced(sortedDates)) {
         // Backend committed the order despite the request erroring out — treat as success.
         track("order_confirmed", { day_count: plan.days.length, payment_method: paymentMethod, recovered_from_error: true }, "order");
+        firePixelPurchase(null);
         notifyOrderConfirmed().catch(() => {});
         clearDraft();
         setStep("confirmed");

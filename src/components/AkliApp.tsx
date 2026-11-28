@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { track, linkAnonToUser } from "@/lib/analytics";
+import * as metaPixel from "@/lib/metaPixel";
 import { simplePriceSimulator } from "@/lib/flask";
 import { checkGuestEmail } from "@/app/actions";
 import { COUNTRY_CODES } from "@/lib/theme";
@@ -562,6 +563,11 @@ export default function AkliApp({
       setSaveLoading(false);
       return;
     }
+
+    // Meta pixel: the account + profile now exist server-side. Fired before the
+    // sign-in round trip so the request has time to leave before the redirect.
+    // No params on purpose — nothing about the person goes to Meta.
+    metaPixel.track("CompleteRegistration", {}, metaPixel.newEventId("registration"));
 
     // 3. Sign in to establish session
     await supabase.auth.signInWithPassword({ email, password });
