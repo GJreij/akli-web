@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import NativeShell from "@/components/NativeShell";
+import MetaPixel from "@/components/MetaPixel";
 import LaunchSplash from "@/components/LaunchSplash";
 import "./globals.css";
 
@@ -52,6 +53,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Suspense fallback={null}>
           <AnalyticsTracker />
+        </Suspense>
+        <Suspense fallback={null}>
+          <MetaPixel />
         </Suspense>
         <NativeShell />
         <LaunchSplash />
